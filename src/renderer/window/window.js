@@ -1158,12 +1158,11 @@ function pinnedBox() {
   return box('pinned', 'Pinned', rows + '<div class="hint">Drop a folder here to pin it.</div>');
 }
 
+// The same places in the same order wherever the window is, with the one
+// it's in shown in bold.
 function placesBox() {
-  const parent = parentOf(cwd);
-  const list = PLACES().filter(([p]) => p !== cwd);
-  if (parent && !list.some(([p]) => p === parent)) list.unshift([parent, placeLabel(parent)]);
-  return box('places', 'Other Places', list.map(([p, label]) =>
-    `<div class="row" data-place="${esc(p)}"><svg><use href="#${p === 'trash' ? 'p-trash' : specialIcon(p) || 'i-folder'}"/></svg>${esc(label)}</div>`).join(''));
+  return box('places', 'Other Places', PLACES().map(([p, label]) =>
+    `<div class="row${p === cwd ? ' here' : ''}" data-place="${esc(p)}"><svg><use href="#${p === 'trash' ? 'p-trash' : specialIcon(p) || 'i-folder'}"/></svg>${esc(label)}</div>`).join(''));
 }
 
 let countFor = null; // the folder whose count the Details box is waiting on
