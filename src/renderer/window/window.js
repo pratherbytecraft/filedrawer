@@ -732,6 +732,8 @@ $('files').addEventListener('contextmenu', async (e) => {
   // In groups like the old windows: opening, pinning, then changing.
   const groups = [[{ label: 'Open', bold: true, click: () => openSelected() }], [], []];
   if (picked.every(isFolder)) groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+  // Apps and other bundles open like files, and can be looked inside too.
+  if (picked.length === 1 && it.package && !it.volume) groups[0].push({ label: 'Show Package Contents', click: () => navigate(it.path) });
   if (!picked.some(isFolder)) {
     groups[0].push({ label: 'Open With', sub: await openWithEntries(picked.map((x) => x.path)) });
     groups[0].push({ label: 'Quick Look', click: () => api.quickLook(it.path) });

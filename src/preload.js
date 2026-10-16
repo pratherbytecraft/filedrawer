@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('filedrawer', {
   onSearchResults: on('search:results'),
   onSearchState: on('search:state'),
   rename: (from, name) => ipcRenderer.invoke('op:rename', from, name),
+  // True to keep the old extension.
+  askExtension: (was, now) => ipcRenderer.invoke('ask:extension', was, now),
   newFolder: (dir) => ipcRenderer.invoke('op:newFolder', dir),
   newText: (dir) => ipcRenderer.invoke('op:newText', dir),
   trash: (paths) => ipcRenderer.invoke('op:trash', paths),

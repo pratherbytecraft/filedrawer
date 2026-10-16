@@ -76,7 +76,8 @@ async function endRename(keep) {
     if (changedWhileRenaming) refreshAfterChange();
     return;
   }
-  const res = await api.rename(from, typed + ext);
+  const name = await withExtension(it, typed);
+  const res = await api.rename(from, name + ext);
   if (res.error) {
     startRename(from, typed);
     return;
@@ -91,6 +92,21 @@ async function endRename(keep) {
     return;
   }
   await navigate(cwd, { push: false, select: res.path });
+}
+
+// Changing or taking off a file's extension asks first, as Finder does,
+// since the file may then open in another app. Keep puts the old one back.
+async function withExtension(it, typed) {
+  if (isFolder(it) || it.package || hiddenExt(it)) return typed;
+  const extOf = (n) => {
+    const i = n.lastIndexOf('.');
+    return i > 0 ? n.slice(i + 1) : '';
+  };
+  const was = extOf(it.display);
+  const now = extOf(typed);
+  if (!was || was.toLowerCase() === now.toLowerCase()) return typed;
+  if (!(await api.askExtension(was, now))) return typed;
+  return (now ? typed.slice(0, -(now.length + 1)) : typed) + '.' + was;
 }
 
 function refreshAfterChange() {

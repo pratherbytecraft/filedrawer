@@ -711,6 +711,17 @@ async function renameWithUndo(from, name) {
   return res;
 }
 ipcMain.handle('op:rename', async (e, from, name) => answer(e, await renameWithUndo(from, name)));
+ipcMain.handle('ask:extension', async (e, was, now) => {
+  const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), {
+    type: 'question',
+    message: now ? `Are you sure you want to change the extension from ".${was}" to ".${now}"?` : `Are you sure you want to remove the extension ".${was}"?`,
+    detail: 'If you make this change, the file may open in a different app.',
+    buttons: [`Keep .${was}`, now ? `Use .${now}` : 'Remove'],
+    defaultId: 0,
+    cancelId: 0
+  });
+  return response === 0;
+});
 
 // Properties, Open With and Quick Look.
 ipcMain.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
