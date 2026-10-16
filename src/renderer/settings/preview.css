@@ -55,13 +55,11 @@
   .mini.classic-1995 .tb .t { text-align: left; }
   .mini.classic-1995 .addr div { background: #fff; border-radius: 0; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; }
   .mini.classic-1995 .body { background: #fff; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; }
-  .mini.classic-1995 .pane { background: var(--face); border-right: 1px solid #808080; }
+  .mini.classic-1995 .pane { background: #fff; border-right: 1px solid #808080; }
+  .mini.classic-1995 .pane span { color: #0000ee; text-decoration: underline; }
   .mini.classic-1995 .list i { background: #f1c447 !important; }
   .mini.classic-1995 .list div.sel span { background: var(--t1); color: #fff; }
-  .mini.classic-1995.standard { --face: #c0c0c0; --t1: #000080; --t2: #1084d0; }
-  .mini.classic-1995.brick { --face: #c2bfa5; --t1: #800000; --t2: #c08060; }
-  .mini.classic-1995.teal { --face: #a8c8c0; --t1: #006060; --t2: #40a0a0; }
-  .mini.classic-1995.slate { --face: #98a8b8; --t1: #304860; --t2: #7090b0; }
+  /* --face, --t1 and --t2 come from the scheme, set by settings.js */
 
   /* Classic 2009 */
   .mini.classic-2009 { background: #fff; color: #000; font-family: "Segoe UI", -apple-system, sans-serif; border-radius: 8px 8px 0 0; }
@@ -71,5 +69,4 @@
   .mini.classic-2009 .pane { background: linear-gradient(#f4f8fc, #e6eef7); border-right: 1px solid #d5dfe8; }
   .mini.classic-2009 .pane b { color: #1e395b; }
   .mini.classic-2009 .list div.sel { background: linear-gradient(#e8f3fd, #c4e0fc); outline: 1px solid #84acdd; outline-offset: -1px; }
-  .mini.classic-2009.sky { --g: #4a9ff5; } .mini.classic-2009.dusk { --g: #2c4f8a; } .mini.classic-2009.leaf { --g: #4ca54d; } .mini.classic-2009.ruby { --g: #c8343b; }
-  .mini.classic-2009.dusk .tb, .mini.classic-2009.dusk .tools { color: #fff; }
+  /* --g comes from the scheme, set by settings.js */

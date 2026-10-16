@@ -33,6 +33,7 @@
     const root = document.documentElement;
     const { appearance, accent, accentText } = resolve(state);
     root.dataset.theme = settings.theme;
+    root.dataset.scheme = (settings.schemes && settings.schemes[settings.theme]) || '';
     root.dataset.appearance = appearance;
     root.style.setProperty('--accent', accent);
     root.style.setProperty('--accent-text', accentText);

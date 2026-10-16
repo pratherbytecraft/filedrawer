@@ -34,3 +34,18 @@ button { font: inherit; min-width: 72px; }
 [data-theme="classic-2001"] button { padding: 3px 10px; border: 1px solid #003c74; border-radius: 3px; background: linear-gradient(#fff, #ece9d8 90%, #d6d0c5); color: #000; }
 [data-theme="classic-2001"] button:hover { box-shadow: inset 0 0 0 2px #f9b119; }
 [data-theme="classic-2001"] button.main { box-shadow: inset 0 0 0 1px #9bb8f1; }
+
+[data-theme="classic-1995"] body { font: 11px Tahoma, Geneva, Verdana, sans-serif; background: #c0c0c0; color: #000; color-scheme: light; }
+[data-theme="classic-1995"] button { padding: 3px 10px; border: 0; border-radius: 0; background: #c0c0c0; color: #000; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf; }
+[data-theme="classic-1995"] button:active { box-shadow: inset 1px 1px #0a0a0a, inset -1px -1px #fff, inset 2px 2px #808080, inset -2px -2px #dfdfdf; }
+[data-theme="classic-1995"] button.main { outline: 1px solid #000; }
+[data-theme="classic-2009"] body { font: 12px "Segoe UI", -apple-system, sans-serif; background: #f0f0f0; color: #000; color-scheme: light; }
+[data-theme="classic-2009"] button { padding: 3px 12px; border: 1px solid #707070; border-radius: 3px; background: linear-gradient(#f2f2f2, #ebebeb 50%, #dddddd 50%, #cfcfcf); color: #000; }
+[data-theme="classic-2009"] button:hover { border-color: #3c7fb1; background: linear-gradient(#eaf6fd, #d9f0fc 50%, #bee6fd 50%, #a7d9f5); }
+[data-theme="classic-2009"] button.main { border-color: #3399ff; box-shadow: inset 0 0 0 1px #9cd4f9; }
+[data-theme="classic-1995"] .bar { height: 16px; background: #fff; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; padding: 2px; }
+[data-theme="classic-1995"] .fill { background: repeating-linear-gradient(90deg, #000080 0 8px, transparent 8px 10px); }
+[data-theme="classic-1995"] .title { font-weight: bold; }
+[data-theme="classic-2009"] .bar { height: 15px; border: 1px solid #bcbcbc; border-radius: 3px; background: linear-gradient(#f3f3f3, #e0e0e0); }
+[data-theme="classic-2009"] .fill { background: linear-gradient(#5fe15f, #06b025 50%, #0cb525); border-radius: 2px; }
+[data-theme="classic-2009"] .line, [data-theme="classic-2009"] .current, [data-theme="classic-2009"] .left { color: #444; }

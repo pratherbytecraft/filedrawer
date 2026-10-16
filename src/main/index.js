@@ -189,7 +189,7 @@ app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => helper.stop());
 
-const THEMES = [['system', 'System'], ['classic-2001', 'Classic 2001']];
+const THEMES = [['system', 'System'], ['classic-2009', 'Classic 2009'], ['classic-2001', 'Classic 2001'], ['classic-1995', 'Classic 1995']];
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
 const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
 
@@ -203,7 +203,13 @@ function send(command, arg) {
 // The themes and their color schemes, for the settings window.
 const THEME_LIST = [
   { id: 'system', name: 'System', schemes: [] },
-  { id: 'classic-2001', name: 'Classic 2001', schemes: [['blue', 'Blue']] }
+  { id: 'classic-2009', name: 'Classic 2009', schemes: [['sky', 'Sky'], ['dusk', 'Dusk'], ['sea', 'Sea'], ['leaf', 'Leaf'], ['lime', 'Lime'],
+    ['sun', 'Sun'], ['pumpkin', 'Pumpkin'], ['ruby', 'Ruby'], ['pink', 'Pink'], ['blush', 'Blush'], ['violet', 'Violet'], ['lavender', 'Lavender'],
+    ['taupe', 'Taupe'], ['cocoa', 'Cocoa'], ['slate', 'Slate'], ['frost', 'Frost'], ['graphite', 'Graphite']] },
+  { id: 'classic-2001', name: 'Classic 2001', schemes: [['blue', 'Blue'], ['olive', 'Olive Green'], ['silver', 'Silver']] },
+  { id: 'classic-1995', name: 'Classic 1995', schemes: [['standard', 'Standard'], ['brick', 'Brick'], ['desert', 'Desert'], ['eggplant', 'Eggplant'],
+    ['lilac', 'Lilac'], ['maple', 'Maple'], ['marine', 'Marine'], ['plum', 'Plum'], ['pumpkin', 'Pumpkin'], ['rainy', 'Rainy Day'], ['rose', 'Rose'],
+    ['slate', 'Slate'], ['spruce', 'Spruce'], ['storm', 'Storm'], ['teal', 'Teal'], ['wheat', 'Wheat']] }
 ];
 
 function openTerminal(dir) {

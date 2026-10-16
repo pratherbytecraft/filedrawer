@@ -1124,7 +1124,7 @@ function detailsBox() {
     else if (isFolder(one)) {
       html += '<span class="d" id="det-count"></span>';
       countFor = one.path;
-    } else html += line(`Size: ${fmtBytes(one.size)}`);
+    } else if (one.size != null) html += line(`Size: ${fmtBytes(one.size)}`);
     if (!one.volume) html += line(`Modified: ${fmtDate(one.modified)}`);
   } else {
     const files = picked.filter((it) => it.size != null);

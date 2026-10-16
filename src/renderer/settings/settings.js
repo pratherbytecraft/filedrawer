@@ -89,11 +89,31 @@ function drawTerminals() {
     '<div class="app" data-other="1"><i style="background:rgba(127,127,127,.35);color:var(--text)">+</i>Other...</div>';
 }
 
+// The colors of the classic schemes the preview draws from variables.
+const SCHEME_1995 = {
+  standard: ['#c0c0c0', '#000080', '#1084d0'], brick: ['#c2bfa5', '#800000', '#c08060'], desert: ['#d5ccbb', '#008080', '#80c0b8'],
+  eggplant: ['#90b0a8', '#5a4a7a', '#9a88c0'], lilac: ['#b0a8d0', '#5a4e8c', '#a094d0'], maple: ['#d8c098', '#804000', '#c08040'],
+  marine: ['#88c0b8', '#004060', '#4080a0'], plum: ['#a89890', '#483048', '#987088'], pumpkin: ['#e0c070', '#604020', '#d08040'],
+  rainy: ['#8098b0', '#405068', '#8098b8'], rose: ['#d0a0a0', '#803040', '#c07080'], slate: ['#98a8b8', '#304860', '#7090b0'],
+  spruce: ['#a0c0a0', '#305030', '#70a070'], storm: ['#a0a0a0', '#202030', '#606080'], teal: ['#a8c8c0', '#006060', '#40a0a0'],
+  wheat: ['#d8d0a0', '#808000', '#c0c060']
+};
+const SCHEME_2009 = {
+  sky: '#4a9ff5', dusk: '#2c4f8a', sea: '#14a4a8', leaf: '#4ca54d', lime: '#a3d55b', sun: '#f2c94c', pumpkin: '#f39c32', ruby: '#c8343b',
+  pink: '#e055a5', blush: '#f4a6c6', violet: '#8b5bc0', lavender: '#b8a1e0', taupe: '#a69580', cocoa: '#6b4a2f', slate: '#6f7680',
+  frost: '#e8eef5', graphite: '#8e8e93'
+};
+
 function drawPreview() {
   const s = app.settings;
   const mini = $('mini');
   const scheme = s.theme === 'system' ? '' : s.schemes[s.theme] || '';
   mini.className = `mini ${s.theme === 'system' ? 'system' + (macLook() === 'dark' ? ' dark' : '') : s.theme + ' ' + scheme}`;
+  const c95 = SCHEME_1995[scheme] || SCHEME_1995.standard;
+  mini.style.setProperty('--face', c95[0]);
+  mini.style.setProperty('--t1', c95[1]);
+  mini.style.setProperty('--t2', c95[2]);
+  mini.style.setProperty('--g', SCHEME_2009[scheme] || SCHEME_2009.sky);
   $('preview').classList.toggle('no-pane', !s.showPane);
   $('mini-term').hidden = !s.terminalButton;
   $('mini-title').textContent = s.fullPathTitle ? '/Users/you/Documents' : 'Documents';

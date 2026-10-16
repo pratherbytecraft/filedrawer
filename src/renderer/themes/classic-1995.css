@@ -1,0 +1,126 @@
+/* Classic 1995 theme: grey bevelled buttons, a title bar in the scheme's two
+   colors, and a white pane of plain blue links. The Mac's window buttons stay
+   on the left of the title bar. It has one look, light, whatever the Mac is
+   set to. */
+:root {
+  color-scheme: light;
+  --font: Tahoma, Geneva, Verdana, sans-serif;
+  --fs: 11px;
+  --tb-icon: 22px;
+  --icon-details: 16; --icon-list: 16; --icon-icons: 32; --icon-tiles: 48; --icon-thumbs: 48; --list-row: 18px;
+  --fold-back: #c6a232; --fold-front: #f6d23a; --fold-line: #806600;
+  --round-bg: transparent; --round-ink: #000; --round-ring: transparent;
+  --face: #c0c0c0; --t1: #000080; --t2: #1084d0;
+  --sel: var(--t1); --sel-text: #fff; --idle-sel: #808080;
+  --raised: inset -1px -1px #0a0a0a, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+  --sunken: inset 1px 1px #808080, inset -1px -1px #fff;
+  --field: inset 1px 1px #808080, inset -1px -1px #fff, inset 2px 2px #0a0a0a, inset -2px -2px #dfdfdf;
+  --text: #000; --dim: #808080;
+}
+/* Color schemes, from Startbar's Classic 1995 list. */
+[data-scheme="brick"] { --face: #c2bfa5; --t1: #800000; --t2: #c08060; }
+[data-scheme="desert"] { --face: #d5ccbb; --t1: #008080; --t2: #80c0b8; }
+[data-scheme="eggplant"] { --face: #90b0a8; --t1: #5a4a7a; --t2: #9a88c0; }
+[data-scheme="lilac"] { --face: #b0a8d0; --t1: #5a4e8c; --t2: #a094d0; }
+[data-scheme="maple"] { --face: #d8c098; --t1: #804000; --t2: #c08040; }
+[data-scheme="marine"] { --face: #88c0b8; --t1: #004060; --t2: #4080a0; }
+[data-scheme="plum"] { --face: #a89890; --t1: #483048; --t2: #987088; }
+[data-scheme="pumpkin"] { --face: #e0c070; --t1: #604020; --t2: #d08040; }
+[data-scheme="rainy"] { --face: #8098b0; --t1: #405068; --t2: #8098b8; }
+[data-scheme="rose"] { --face: #d0a0a0; --t1: #803040; --t2: #c07080; }
+[data-scheme="slate"] { --face: #98a8b8; --t1: #304860; --t2: #7090b0; }
+[data-scheme="spruce"] { --face: #a0c0a0; --t1: #305030; --t2: #70a070; }
+[data-scheme="storm"] { --face: #a0a0a0; --t1: #202030; --t2: #606080; }
+[data-scheme="teal"] { --face: #a8c8c0; --t1: #006060; --t2: #40a0a0; }
+[data-scheme="wheat"] { --face: #d8d0a0; --t1: #808000; --t2: #c0c060; }
+
+body { background: var(--face); color: var(--text); padding: 0 3px 3px; box-shadow: var(--raised); }
+
+.titlebar { height: 26px; margin: 0 -3px 2px; padding-left: 78px; color: #fff; background: linear-gradient(90deg, var(--t1), var(--t2)); font: bold 11px var(--font); }
+body.idle .titlebar { background: linear-gradient(90deg, #808080, #b5b5b5); color: #d4d0c8; }
+
+.toolbar { gap: 1px; padding: 2px 4px; min-height: 36px; background: var(--face); box-shadow: 0 1px #fff, inset 0 -1px #808080; margin-bottom: 1px; }
+.tb { gap: 4px; padding: 3px 6px; border: 0; }
+.tb:hover { box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; }
+.tb.down { box-shadow: var(--sunken); }
+.tb.off { opacity: .45; }
+.tbsep { height: 26px; margin: 0 3px; background: #808080; box-shadow: 1px 0 #fff; }
+
+.addrrow { padding: 3px 4px 4px; background: var(--face); }
+.addrrow .lab { padding: 0 2px 0 3px; }
+.addr { gap: 4px; height: 22px; padding: 0 2px 0 4px; background: #fff; box-shadow: var(--field); }
+.addr .dd { width: 17px; height: 18px; align-self: center; background: var(--face); box-shadow: var(--raised); color: #000; }
+.addr .dd.down { box-shadow: var(--sunken); }
+.go { padding: 1px 6px 1px 3px; }
+.go:hover { box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; }
+.suggest, .addr-error { left: 62px; top: 26px; background: #fff; border: 1px solid #000; }
+.suggest { padding: 1px 0; min-width: 360px; }
+.suggest .row { padding: 2px 5px; }
+.suggest .row.on { background: var(--sel); color: var(--sel-text); }
+.addr-error { padding: 4px 8px; background: #ffffe1; }
+
+.body { background: #fff; box-shadow: var(--field); padding: 2px; margin: 0 1px 2px; }
+.pane, .tree { width: 214px; background: #fff; border-right: 1px solid #808080; }
+.pane { padding: 10px 10px 4px; }
+.box { margin-bottom: 10px; }
+.box h3 { height: 20px; padding: 0 2px; font: bold 11px var(--font); color: #000; border-bottom: 2px solid; border-image: linear-gradient(90deg, var(--t1), var(--t2)) 1; }
+.box.first h3 { font-size: 13px; height: 24px; }
+.box h3 .chev { display: none; }
+.box .bd { padding: 5px 2px 8px; }
+.box .row { padding: 2px 0; color: #0000ee; text-decoration: underline; }
+.box .row:hover { color: #c00000; }
+.box .row .x { color: #808080; text-decoration: none; }
+.box .hint { color: #808080; padding-top: 3px; }
+.box .det { line-height: 1.5; }
+
+.tree .head { height: 22px; padding: 0 3px 0 6px; background: var(--face); border-bottom: 1px solid #808080; }
+.tree .head .x:hover { box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; }
+.tree .n { height: 18px; padding-right: 6px; }
+.tree .n .tw { width: 9px; height: 9px; border: 1px solid #808080; background: #fff; font-size: 8px; color: #000; }
+.tree .n .tw.none { border: 0; }
+.tree .n .lb { padding: 0 2px; }
+.tree .n.sel .lb { background: var(--sel); color: var(--sel-text); }
+body.idle .tree .n.sel .lb { background: none; color: #000; outline: 1px dotted #000; outline-offset: -1px; }
+.tree .grp { padding: 6px 6px 2px; color: var(--dim); }
+.tree .grp:empty { padding: 2px 0 0; }
+
+.files { background: #fff; }
+table.det th { height: 19px; padding: 0 6px; font-weight: normal; color: #000; background: var(--face); box-shadow: var(--raised); }
+table.det th:active { box-shadow: var(--sunken); }
+table.det th.sorted.asc::after { content: " \25B4"; color: #808080; }
+table.det th.sorted.desc::after { content: " \25BE"; color: #808080; }
+table.det td { height: 18px; padding: 0 6px; }
+table.det td .ic { width: 16px; height: 16px; }
+
+.item .nm { padding: 0 2px; }
+.item.sel .nm { background: var(--sel); color: var(--sel-text); outline: 1px dotted #ff0; outline-offset: -1px; }
+body.idle .item.sel .nm { background: none; color: #000; outline: 1px dotted #000; }
+.g-icons { grid-template-columns: repeat(auto-fill, 78px); gap: 14px 6px; padding: 10px; }
+.g-icons .nm { line-height: 1.25; max-width: 76px; }
+.g-tiles { grid-template-columns: repeat(auto-fill, 230px); gap: 8px 14px; padding: 10px; }
+.g-tiles .item { height: 56px; }
+.g-tiles .meta { line-height: 1.4; }
+.g-tiles .sub { color: var(--dim); padding: 0 2px; }
+.g-list { gap: 0 10px; padding: 4px 6px; grid-auto-columns: 210px; }
+.g-thumbs { grid-template-columns: repeat(auto-fill, 116px); gap: 14px 10px; padding: 12px; }
+.g-thumbs .frame { width: 102px; height: 102px; background: #fff; box-shadow: var(--field); padding: 5px; }
+.g-thumbs .item.sel .frame { box-shadow: var(--field), 0 0 0 2px var(--sel); }
+.g-thumbs .nm { max-width: 110px; }
+
+.band { border: 1px dotted #000; }
+input.ren { border: 1px solid #000; }
+.note { color: var(--dim); }
+
+.status { height: 22px; background: var(--face); padding: 2px 1px 1px; gap: 2px; }
+.status > div { padding: 0 6px; box-shadow: var(--sunken); }
+.status .s2 { width: 90px; justify-content: flex-end; }
+.status .s3 { width: 210px; }
+
+.menu { min-width: 190px; padding: 3px; background: var(--face); box-shadow: var(--raised), 2px 2px 0 rgba(0,0,0,.25); }
+.menu .mi { height: 20px; padding: 0 18px 0 6px; }
+.menu .mi b { font-weight: bold; }
+.menu .mi:hover, .menu .mi.on { background: var(--t1); color: #fff; }
+.menu .mi .key { color: #000; }
+.menu .mi:hover .key { color: #fff; }
+.menu .mi.chk::before { content: "\25CF"; position: absolute; left: 10px; font-size: 7px; }
+.menu .sep { height: 1px; margin: 3px 2px 4px; background: #808080; box-shadow: 0 1px #fff; }
