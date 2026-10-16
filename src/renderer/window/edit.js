@@ -297,12 +297,13 @@ document.addEventListener('keydown', (e) => {
   api.quickLook(it.path);
 });
 
-// The apps that can open the right clicked file, with its usual app first.
+// The apps that can open the right clicked file, with its usual app first,
+// and Choose App... for the app list, which can also change the default.
 async function openWithEntries(paths) {
   const apps = await api.openWithApps(paths[0]);
   const sorted = apps.slice().sort((a, b) => (b.default - a.default) || a.name.localeCompare(b.name));
   const rows = sorted.map((a) => ({ label: a.default ? `${a.name} (default)` : a.name, click: () => api.openWith(a.path, paths) }));
-  return [...rows, ...(rows.length ? ['sep'] : []), { label: 'Other...', click: () => api.openWithOther(paths) }];
+  return [...rows, ...(rows.length ? ['sep'] : []), { label: 'Choose App...', click: () => api.chooseApp(paths) }];
 }
 
 // ---------- Send To and Eject ----------

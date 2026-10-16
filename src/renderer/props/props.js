@@ -34,10 +34,11 @@ api.getProps().then((d) => {
   $('kind').textContent = d.kind;
   $('location').textContent = d.location;
   $('contains-label').hidden = $('contains').hidden = !d.folder;
+  showOpensWith(d.opensWith);
   if (d.volume) {
     // A disk: how full it is, in place of the sizes and the switches.
-    document.querySelector('.grid').querySelectorAll('span').forEach((el, i) => {
-      if (i >= 4) el.hidden = true;
+    document.querySelector('.grid').querySelectorAll(':scope > span').forEach((el, i) => {
+      if (i >= 6) el.hidden = true;
     });
     $('disk-grid').hidden = false;
     if (d.volume.total) $('used').textContent = fmtBytes(d.volume.total - d.volume.free);
@@ -52,6 +53,17 @@ api.getProps().then((d) => {
   $('hidden').checked = !!d.hidden;
   $('ok').focus();
 });
+
+// The app these files open with, for files of one extension.
+function showOpensWith(app) {
+  $('opens-label').hidden = $('opens').hidden = !app;
+  if (!app) return;
+  $('opens-name').textContent = app.name;
+  if (app.icon) $('opens-icon').src = app.icon;
+  else $('opens-icon').removeAttribute('src');
+}
+api.onPropsOpensWith(showOpensWith);
+$('change').addEventListener('click', () => api.changeDefaultApp());
 
 api.onPropsSize((t) => {
   const more = t.done ? '' : '...';

@@ -38,6 +38,7 @@ const DEFAULTS = Object.freeze({
   showHidden: false, // files the Mac keeps out of sight, shown dimmed
   pins: [], // pinned folders, as paths, in the order shown
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
+  openWith: {}, // extension -> the apps picked for it in the app list, last picked first
   sort: {
     key: 'name', // name | size | kind | modified
     dir: 'asc' // asc | desc
@@ -78,6 +79,12 @@ function clean(saved, base) {
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.folderViews = {};
         for (const [k, view] of Object.entries(v)) if (typeof view === 'string') out.folderViews[k] = view;
+      }
+    } else if (base === DEFAULTS && key === 'openWith') {
+      // Any extension can be in here, each with a list of app paths.
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.openWith = {};
+        for (const [k, apps] of Object.entries(v)) if (Array.isArray(apps)) out.openWith[k] = apps.filter((x) => typeof x === 'string');
       }
     } else if (Array.isArray(b)) {
       if (Array.isArray(v)) out[key] = v.filter((x) => typeof x === 'string');

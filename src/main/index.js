@@ -22,6 +22,7 @@ const search = require('./search');
 const updates = require('./updates');
 const finder = require('./finder');
 const welcome = require('./welcome');
+const chooser = require('./chooser');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -710,22 +711,9 @@ ipcMain.handle('op:rename', async (e, from, name) => answer(e, await renameWithU
 
 // Properties, Open With and Quick Look.
 ipcMain.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
-ipcMain.handle('openWith:apps', async (_e, p) => {
-  const res = await helper.request('openWith', { path: p });
-  return res ? res.apps : [];
-});
+ipcMain.handle('openWith:apps', (_e, p) => chooser.appsFor(p));
 ipcMain.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
-ipcMain.on('openWith:other', async (e, paths) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
-  const res = await dialog.showOpenDialog(win, {
-    title: 'Open With',
-    buttonLabel: 'Open',
-    defaultPath: '/Applications',
-    filters: [{ name: 'Applications', extensions: ['app'] }],
-    properties: ['openFile']
-  });
-  if (!res.canceled && res.filePaths[0]) execFile('open', ['-a', res.filePaths[0], ...paths], () => {});
-});
+ipcMain.on('openWith:choose', (e, paths) => chooser.show({ paths, mode: 'choose', near: BrowserWindow.fromWebContents(e.sender) }));
 // Space again on the same item closes its preview.
 const previewing = new WeakMap(); // window -> the path in Quick Look
 ipcMain.on('quicklook', (e, p) => {

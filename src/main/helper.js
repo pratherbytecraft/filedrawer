@@ -53,11 +53,13 @@ function start() {
   child.stdin.on('error', () => {}); // the exit handler above covers it
 }
 
-function request(cmd, args = {}, { withError = false } = {}) {
+// timeout is longer for a request that waits on the user, such as macOS's
+// question before a new default app.
+function request(cmd, args = {}, { withError = false, timeout = TIMEOUT } = {}) {
   if (!child) return Promise.resolve(null);
   const id = nextId++;
   return new Promise((resolve) => {
-    const timer = setTimeout(() => finish(id, null), TIMEOUT);
+    const timer = setTimeout(() => finish(id, null), timeout);
     pending.set(id, { resolve, timer, withError });
     child.stdin.write(JSON.stringify({ id, cmd, ...args }) + '\n');
   });

@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const helper = require('./helper');
 const folders = require('./folders');
+const chooser = require('./chooser');
 
 const open = new Map(); // window id -> { paths, stopped }
 let renameItem = null; // (from, name) -> { path } | { error }, with Undo, from index.js
@@ -57,14 +58,15 @@ async function describe(paths) {
     modified: paths.length === 1 && first.st ? first.st.mtimeMs : null,
     accessed: paths.length === 1 && first.st ? first.st.atimeMs : null,
     locked: flags ? flags.locked : null,
-    hidden: flags ? flags.hidden : null
+    hidden: flags ? flags.hidden : null,
+    opensWith: volume ? null : await chooser.opensWith(paths)
   };
 }
 
 function show(paths, near) {
   const opts = {
     width: 380,
-    height: 470,
+    height: 500,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -148,6 +150,23 @@ async function apply(e, change) {
   if (change.hidden !== undefined) rest.hidden = change.hidden;
   return Object.keys(rest).length ? setFlags(p, rest) : {};
 }
+
+// Change... next to Opens with: the app list over Properties, and the row
+// shows the new app once it's set.
+ipcMain.on('props:changeApp', (e) => {
+  const entry = open.get(e.sender.id);
+  if (!entry) return;
+  const sender = e.sender;
+  chooser.show({
+    paths: entry.paths,
+    mode: 'change',
+    near: BrowserWindow.fromWebContents(sender),
+    onDone: async () => {
+      const now = await chooser.opensWith(entry.paths);
+      if (!sender.isDestroyed()) sender.send('props:opensWith', now);
+    }
+  });
+});
 
 function init({ rename }) {
   renameItem = rename;

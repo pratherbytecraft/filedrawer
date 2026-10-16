@@ -27,7 +27,12 @@
 //   {"id":8,"cmd":"clipRead"}
 //     -> {"id":8,"paths":["/Users/you/a.txt"],"change":42}
 //   {"id":9,"cmd":"openWith","path":"/Users/you/a.txt"}
-//     -> {"id":9,"apps":[{"path":"/System/Applications/TextEdit.app","name":"TextEdit","default":true}]}
+//     -> {"id":9,"apps":[{"path":"/System/Applications/TextEdit.app","name":"TextEdit","default":true,"claims":true}]}
+//     (claims: the app names this kind of file outright, not only any file)
+//   {"id":15,"cmd":"setDefault","path":"/Users/you/a.txt","app":"/Applications/BBEdit.app","scope":"type"}
+//     -> {"id":15,"ok":true}   (scope type: every file of this kind, file: this file only)
+//     macOS asks the user before it changes the app for a whole kind, so the
+//     reply comes once that's answered, while other requests carry on.
 //   {"id":10,"cmd":"flags","path":"/Users/you/a.txt"}
 //     -> {"id":10,"locked":false,"hidden":false}
 //   {"id":11,"cmd":"setFlags","path":"/Users/you/a.txt","locked":true,"hidden":false}
@@ -66,10 +71,16 @@ import UniformTypeIdentifiers
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
+// Replies can come from another thread (setDefault answers once macOS
+// does), so lines are written one at a time.
+let replyLock = NSLock()
+
 func reply(_ obj: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: obj),
           let line = String(data: data, encoding: .utf8) else { return }
+    replyLock.lock()
     print(line)
+    replyLock.unlock()
 }
 
 // An icon drawn at size x size pixels, as PNG.
@@ -134,6 +145,19 @@ func volume(_ path: String) -> [String: Any] {
     let important = v?.volumeAvailableCapacityForImportantUsage.map { Int($0) } ?? 0
     let free = max(important, v?.volumeAvailableCapacity ?? 0)
     return ["name": v?.volumeLocalizedName ?? v?.volumeName ?? "", "free": free, "total": v?.volumeTotalCapacity ?? 0]
+}
+
+// Whether an app names this exact kind of file or extension among its
+// document types, as opposed to a wider kind (any text, any file).
+func claims(_ app: URL, _ file: URL) -> Bool {
+    guard let docs = Bundle(url: app)?.infoDictionary?["CFBundleDocumentTypes"] as? [[String: Any]] else { return false }
+    let ext = file.pathExtension.lowercased()
+    let type = (try? file.resourceValues(forKeys: [.contentTypeKey]))?.contentType
+    for doc in docs {
+        if !ext.isEmpty, let exts = doc["CFBundleTypeExtensions"] as? [String], exts.contains(where: { $0.lowercased() == ext }) { return true }
+        if let type, let ids = doc["LSItemContentTypes"] as? [String], ids.contains(where: { UTType($0) == type }) { return true }
+    }
+    return false
 }
 
 func handle(_ req: [String: Any]) {
@@ -201,9 +225,24 @@ func handle(_ req: [String: Any]) {
         var apps: [[String: Any]] = []
         for app in NSWorkspace.shared.urlsForApplications(toOpen: url) where !seen.contains(app.path) {
             seen.insert(app.path)
-            apps.append(["path": app.path, "name": FileManager.default.displayName(atPath: app.path), "default": app == fallback])
+            apps.append(["path": app.path, "name": FileManager.default.displayName(atPath: app.path), "default": app == fallback, "claims": claims(app, url)])
         }
         reply(["id": id, "apps": apps])
+    case "setDefault":
+        let file = URL(fileURLWithPath: req["path"] as? String ?? "/")
+        let app = URL(fileURLWithPath: req["app"] as? String ?? "/")
+        let finished: (Error?) -> Void = { err in
+            if let err = err as NSError? {
+                reply(["id": id, "error": err.localizedDescription, "code": err.code, "domain": err.domain])
+            } else {
+                reply(["id": id, "ok": true])
+            }
+        }
+        if req["scope"] as? String == "file" {
+            NSWorkspace.shared.setDefaultApplication(at: app, toOpenFileAt: file, completion: finished)
+        } else {
+            NSWorkspace.shared.setDefaultApplication(at: app, toOpenContentTypeOfFileAt: file, completion: finished)
+        }
     case "flags":
         let v = try? URL(fileURLWithPath: req["path"] as? String ?? "/").resourceValues(forKeys: [.isUserImmutableKey, .isHiddenKey])
         reply(["id": id, "locked": v?.isUserImmutable ?? false, "hidden": v?.isHidden ?? false])

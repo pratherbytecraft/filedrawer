@@ -46,12 +46,18 @@ contextBridge.exposeInMainWorld('filedrawer', {
   showProps: (paths) => ipcRenderer.send('props:open', paths),
   openWithApps: (p) => ipcRenderer.invoke('openWith:apps', p),
   openWith: (appPath, paths) => ipcRenderer.send('openWith:open', appPath, paths),
-  openWithOther: (paths) => ipcRenderer.send('openWith:other', paths),
+  chooseApp: (paths) => ipcRenderer.send('openWith:choose', paths),
   quickLook: (p) => ipcRenderer.send('quicklook', p),
   // The Properties window.
   getProps: () => ipcRenderer.invoke('props:get'),
   onPropsSize: on('props:size'),
   applyProps: (change) => ipcRenderer.invoke('props:apply', change),
+  changeDefaultApp: () => ipcRenderer.send('props:changeApp'),
+  onPropsOpensWith: on('props:opensWith'),
+  // The app list window behind Change... and Choose App...
+  chooserGet: () => ipcRenderer.invoke('chooser:get'),
+  chooserBrowse: () => ipcRenderer.invoke('chooser:browse'),
+  chooserDone: (choice) => ipcRenderer.invoke('chooser:done', choice),
   // The progress window of a copy or move.
   onJob: on('job:update'),
   answerJob: (id, choice, all) => ipcRenderer.send('job:answer', id, choice, all),
