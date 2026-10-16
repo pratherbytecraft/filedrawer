@@ -618,6 +618,7 @@ document.addEventListener('keydown', (e) => {
       openSelected();
       break;
     case 'Backspace':
+      if (e.metaKey) return; // Move to Trash, from the menu
       e.preventDefault();
       back();
       break;
