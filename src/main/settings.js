@@ -30,6 +30,7 @@ const DEFAULTS = Object.freeze({
   confirmTrash: false, // ask before moving items to the Trash
   terminalButton: true, // Open Terminal Here on the toolbar
   takeOverFinder: true, // Finder's new folder windows open in Filedrawer, in the same spot
+  welcomed: false, // the first launch note has been shown
   updates: {
     auto: true // check npm for a newer version now and then, never installs
   },

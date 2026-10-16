@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('filedrawer', {
   chooseStartFolder: () => ipcRenderer.send('settings:startFolder'),
   chooseTerminal: () => ipcRenderer.send('settings:terminal'),
   openLink: (name) => ipcRenderer.send('link', name),
-  getViewer: () => ipcRenderer.invoke('viewer:get'),
-  setViewer: (on) => ipcRenderer.invoke('viewer:set', on)
+  // The Default File Manager page's permission buttons.
+  finderAccessibility: () => ipcRenderer.send('finder:accessibility'),
+  finderAutomation: () => ipcRenderer.send('finder:automation'),
+  // The first launch note.
+  welcome: (what) => ipcRenderer.send('welcome', what)
 });

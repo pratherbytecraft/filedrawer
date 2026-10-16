@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" data-appearance="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>Open folders in Filedrawer?</title>
+<link rel="stylesheet" href="../settings/settings.css">
+<style>
+  body { background: var(--win); }
+  [data-appearance="light"] body { background: #f6f6f6; }
+  .sheet { height: 100%; display: flex; flex-direction: column; padding: 22px 24px 18px; }
+  .head { display: flex; gap: 14px; align-items: flex-start; }
+  .head svg { width: 56px; height: 56px; flex: none; }
+  h3 { margin: 2px 0 6px; font-size: 14px; }
+  p { margin: 0 0 8px; line-height: 1.45; }
+  .steps { margin: 12px 0 4px; }
+  .steps .row { min-height: 40px; }
+  .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 16px; }
+  .btns .btn { padding: 5px 16px; font-size: 13px; }
+  .check { width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; flex: none; background: rgba(127,127,127,.3); color: #fff; font-size: 11px; font-weight: 700; }
+  .check.ok { background: #30d158; }
+</style>
+</head>
+<body>
+<div class="sheet" id="sheet">
+  <div class="head">
+    <svg viewBox="100 100 824 824">
+      <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5ac8fa"/><stop offset=".55" stop-color="#0a84ff"/><stop offset="1" stop-color="#0a5bd0"/></linearGradient>
+      <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c37a"/><stop offset="1" stop-color="#c98f3a"/></linearGradient></defs>
+      <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sky)"/>
+      <rect x="262" y="294" width="500" height="560" rx="36" fill="url(#wood)"/>
+      <rect x="300" y="334" width="424" height="226" rx="22" fill="#5a3a10"/>
+      <path d="M330 464v-90h30l20-40h100l20 40h164v90z" fill="#9fd3ff"/><path d="M420 464v-64h30l20-40h100l20 40h174v64z" fill="#fde79a"/><path d="M360 464v-50h30l20-40h100l20 40h164v50z" fill="#a8e38a"/>
+      <rect x="280" y="452" width="464" height="124" rx="24" fill="#e8b46a" stroke="#8a5a1c" stroke-width="6"/><rect x="452" y="496" width="120" height="34" rx="17" fill="#6b4512"/>
+      <rect x="300" y="600" width="424" height="214" rx="22" fill="#e8b46a" stroke="#8a5a1c" stroke-width="6"/><rect x="452" y="690" width="120" height="34" rx="17" fill="#6b4512"/>
+    </svg>
+    <div id="text"></div>
+  </div>
+  <div class="steps group" id="steps" hidden></div>
+  <div class="btns" id="btns"></div>
+</div>
+<script src="welcome.js"></script>
+</body>
+</html>

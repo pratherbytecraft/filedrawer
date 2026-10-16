@@ -186,4 +186,4 @@ function init({ version: v, onChange }) {
   ipcMain.on('settings:terminal', () => chooseTerminal());
 }
 
-module.exports = { init, show, loginItem, startFolder, get window() { return win; } };
+module.exports = { init, show, loginItem, setLoginItem, startFolder, get window() { return win; } };

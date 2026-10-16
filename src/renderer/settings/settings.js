@@ -7,9 +7,8 @@ const $ = (id) => document.getElementById(id);
 let app = null; // state from the main process
 let page = new URLSearchParams(location.search).get('page') || 'appearance';
 let terminals = [];
-let viewer = null; // { on, known }: Filedrawer is the app for Show in Finder
 
-const TITLES = { appearance: 'Appearance', folders: 'Folder Options', terminal: 'Terminal', viewer: 'Default Viewer', general: 'General', about: 'About' };
+const TITLES = { appearance: 'Appearance', folders: 'Folder Options', terminal: 'Terminal', viewer: 'Default File Manager', general: 'General', about: 'About' };
 const PREVIEW_ON = new Set(['appearance', 'folders']);
 const FILES = [['Invoices', 'd'], ['Projects', 'd'], ['Recipes', 'd'], ['.config', 'h'], ['Budget 2026', 'f', '.numbers'], ['Notes', 'f', '.txt'], ['Resume', 'f', '.pdf']];
 
@@ -69,20 +68,26 @@ function draw() {
   $('about-version').textContent = `Version ${app.version}`;
   drawTerminals();
   drawPreview();
+  drawFinder();
 }
 
-function drawViewer() {
-  if (!viewer) return;
-  const on = viewer.on;
-  $('viewer-status').innerHTML = on ? '<i></i>Filedrawer' : '<i class="warn"></i>Finder';
-  $('viewer-btn').textContent = on ? 'Use Finder' : 'Use Filedrawer';
-  $('viewer-btn').classList.toggle('primary', !on);
-  $('viewer-note').textContent = on ? 'Show in Finder from other apps opens Filedrawer.' : 'Show in Finder from other apps opens Finder.';
-}
-
-async function loadViewer() {
-  viewer = await api.getViewer();
-  drawViewer();
+// The Finder takeover: the switch, and a row per permission it needs.
+function drawFinder() {
+  const on = app.settings.takeOverFinder;
+  const p = app.finder || {};
+  const allowed = '<span class="status"><i></i>Allowed</span>';
+  const missing = (id, label) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="${id}">${label}</span>`;
+  $('ax-ctl').innerHTML = p.accessibility ? allowed : missing('ax-btn', 'Open Privacy Settings');
+  $('ae-ctl').innerHTML = p.automation === 'allowed' ? allowed
+    : missing('ae-btn', p.automation === 'denied' ? 'Open Privacy Settings' : 'Allow');
+  document.querySelectorAll('.perm').forEach((r) => r.classList.toggle('dim', !on));
+  const note = $('finder-note');
+  const lacking = !p.accessibility ? 'Accessibility' : p.automation !== 'allowed' ? 'Control Finder' : null;
+  note.classList.toggle('warn', on && !!lacking);
+  note.textContent = !on ? 'Folders open in Finder. Show in Finder from other apps opens Finder.'
+    : lacking ? `Folders still open in Finder until ${lacking} is allowed below.`
+      : 'Finder\'s new windows open here, and so does Show in Finder from other apps.';
+  $('startbar-group').hidden = !app.startbar;
 }
 
 function drawVersion() {
@@ -190,6 +195,14 @@ document.addEventListener('click', (e) => {
     set('accent', sw.dataset.v);
     return;
   }
+  if (e.target.id === 'ax-btn') {
+    api.finderAccessibility();
+    return;
+  }
+  if (e.target.id === 'ae-btn') {
+    api.finderAutomation();
+    return;
+  }
   const term = e.target.closest('#apps .app');
   if (term) {
     if (term.dataset.other) api.chooseTerminal();
@@ -209,11 +222,6 @@ $('start').addEventListener('change', (e) => {
   }
 });
 $('login').addEventListener('click', () => api.setLoginItem(!app.loginItem.on));
-$('viewer-btn').addEventListener('click', async () => {
-  viewer = await api.setViewer(!(viewer && viewer.on));
-  drawViewer();
-});
-window.addEventListener('focus', loadViewer);
 $('check').addEventListener('click', () => api.checkUpdates());
 $('export').addEventListener('click', () => api.exportSettings());
 $('import').addEventListener('click', () => api.importSettings());
@@ -244,5 +252,4 @@ api.getState().then((state) => {
   draw();
   showPage(page);
   loadTerminals();
-  loadViewer();
 });

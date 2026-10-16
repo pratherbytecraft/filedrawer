@@ -17,6 +17,7 @@ const prefs = require('./prefs');
 const search = require('./search');
 const updates = require('./updates');
 const finder = require('./finder');
+const welcome = require('./welcome');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -46,15 +47,26 @@ function state() {
     version: VERSION,
     loginItem: prefs.loginItem(),
     update: updates.get(),
-    themes: THEME_LIST
+    themes: THEME_LIST,
+    finder: finder.permission,
+    startbar: startbarInstalled()
   };
+}
+
+// Startbar, Prather Bytecraft's taskbar, when it's installed: the Default
+// File Manager page points to its own setting.
+let startbarSeen = { at: 0, found: false };
+function startbarInstalled() {
+  if (Date.now() - startbarSeen.at < 30 * 1000) return startbarSeen.found;
+  const found = [path.join(os.homedir(), 'Applications', 'Startbar.app'), '/Applications/Startbar.app'].some((p) => fs.existsSync(p));
+  startbarSeen = { at: Date.now(), found };
+  return found;
 }
 
 // Every window that shows settings: the folder windows and the settings window.
 function broadcast(channel, payload) {
   for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  const pw = prefs.window;
-  if (pw && !pw.isDestroyed()) pw.webContents.send(channel, payload);
+  for (const w of [prefs.window, welcome.window]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
 
 function pushState() {
@@ -100,7 +112,12 @@ function openWindow(dir, select, { wait = false, spare = false, bounds = null, t
   // A window standing in for Finder's shows once its page has drawn in the
   // theme's colors (the page starts out light), the rest when ready.
   if (wait && !spare) whenDrawn(win, () => showStandIn(win));
-  else if (!wait) win.once('ready-to-show', () => win.show());
+  else if (!wait) {
+    win.once('ready-to-show', () => {
+      win.show();
+      maybeWelcome();
+    });
+  }
   // The size of the last window moved or resized is the size of the next one.
   let sizeTimer = null;
   win.on('resize', () => {
@@ -194,18 +211,68 @@ const finderEvents = {
   },
   permission() {
     pushState();
+    maybeWelcome();
   }
 };
 
+const PRIVACY = 'x-apple.systempreferences:com.apple.preference.security?Privacy_';
+
+// Show in Finder from other apps (NSFileViewer) follows the same switch.
+async function setFileViewer(on) {
+  const res = await helper.request('viewer');
+  if (res && (res.fileViewer === BUNDLE_ID) !== on) await helper.request('setViewer', { bundleId: on ? BUNDLE_ID : '' });
+}
+
+let takingOver = null;
+
 function watchFinder() {
-  if (settings.get().takeOverFinder) {
+  const on = settings.get().takeOverFinder;
+  if (on) {
     finder.start(finderEvents);
     makeSpare();
   } else {
     finder.stop();
     dropSpare();
   }
+  if (on === takingOver) return;
+  // Turned on, from the settings page or by the first launch note: it only
+  // works while Filedrawer runs, so Filedrawer opens at login from then on.
+  if (on && takingOver === false) prefs.setLoginItem(true);
+  takingOver = on;
+  setFileViewer(on);
 }
+
+// The first launch note, once, on the first window, while the takeover is
+// on and a permission is missing.
+function maybeWelcome() {
+  const s = settings.get();
+  const p = finder.permission;
+  if (s.welcomed || !s.takeOverFinder || p.accessibility === null) return;
+  if (p.accessibility && p.automation === 'allowed') {
+    settings.update({ welcomed: true });
+    return;
+  }
+  const parent = [...windows].find((w) => w.isVisible() && !w.isDestroyed());
+  if (!parent) return;
+  settings.update({ welcomed: true });
+  welcome.show(parent, {
+    onContinue: () => {
+      prefs.setLoginItem(true);
+      pushState();
+      if (!finder.permission.accessibility) shell.openExternal(PRIVACY + 'Accessibility');
+      else if (finder.permission.automation !== 'allowed') askAutomation();
+    },
+    onClose: () => {}
+  });
+}
+
+function askAutomation() {
+  if (finder.permission.automation === 'denied') shell.openExternal(PRIVACY + 'Automation');
+  else finder.askAutomation();
+}
+
+ipcMain.on('finder:accessibility', () => shell.openExternal(PRIVACY + 'Accessibility'));
+ipcMain.on('finder:automation', () => askAutomation());
 
 ipcMain.on('window:drawn', (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -746,15 +813,6 @@ ipcMain.handle('op:trash', async (e, paths) => {
 });
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 // Show in Finder from other apps: Filedrawer or Finder.
-async function viewerState() {
-  const res = await helper.request('viewer');
-  return { on: !!res && res.fileViewer === BUNDLE_ID, known: !!res };
-}
-ipcMain.handle('viewer:get', () => viewerState());
-ipcMain.handle('viewer:set', async (_e, on) => {
-  await helper.request('setViewer', { bundleId: on ? BUNDLE_ID : '' });
-  return viewerState();
-});
 ipcMain.on('search:start', (e, id, q) => search.start(e.sender, id, q));
 ipcMain.on('search:stop', (e) => search.stop(e.sender));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));

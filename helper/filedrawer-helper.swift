@@ -277,6 +277,12 @@ final class FinderWatcher {
 
     func start() {
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
+        // An Accessibility call from an app that isn't allowed yet puts it in
+        // the list in System Settings, switched off, ready to turn on.
+        if !trusted {
+            var v: AnyObject?
+            AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute as CFString, &v)
+        }
         checkAutomation()
         emitPermission()
         attach()
@@ -291,7 +297,7 @@ final class FinderWatcher {
             guard let self else { return }
             let now = AXIsProcessTrusted()
             let before = self.automation
-            if self.automation != "allowed" { self.checkAutomation() }
+            self.checkAutomation()
             if now != self.trusted || before != self.automation {
                 self.trusted = now
                 self.emitPermission()

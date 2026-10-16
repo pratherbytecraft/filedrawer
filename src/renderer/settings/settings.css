@@ -99,3 +99,11 @@
   .apps { flex-wrap: wrap; }
   [hidden] { display: none !important; }
   .foot-note code { font: 11px ui-monospace, Menlo, monospace; }
+  .row.sub { padding-left: 24px; }
+  .row.dim { opacity: .4; }
+  .row .lbl small.warn { color: #ff9f0a; }
+  [data-appearance="light"] .row .lbl small.warn { color: #c46a00; }
+  .keeps { display: grid; grid-template-columns: 1fr 1fr; }
+  .keeps .row { min-height: 34px; }
+  .keeps .row:nth-child(-n+2) { border-top: 0; }
+  .keeps .row:nth-child(odd) { border-right: 1px solid var(--row-line); }
