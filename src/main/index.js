@@ -16,6 +16,7 @@ const props = require('./props');
 const prefs = require('./prefs');
 const search = require('./search');
 const updates = require('./updates');
+const finder = require('./finder');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -71,13 +72,15 @@ function placeFor() {
 }
 
 // select, when given, is an item in dir to pick once it's listed.
-function openWindow(dir, select) {
+// A window with wait set opens before its folder is known, at the frame of
+// the Finder window it stands in for, and asks for the folder once loaded.
+function openWindow(dir, select, { wait = false, bounds = null, title = null } = {}) {
   const win = new BrowserWindow({
-    ...placeFor(),
+    ...(bounds || placeFor()),
     minWidth: 560,
     minHeight: 360,
     show: false,
-    title: path.basename(dir) || dir,
+    title: title || path.basename(dir) || dir,
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 12, y: 9 },
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ffffff',
@@ -89,8 +92,16 @@ function openWindow(dir, select) {
     }
   });
   windows.add(win);
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query: select ? { path: dir, select } : { path: dir } });
-  win.once('ready-to-show', () => win.show());
+  const query = { path: dir };
+  if (select) query.select = select;
+  if (wait) query.wait = '1';
+  win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query });
+  if (wait) {
+    app.focus({ steal: true });
+    win.show();
+  } else {
+    win.once('ready-to-show', () => win.show());
+  }
   // The size of the last window moved or resized is the size of the next one.
   let sizeTimer = null;
   win.on('resize', () => {
@@ -104,11 +115,59 @@ function openWindow(dir, select) {
   win.on('focus', buildMenu);
   win.on('closed', () => {
     windows.delete(win);
+    waiting.delete(win);
     unwatch(win);
     buildMenu();
   });
   return win;
 }
+
+// ---------- Finder's new windows open here ----------
+
+// Filedrawer windows standing in for a Finder window, by the helper's token,
+// and the folder each is waiting for.
+const standIns = new Map(); // token -> window
+const waiting = new Map(); // window -> { path, resolve }
+
+function folderFor(win, dir) {
+  const w = waiting.get(win) || {};
+  if (w.resolve) w.resolve(dir);
+  waiting.set(win, { path: dir });
+}
+
+const finderEvents = {
+  window({ token, frame: [x, y, width, height], title }) {
+    const win = openWindow(folders.HOME, null, { wait: true, bounds: { x, y, width, height }, title });
+    standIns.set(token, win);
+  },
+  folder({ token, path: dir }) {
+    const win = standIns.get(token);
+    standIns.delete(token);
+    if (win && !win.isDestroyed()) folderFor(win, dir);
+  },
+  // Not a folder Filedrawer takes: Finder keeps its window.
+  skip({ token }) {
+    const win = standIns.get(token);
+    standIns.delete(token);
+    if (win && !win.isDestroyed()) win.destroy();
+  },
+  permission() {
+    pushState();
+  }
+};
+
+function watchFinder() {
+  if (settings.get().takeOverFinder) finder.start(finderEvents);
+  else finder.stop();
+}
+
+// A waiting window asks for its folder once its page is up. Null closes it.
+ipcMain.handle('window:waitFolder', (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const w = waiting.get(win);
+  if (w && w.path) return w.path;
+  return new Promise((resolve) => waiting.set(win, { resolve }));
+});
 
 // Each window watches the folder it shows and is told when something in it
 // changes, a moment after the changes stop. Computer watches /Volumes, so
@@ -195,7 +254,10 @@ app.on('activate', () => {
 // Like other Mac apps, Filedrawer stays open with no windows.
 app.on('window-all-closed', () => {});
 
-app.on('will-quit', () => helper.stop());
+app.on('will-quit', () => {
+  helper.stop();
+  finder.stop();
+});
 
 const THEMES = [['system', 'System'], ['classic-2009', 'Classic 2009'], ['classic-2001', 'Classic 2001'], ['classic-1995', 'Classic 1995']];
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
@@ -656,7 +718,10 @@ ipcMain.on('window:view', (e, look) => {
   buildMenu();
 });
 // Finder keeps the Trash to itself, so the Trash opens there.
-ipcMain.on('trash:open', () => shell.openPath(path.join(folders.HOME, '.Trash')));
+ipcMain.on('trash:open', () => {
+  finder.pass();
+  shell.openPath(path.join(folders.HOME, '.Trash'));
+});
 ipcMain.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
@@ -686,12 +751,14 @@ app.whenReady().then(() => {
     copyright: 'Prather Bytecraft. All rights reserved.'
   });
   settings.onChange(() => {
+    watchFinder();
     pushState();
     buildMenu();
   });
   undo.onChange(buildMenu);
   system.watch(pushState);
   buildMenu();
+  watchFinder();
   ready = true;
   const early = queued.splice(0);
   early.forEach(([dir, select]) => openWindow(dir, select));

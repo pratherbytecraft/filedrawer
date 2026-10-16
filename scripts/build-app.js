@@ -127,6 +127,9 @@ function setPlist(dest) {
   set('CFBundleIconFile', 'string', 'Filedrawer.icns');
   set('LSApplicationCategoryType', 'string', 'public.app-category.utilities');
   set('NSHumanReadableCopyright', 'string', 'Prather Bytecraft. All rights reserved.');
+  // Shown in macOS's prompt for Control Finder, which Filedrawer uses to ask
+  // which folder a new Finder window shows.
+  set('NSAppleEventsUsageDescription', 'string', 'Filedrawer asks Finder which folder a new Finder window shows, so it can open that folder itself.');
   // Folders can be opened with Filedrawer, from `filedrawer <folder>` and
   // later as the default folder viewer.
   set('CFBundleDocumentTypes', 'json', JSON.stringify([{

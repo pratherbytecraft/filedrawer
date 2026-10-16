@@ -41,7 +41,26 @@
 // macOS doesn't let another app become the one that opens folders (Launch
 // Services answers -50 for public.folder), so only Show in Finder can move.
 // A request that fails gets {"id":n,"error":"..."}.
+//
+//   filedrawer-helper watch
+//
+// Watches Finder so its new folder windows open in Filedrawer instead (see
+// FinderWatcher below). Writes one JSON event per line:
+//   {"type":"permission","accessibility":true,"automation":"allowed"}
+//     (automation is allowed, denied, ask or unknown while Finder isn't running)
+//   {"type":"window","token":1,"frame":[x,y,w,h],"title":"Documents"}
+//     (Finder opened a window: Filedrawer shows one at that frame right away)
+//   {"type":"folder","token":1,"path":"/Users/you/Documents"}
+//     (the folder it shows; Finder's window is closed next)
+//   {"type":"skip","token":1}
+//     (not a folder Filedrawer takes, Finder keeps the window)
+// and reads one command per line:
+//   {"cmd":"pass"}            the next Finder window in the next 3 seconds stays Finder's
+//   {"cmd":"askAutomation"}   asks the user for Control Finder (macOS shows its prompt once)
+//   {"cmd":"askAccessibility"} puts Filedrawer in the Accessibility list and shows macOS's note
 import AppKit
+import ApplicationServices
+import CoreServices
 import Foundation
 import UniformTypeIdentifiers
 
@@ -236,10 +255,226 @@ func serve() {
     }
 }
 
+// ---------- watch: Finder's new windows open in Filedrawer ----------
+
+// When Finder opens a folder window, Filedrawer opens one in the same spot
+// and Finder's closes underneath. Finder only says a window opened after
+// it's drawn, so the frame goes out first and Filedrawer covers the window
+// within a few frames; asking Finder which folder it shows takes longer.
+// Windows that aren't folders on disk stay Finder's.
+final class FinderWatcher {
+    var trusted = AXIsProcessTrusted()
+    var automation = "unknown"
+    var observer: AXObserver?
+    var finderPid: pid_t = 0
+    var known: [AXUIElement] = []
+    var token = 0
+    var passUntil = Date.distantPast
+    var attachedOnce = false
+
+    // Places that aren't a folder on disk, by the title Finder gives them.
+    static let skipTitles: Set<String> = ["Recents", "AirDrop", "Network", "Trash", "iCloud Drive", "Computer"]
+
+    func start() {
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
+        checkAutomation()
+        emitPermission()
+        attach()
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            if app?.bundleIdentifier == "com.apple.finder" { self?.attach() }
+        }
+        // A permission given or taken away in System Settings, and Finder
+        // coming back after a restart.
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let now = AXIsProcessTrusted()
+            let before = self.automation
+            if self.automation != "allowed" { self.checkAutomation() }
+            if now != self.trusted || before != self.automation {
+                self.trusted = now
+                self.emitPermission()
+                self.attach()
+            }
+            if self.finderPid == 0 || NSRunningApplication(processIdentifier: self.finderPid) == nil { self.attach() }
+        }
+        readCommands()
+    }
+
+    func emitPermission() {
+        reply(["type": "permission", "accessibility": trusted, "automation": automation])
+    }
+
+    func finder() -> NSRunningApplication? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+    }
+
+    func checkAutomation() {
+        automation = automationStatus(ask: false)
+    }
+
+    // Asking with ask false only reads the answer, it never shows the prompt.
+    func automationStatus(ask: Bool) -> String {
+        guard finder() != nil else { return "unknown" }
+        var target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.finder").aeDesc!.pointee
+        switch AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, ask) {
+        case noErr: return "allowed"
+        case OSStatus(errAEEventNotPermitted): return "denied"
+        case OSStatus(errAEEventWouldRequireUserConsent): return "ask"
+        default: return "unknown"
+        }
+    }
+
+    func attach() {
+        guard trusted, let app = finder() else {
+            if observer != nil { dropObserver() }
+            return
+        }
+        if app.processIdentifier == finderPid && observer != nil { return }
+        dropObserver()
+        finderPid = app.processIdentifier
+        let element = AXUIElementCreateApplication(finderPid)
+        guard AXObserverCreate(finderPid, { _, el, _, refcon in
+            let me = Unmanaged<FinderWatcher>.fromOpaque(refcon!).takeUnretainedValue()
+            me.created(el)
+        }, &observer) == .success, let observer else { return }
+        AXObserverAddNotification(observer, element, kAXWindowCreatedNotification as CFString, Unmanaged.passUnretained(self).toOpaque())
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        let windows = attr(element, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        // Finder's windows when Filedrawer starts are left alone, unless
+        // Finder itself just started (a login or a restart brings its last
+        // windows back), and then they move over like new ones.
+        let fresh = attachedOnce || Date().timeIntervalSince(app.launchDate ?? .distantPast) < 30
+        attachedOnce = true
+        known = fresh ? [] : windows
+        if fresh {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self else { return }
+                for w in attr(element, kAXWindowsAttribute) as? [AXUIElement] ?? [] { self.created(w) }
+            }
+        }
+    }
+
+    func dropObserver() {
+        if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode) }
+        observer = nil
+        finderPid = 0
+        known = []
+    }
+
+    func attr(_ el: AXUIElement, _ name: String) -> AnyObject? {
+        var v: AnyObject?
+        return AXUIElementCopyAttributeValue(el, name as CFString, &v) == .success ? v : nil
+    }
+
+    func frame(_ win: AXUIElement) -> [Int]? {
+        guard let pv = attr(win, kAXPositionAttribute), let sv = attr(win, kAXSizeAttribute) else { return nil }
+        var p = CGPoint.zero, size = CGSize.zero
+        guard AXValueGetValue(pv as! AXValue, .cgPoint, &p), AXValueGetValue(sv as! AXValue, .cgSize, &size) else { return nil }
+        return [Int(p.x), Int(p.y), Int(size.width), Int(size.height)]
+    }
+
+    // Browser windows have a toolbar. Get Info and copy progress don't.
+    func isBrowser(_ win: AXUIElement) -> Bool {
+        guard attr(win, kAXSubroleAttribute) as? String == kAXStandardWindowSubrole as String else { return false }
+        let kids = attr(win, kAXChildrenAttribute) as? [AXUIElement] ?? []
+        return kids.contains { attr($0, kAXRoleAttribute) as? String == kAXToolbarRole as String }
+    }
+
+    func created(_ win: AXUIElement) {
+        guard !known.contains(where: { CFEqual($0, win) }) else { return }
+        known.append(win)
+        known = known.filter { attr($0, kAXRoleAttribute) != nil } // drops closed ones
+        guard automation == "allowed", isBrowser(win) else { return }
+        if Date() < passUntil {
+            passUntil = .distantPast
+            return
+        }
+        if CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate) { return }
+        let title = attr(win, kAXTitleAttribute) as? String ?? ""
+        guard !title.isEmpty, !Self.skipTitles.contains(title), let frame = frame(win) else { return }
+        token += 1
+        let t = token
+        reply(["type": "window", "token": t, "frame": frame, "title": title])
+        if let path = folder(titled: title), take(path) {
+            reply(["type": "folder", "token": t, "path": path])
+            if let close = attr(win, kAXCloseButtonAttribute) {
+                AXUIElementPerformAction(close as! AXUIElement, kAXPressAction as CFString)
+            }
+        } else {
+            reply(["type": "skip", "token": t])
+            finder()?.activate()
+        }
+    }
+
+    // The folder Finder's window with this title shows, or nil for places
+    // that aren't folders (AppleScript can't make those an alias).
+    func folder(titled title: String) -> String? {
+        let quoted = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let src = "tell application \"Finder\" to get POSIX path of (target of (first Finder window whose name is \"\(quoted)\") as alias)"
+        var err: NSDictionary?
+        guard let out = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue else {
+            if (err?[NSAppleScript.errorNumber] as? Int) == Int(errAEEventNotPermitted) {
+                automation = "denied"
+                emitPermission()
+            }
+            return nil
+        }
+        return out.count > 1 && out.hasSuffix("/") ? String(out.dropLast()) : out
+    }
+
+    // The Trash and iCloud Drive's top level stay Finder's.
+    func take(_ path: String) -> Bool {
+        let home = NSHomeDirectory()
+        let keep = [home + "/.Trash", home + "/Library/Mobile Documents", home + "/Library/Mobile Documents/com~apple~CloudDocs"]
+        if keep.contains(path) || path.hasPrefix(home + "/.Trash/") || path.contains("/.Trashes") { return false }
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    func readCommands() {
+        Thread.detachNewThread {
+            while let line = readLine(strippingNewline: true) {
+                DispatchQueue.main.async { self.handle(line) }
+            }
+            // Filedrawer closed our stdin or quit.
+            DispatchQueue.main.async { exit(0) }
+        }
+    }
+
+    func handle(_ line: String) {
+        guard let data = line.data(using: .utf8),
+              let req = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        switch req["cmd"] as? String {
+        case "pass":
+            passUntil = Date().addingTimeInterval(3)
+        case "askAccessibility":
+            _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+        case "askAutomation":
+            // The prompt blocks until it's answered, so it runs off the main thread.
+            DispatchQueue.global().async {
+                let answer = self.automationStatus(ask: true)
+                DispatchQueue.main.async {
+                    self.automation = answer
+                    self.emitPermission()
+                    self.attach()
+                }
+            }
+        default:
+            break
+        }
+    }
+}
+
 switch CommandLine.arguments.dropFirst().first {
 case "serve":
     serve()
+case "watch":
+    let watcher = FinderWatcher()
+    watcher.start()
+    RunLoop.main.run()
 default:
-    FileHandle.standardError.write("usage: filedrawer-helper serve\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: filedrawer-helper serve | watch\n".data(using: .utf8)!)
     exit(2)
 }

@@ -1031,7 +1031,18 @@ window.addEventListener('DOMContentLoaded', () => {
     view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
     COMPUTER = state.computer;
     setPane(state.settings.pane, { save: false });
-    navigate(cwd, { push: false, select: new URLSearchParams(location.search).get('select') });
+    const params = new URLSearchParams(location.search);
+    if (params.get('wait')) {
+      // Opened in the spot of a Finder window, before its folder was known.
+      api.waitFolder().then((dir) => {
+        if (!dir) return;
+        cwd = dir;
+        history = [dir];
+        navigate(dir, { push: false });
+      });
+    } else {
+      navigate(cwd, { push: false, select: params.get('select') });
+    }
     $('files').focus();
   });
 });

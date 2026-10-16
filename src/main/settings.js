@@ -29,6 +29,7 @@ const DEFAULTS = Object.freeze({
   foldersFirst: true, // folders above files whatever the sort
   confirmTrash: false, // ask before moving items to the Trash
   terminalButton: true, // Open Terminal Here on the toolbar
+  takeOverFinder: true, // Finder's new folder windows open in Filedrawer, in the same spot
   updates: {
     auto: true // check npm for a newer version now and then, never installs
   },
