@@ -82,6 +82,14 @@ async function endRename(keep) {
     return;
   }
   changedWhileRenaming = false;
+  // In search results the item is renamed where it stands.
+  if (searchOn()) {
+    Object.assign(it, { path: res.path, name: typed + ext, display: typed });
+    sel = new Set([res.path]);
+    anchor = cursor = res.path;
+    render();
+    return;
+  }
   await navigate(cwd, { push: false, select: res.path });
 }
 
@@ -127,12 +135,18 @@ $('files').addEventListener('dblclick', () => {
 
 // ---------- the Trash and Undo ----------
 
-function trashSelected() {
+async function trashSelected() {
   if (cwd === COMPUTER) return;
   const picked = selectedItems().filter((it) => !it.volume);
   if (!picked.length) return;
   sel.clear();
-  api.trash(picked.map((it) => it.path));
+  const res = await api.trash(picked.map((it) => it.path));
+  // Search results don't follow the disk, so trashed ones are taken out here.
+  if (searchOn() && res && res.items) {
+    const gone = new Set(res.items.map((t) => t.from));
+    items = items.filter((it) => !gone.has(it.path));
+    render();
+  }
 }
 
 // Undo and Redo undo typing while a name or the address bar is being

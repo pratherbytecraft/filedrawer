@@ -172,7 +172,7 @@ function watchThumbs() {
 // ---------- the list ----------
 
 function sortItems(list) {
-  const { key, dir } = cwd === COMPUTER ? { key: 'name', dir: 'asc' } : app.settings.sort;
+  const { key, dir } = cwd === COMPUTER && !searchOn() ? { key: 'name', dir: 'asc' } : app.settings.sort;
   const m = dir === 'desc' ? -1 : 1;
   const byName = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' });
   return list.slice().sort((a, b) => {
@@ -206,15 +206,25 @@ function cellFor(col, it) {
   if (col.key === 'name') return `<div class="cell">${iconHtml(it)}<span class="nm">${esc(it.display)}</span></div>`;
   if (col.key === 'size') return fmtKB(it.size);
   if (col.key === 'kind') return esc(it.kind);
+  if (col.key === 'folder') return `<span title="${esc(dirname(it.path))}">${esc(shortFolder(it.path))}</span>`;
   if (col.key === 'total' || col.key === 'free') return it[col.key] != null ? fmtBytes(it[col.key]) : '';
   return fmtDate(it.modified);
 }
 
+// Search results add the folder each item is in.
+const SEARCH_COLUMNS = [
+  { key: 'name', label: 'Name', width: '30%' },
+  { key: 'folder', label: 'In Folder', width: '26%' },
+  { key: 'size', label: 'Size', width: '12%', cls: 'r' },
+  { key: 'kind', label: 'Kind', width: '14%' },
+  { key: 'modified', label: 'Date Modified', width: '18%' }
+];
+
 function renderDetails() {
-  const computer = cwd === COMPUTER;
-  const cols = computer ? COMPUTER_COLUMNS : COLUMNS;
+  const computer = cwd === COMPUTER && !searchOn();
+  const cols = searchOn() ? SEARCH_COLUMNS : computer ? COMPUTER_COLUMNS : COLUMNS;
   const { key, dir } = app.settings.sort;
-  const head = cols.map((c) => computer ? `<th class="${c.cls || ''}">${c.label}</th>` :
+  const head = cols.map((c) => computer || c.key === 'folder' ? `<th class="${c.cls || ''}">${c.label}</th>` :
     `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
   const rows = items.map((it, i) =>
     `<tr ${itemAttrs(it, i)}>` +
@@ -324,6 +334,7 @@ function renderStatus() {
   const files = (n ? picked : items).filter((it) => it.size != null);
   const total = files.reduce((sum, it) => sum + it.size, 0);
   $('st2').textContent = files.length ? fmtBytes(total) : '';
+  if (searchOn() && !n) drawSearchState();
 }
 
 async function loadVolume() {
@@ -344,7 +355,7 @@ async function loadVolume() {
 
 function updateTitle() {
   const short = cwd === COMPUTER || cwd === '/' ? placeLabel(cwd) : basename(cwd);
-  const name = app.settings.fullPathTitle && cwd !== COMPUTER ? cwd : short;
+  const name = searchOn() ? 'Search Results' : app.settings.fullPathTitle && cwd !== COMPUTER ? cwd : short;
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
@@ -368,6 +379,11 @@ function updateChrome() {
 // Opens dir in this window. select picks an item once it's listed, keep
 // holds on to the selection (a refresh).
 async function navigate(dir, { push = true, select = null, selectMany = null, keep = false, changed = false } = {}) {
+  if (searchOn()) {
+    leaveSearch();
+    $('b-search').classList.remove('down');
+    if (document.body.dataset.pane === 'search') setPane(paneBefore, { save: false, quiet: true });
+  }
   const token = ++listToken;
   const res = await api.list(dir, { hidden: app.settings.showHidden, extensions: app.settings.showExtensions });
   if (token !== listToken) return;
@@ -906,12 +922,14 @@ async function go() {
 // ---------- commands from the menu bar ----------
 
 api.onCommand(({ command, arg }) => {
-  const typing = document.activeElement === path;
+  // Any field being typed in: the address bar, a name, the search boxes.
+  const field = document.activeElement && document.activeElement.matches('input, textarea') ? document.activeElement : null;
+  const typing = !!field;
   switch (command) {
     case 'newWindow': api.openWindow(cwd); break;
     case 'open': if (!typing) openSelected(); break;
     case 'selectAll':
-      if (typing) path.select();
+      if (field) field.select();
       else {
         sel = new Set(items.map((it) => it.path));
         showSelection();
@@ -930,6 +948,7 @@ api.onCommand(({ command, arg }) => {
     case 'home': navigate(app.home); break;
     case 'computer': navigate(COMPUTER); break;
     case 'navigate': navigate(arg); break;
+    case 'find': openSearch(); break;
     case 'newFolder': makeNew('folder'); break;
     case 'newText': makeNew('text'); break;
     case 'rename': if (!typing) renameSelected(); break;
@@ -996,7 +1015,7 @@ function applyState(state) {
 
 api.onState(applyState);
 api.onFolderChanged((dir) => {
-  if (dir !== cwd) return;
+  if (dir !== cwd || searchOn()) return;
   if (renaming) {
     changedWhileRenaming = true; // redrawing now would throw away the name being typed
     return;
@@ -1004,14 +1023,17 @@ api.onFolderChanged((dir) => {
   treeKids.delete(cwd);
   navigate(cwd, { push: false, keep: true, changed: true });
 });
-api.getState().then((state) => {
-  applyState(state);
-  const s = state.settings;
-  view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
-  COMPUTER = state.computer;
-  setPane(state.settings.pane, { save: false });
-  navigate(cwd, { push: false });
-  $('files').focus();
+// Starts once every script on the page is in (edit.js and search.js come after this one).
+window.addEventListener('DOMContentLoaded', () => {
+  api.getState().then((state) => {
+    applyState(state);
+    const s = state.settings;
+    view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
+    COMPUTER = state.computer;
+    setPane(state.settings.pane, { save: false });
+    navigate(cwd, { push: false });
+    $('files').focus();
+  });
 });
 
 // ---------- pinned folders and the terminal ----------
@@ -1358,7 +1380,15 @@ $('tree-list').addEventListener('click', async (e) => {
 $('tree-close').addEventListener('click', () => setPane('tasks'));
 $('b-folders').addEventListener('click', () => setPane(pane === 'folders' ? 'tasks' : 'folders'));
 
-function setPane(p, { save = true } = {}) {
+function setPane(p, { save = true, quiet = false } = {}) {
+  // Leaving the Search pane for another one closes the search.
+  if (!quiet && document.body.dataset.pane === 'search') {
+    $('b-search').classList.remove('down');
+    if (searchOn()) {
+      leaveSearch();
+      navigate(cwd, { push: false, keep: true });
+    }
+  }
   pane = p === 'folders' ? 'folders' : 'tasks';
   document.body.dataset.pane = pane;
   $('b-folders').classList.toggle('down', pane === 'folders');

@@ -290,4 +290,4 @@ async function thumbs(paths, px) {
   return out;
 }
 
-module.exports = { HOME, COMPUTER, list, count, resolve, complete, volume, icons, thumbs };
+module.exports = { HOME, COMPUTER, list, count, resolve, complete, volume, icons, thumbs, readItem, addInfo };

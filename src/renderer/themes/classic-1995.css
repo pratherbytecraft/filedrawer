@@ -124,3 +124,7 @@ input.ren { border: 1px solid #000; }
 .menu .mi:hover .key { color: #fff; }
 .menu .mi.chk::before { content: "\25CF"; position: absolute; left: 10px; font-size: 7px; }
 .menu .sep { height: 1px; margin: 3px 2px 4px; background: #808080; box-shadow: 0 1px #fff; }
+.spane input { border: 0; box-shadow: var(--field); }
+.spane button { padding: 3px 10px; border: 0; background: var(--face); box-shadow: var(--raised); }
+.spane button:active { box-shadow: var(--sunken); }
+.spane button:disabled { color: #808080; }

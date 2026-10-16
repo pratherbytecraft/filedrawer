@@ -132,3 +132,10 @@ input.ren { color: var(--text); background: var(--bg); border: 0; border-radius:
 .menu .sep { height: 1px; background: var(--line); margin: 4px 8px; }
 .menu .mi .key { color: var(--dim); }
 .menu .mi:hover .key { color: inherit; }
+.spane input { height: 24px; border: 0; border-radius: 6px; background: var(--field); color: var(--text); }
+.spane input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+.spane label { color: var(--text); font-size: 12px; }
+.spane .sstate { color: var(--dim); font-size: 12px; }
+.spane button { padding: 3px 12px; border-radius: 6px; border: 0; background: var(--hover); color: var(--text); }
+.spane button.main { background: var(--accent); color: var(--accent-text); }
+.spane button:disabled { opacity: .45; }

@@ -14,6 +14,7 @@ const undo = require('./undo');
 const copier = require('./copier');
 const props = require('./props');
 const prefs = require('./prefs');
+const search = require('./search');
 const updates = require('./updates');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
@@ -258,6 +259,7 @@ function buildMenu() {
         },
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
         cmd('Open Terminal Here', 'terminal', 'CmdOrCtrl+Alt+T'),
+        cmd('Find...', 'find', 'CmdOrCtrl+F'),
         { type: 'separator' },
         cmd('New Folder', 'newFolder', 'CmdOrCtrl+Shift+N'),
         cmd('New Text Document', 'newText', null),
@@ -621,6 +623,8 @@ ipcMain.handle('op:trash', async (e, paths) => {
   return res;
 });
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
+ipcMain.on('search:start', (e, id, q) => search.start(e.sender, id, q));
+ipcMain.on('search:stop', (e) => search.stop(e.sender));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
 ipcMain.on('folder:watch', (e, dir) => {
   const win = BrowserWindow.fromWebContents(e.sender);

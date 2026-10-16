@@ -41,7 +41,19 @@ svg { display: block; }
 /* The left pane: Tasks (boxes of tasks, places and details) or the Folders tree. */
 .pane, .tree { flex: none; overflow: auto; }
 body[data-pane="tasks"] .tree, body[data-pane="folders"] .pane { display: none; }
-body.no-pane[data-pane="tasks"] .pane { display: none; }
+body.no-pane[data-pane="tasks"] .pane#pane { display: none; }
+.spane, body[data-pane="search"] #pane, body[data-pane="search"] .tree { display: none; }
+body[data-pane="search"] .spane { display: block; }
+.spane label { display: block; margin: 8px 0 3px; }
+.spane label:first-child { margin-top: 0; }
+.spane input, .spane select { width: 100%; font: inherit; user-select: text; }
+.spane .sbtns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+.spane button { font: inherit; min-width: 64px; }
+.spane .sstate { margin-top: 10px; min-height: 1.4em; line-height: 1.4; }
+.spane .sx { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 3px; }
+.spane .sx svg { width: 9px; height: 9px; }
+.spane .sx:hover { background: rgba(127,127,127,.25); }
+.spane input { box-sizing: border-box; height: 22px; padding: 2px 5px; border: 1px solid #7f9db9; background: #fff; color: #000; outline: none; }
 [hidden] { display: none !important; }
 .tree { display: flex; flex-direction: column; }
 .tree .head { flex: none; display: flex; align-items: center; justify-content: space-between; }
