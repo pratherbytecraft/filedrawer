@@ -163,6 +163,11 @@ function build({ quiet = false } = {}) {
     setPlist(dest);
     writeStub(dest);
     run('codesign', ['--force', '--deep', '--sign', '-', dest]);
+    // macOS ties Accessibility and the other permissions to an ad hoc app's
+    // exact signature, so any change to the bundle (a new icon) would ask
+    // again. Naming the bundle id instead keeps them across updates. Only the
+    // outer bundle gets the rule; the Electron helpers inside keep their own.
+    run('codesign', ['--force', '--sign', '-', `-r=designated => identifier "${BUNDLE_ID}"`, dest]);
     // Tell Spotlight and Launch Services about the new bundle right away.
     spawnSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', dest]);
     log(`Filedrawer: app built at ${dest}`);
