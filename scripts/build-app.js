@@ -197,6 +197,7 @@ function build({ quiet = false } = {}) {
   }
 }
 
-if (require.main === module) build();
+// Without Electron yet (see fix-electron.js), the first run builds the app.
+if (require.main === module && !process.env.ELECTRON_SKIP_BINARY_DOWNLOAD) build();
 
 module.exports = { build, appPath, BUNDLE_ID };

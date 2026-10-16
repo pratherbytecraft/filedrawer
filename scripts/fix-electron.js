@@ -93,6 +93,12 @@ async function fix({ quiet = false } = {}) {
   }
 }
 
-if (require.main === module) fix();
+// The Homebrew formula installs without Electron's download (Homebrew can't
+// rewrite Electron's libraries, see the formula), and the first run fetches
+// it instead. Run as the install script, this leaves it to that run.
+if (require.main === module) {
+  if (process.env.ELECTRON_SKIP_BINARY_DOWNLOAD) console.log('Filedrawer: Electron will be downloaded the first time Filedrawer runs.');
+  else fix();
+}
 
 module.exports = { fix };
