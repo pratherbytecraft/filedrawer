@@ -10,7 +10,8 @@
 // Reads one JSON request per line on stdin and writes one JSON reply per
 // line on stdout, with the request's id:
 //   {"id":1,"cmd":"info","paths":["/Users/you/a.txt"]}
-//     -> {"id":1,"items":[{"name":"a.txt","kind":"Plain Text Document","hidden":false,"package":false}]}
+//     -> {"id":1,"items":[{"name":"a.txt","kind":"Plain Text Document","hidden":false,"package":false,"added":1760000000000}]}
+//     (added: when the item came into its folder, in ms, which in the Trash is when it was deleted)
 //   {"id":2,"cmd":"icon","path":"/Applications/Safari.app","size":64}
 //     -> {"id":2,"png":"<base64>"}
 //   {"id":3,"cmd":"typeIcon","ext":"pdf","size":64}
@@ -40,6 +41,10 @@
 //   {"id":16,"cmd":"extra","path":"/Users/you/Downloads/a.txt"}
 //     -> {"id":16,"version":"","whereFrom":["https://example.com/a.txt"],"comment":""}
 //     (version for apps, whereFrom for downloads, comment is Finder's)
+//   {"id":17,"cmd":"lastUsed","paths":["/Users/you/a.txt"]}
+//     -> {"id":17,"dates":[1760000000000]}   (when each was last opened, in ms, 0 when never)
+//   {"id":18,"cmd":"appNames","ids":["com.apple.Pages"]}
+//     -> {"id":18,"names":["Pages"]}   ("" for an app that isn't on this Mac)
 //   {"id":12,"cmd":"alias","path":"/Users/you/a.txt","to":"/Users/you/Desktop/a.txt alias"}
 //     -> {"id":12,"ok":true}   (a Finder alias, which follows the item when it moves)
 //   {"id":13,"cmd":"viewer"}
@@ -62,6 +67,9 @@
 //     (the folder it shows; Finder's window is closed next)
 //   {"type":"skip","token":1}
 //     (not a folder Filedrawer takes, Finder keeps the window)
+//   The Trash, Recents and iCloud Drive's top come as folder events with the
+//   paths ::trash, ::recents and ::icloud (the Trash only while Filedrawer
+//   can read it, which takes Full Disk Access).
 // and reads one command per line:
 //   {"cmd":"pass"}            the next Finder window in the next 3 seconds stays Finder's
 //   {"cmd":"askAutomation"}   asks the user for Control Finder (macOS shows its prompt once)
@@ -106,7 +114,7 @@ var kindByExt: [String: String] = [:]
 
 func info(_ path: String) -> [String: Any] {
     let url = URL(fileURLWithPath: path)
-    let keys: Set<URLResourceKey> = [.isHiddenKey, .isPackageKey, .isDirectoryKey, .isSymbolicLinkKey, .isAliasFileKey, .localizedTypeDescriptionKey, .localizedNameKey]
+    let keys: Set<URLResourceKey> = [.isHiddenKey, .isPackageKey, .isDirectoryKey, .isSymbolicLinkKey, .isAliasFileKey, .localizedTypeDescriptionKey, .localizedNameKey, .addedToDirectoryDateKey]
     let values = try? url.resourceValues(forKeys: keys)
     let isDir = values?.isDirectory ?? false
     // A link opens what it points at, so a link to an app is a package too,
@@ -129,6 +137,7 @@ func info(_ path: String) -> [String: Any] {
         if !isDir && !ext.isEmpty && !kind.isEmpty { kindByExt[ext] = kind }
     }
     var out: [String: Any] = ["name": values?.localizedName ?? url.lastPathComponent, "kind": kind, "hidden": values?.isHidden ?? false, "package": isPackage]
+    if let added = values?.addedToDirectoryDate { out["added"] = Int(added.timeIntervalSince1970 * 1000) }
     // A Finder alias (not a link) says where it points, so a folder's alias can open that folder.
     if values?.isAliasFile == true && values?.isSymbolicLink != true, let target = try? URL(resolvingAliasFileAt: url, options: [.withoutUI, .withoutMounting]) {
         let t = try? target.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
@@ -282,6 +291,19 @@ func handle(_ req: [String: Any]) {
         } ?? ""
         let whereFrom = (metadata(path, "kMDItemWhereFroms") as? [String] ?? []).filter { !$0.isEmpty }
         reply(["id": id, "version": version, "whereFrom": whereFrom, "comment": metadata(path, "kMDItemFinderComment") as? String ?? ""])
+    case "lastUsed":
+        let dates: [Int] = (req["paths"] as? [String] ?? []).map { p in
+            guard let item = MDItemCreate(nil, p as CFString),
+                  let date = MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date else { return 0 }
+            return Int(date.timeIntervalSince1970 * 1000)
+        }
+        reply(["id": id, "dates": dates])
+    case "appNames":
+        let names: [String] = (req["ids"] as? [String] ?? []).map { bundle in
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return "" }
+            return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        }
+        reply(["id": id, "names": names])
     case "alias":
         do {
             let src = URL(fileURLWithPath: req["path"] as? String ?? "")
@@ -340,7 +362,14 @@ final class FinderWatcher {
     var attachedOnce = false
 
     // Places that aren't a folder on disk, by the title Finder gives them.
-    static let skipTitles: Set<String> = ["Recents", "AirDrop", "Network", "Trash", "iCloud Drive", "Computer"]
+    static let skipTitles: Set<String> = ["AirDrop", "Network", "Computer"]
+    // Places Filedrawer shows itself, by the same titles.
+    static let places: [String: String] = ["Trash": "::trash", "Recents": "::recents", "iCloud Drive": "::icloud"]
+
+    // The Trash can be listed once Filedrawer has Full Disk Access.
+    func canReadTrash() -> Bool {
+        (try? FileManager.default.contentsOfDirectory(atPath: NSHomeDirectory() + "/.Trash")) != nil
+    }
 
     func start() {
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
@@ -467,6 +496,16 @@ final class FinderWatcher {
         if CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate) { return }
         let title = attr(win, kAXTitleAttribute) as? String ?? ""
         guard !title.isEmpty, !Self.skipTitles.contains(title), let frame = frame(win) else { return }
+        if let place = Self.places[title], place != "::trash" || canReadTrash() {
+            token += 1
+            reply(["type": "window", "token": token, "frame": frame, "title": title])
+            reply(["type": "folder", "token": token, "path": place])
+            if let close = attr(win, kAXCloseButtonAttribute) {
+                AXUIElementPerformAction(close as! AXUIElement, kAXPressAction as CFString)
+            }
+            return
+        }
+        if Self.places[title] != nil { return }
         token += 1
         let t = token
         reply(["type": "window", "token": t, "frame": frame, "title": title])

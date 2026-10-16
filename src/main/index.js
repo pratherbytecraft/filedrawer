@@ -23,6 +23,7 @@ const updates = require('./updates');
 const finder = require('./finder');
 const welcome = require('./welcome');
 const chooser = require('./chooser');
+const places = require('./places');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -48,6 +49,10 @@ function state() {
     home: folders.HOME,
     cut: cut ? cut.paths : [],
     computer: folders.COMPUTER,
+    trash: places.TRASH,
+    recents: places.RECENTS,
+    icloud: places.ICLOUD,
+    icloudOn: places.icloudOn(),
     user: os.userInfo().username,
     version: VERSION,
     loginItem: prefs.loginItem(),
@@ -314,7 +319,10 @@ function watch(win, dir) {
   const w = watchers.get(win);
   if (w && w.dir === dir) return;
   unwatch(win);
-  const target = dir === folders.COMPUTER ? '/Volumes' : dir;
+  // Computer watches the disks, the Trash its folder in Home; Recents and
+  // iCloud Drive's top aren't watched.
+  if (dir === places.RECENTS || dir === places.ICLOUD) return;
+  const target = dir === folders.COMPUTER ? '/Volumes' : dir === places.TRASH ? places.HOME_TRASH : dir;
   let watcher;
   try {
     watcher = fs.watch(target, { persistent: false });
@@ -898,6 +906,37 @@ ipcMain.on('window:title', (e, { name, dir }) => {
   win.setTitle(name);
   win.setRepresentedFilename(dir);
 });
+// The Trash, shown in Filedrawer once it has Full Disk Access.
+ipcMain.on('privacy:fda', () => shell.openExternal(PRIVACY + 'AllFiles'));
+ipcMain.handle('trash:putBack', async (e, paths) => {
+  const res = await places.putBack(paths);
+  if (res.done.length) {
+    const done = res.done;
+    undo.push({
+      label: 'Put Back',
+      undo: () => places.moveAll(done.map((d) => ({ from: d.to, to: d.from }))),
+      redo: () => places.moveAll(done)
+    });
+  }
+  if (res.error) await answer(e, { error: res.error });
+  return { paths: res.done.map((d) => d.to) };
+});
+ipcMain.handle('trash:delete', async (e, paths) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `these ${paths.length} items`;
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    message: `Are you sure you want to delete ${what}?`,
+    detail: paths.length === 1 ? 'This item will be deleted immediately. You can\'t undo this action.' : 'These items will be deleted immediately. You can\'t undo this action.',
+    buttons: ['Delete', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1
+  });
+  if (response !== 0) return {};
+  return answer(e, await places.deleteNow(paths));
+});
+// The folder Up goes to from a folder that belongs to a place (the Trash's own folder).
+ipcMain.handle('folder:place', (_e, dir) => places.placeOf(dir));
 // macOS's own pane for folder access, for a folder Filedrawer wasn't allowed into.
 ipcMain.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'));
 

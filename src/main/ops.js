@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const helper = require('./helper');
+const places = require('./places');
 
 function message(err, what) {
   if (err.code === 'EACCES' || err.code === 'EPERM') return `Filedrawer doesn't have permission to ${what} here.`;
@@ -83,6 +84,7 @@ async function trash(paths) {
   if (!res) return { error: 'The items couldn\'t be moved to the Trash.', items: [] };
   const moved = res.items.filter((it) => it.to);
   const failed = res.items.filter((it) => !it.to);
+  places.logTrashed(moved); // so Put Back knows where they came from
   if (!failed.length) return { items: moved };
   const name = path.basename(failed[0].from);
   const error = failed.length === 1 ? `"${name}" couldn't be moved to the Trash. ${failed[0].error}`

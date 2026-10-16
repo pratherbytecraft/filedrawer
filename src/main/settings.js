@@ -37,6 +37,11 @@ const DEFAULTS = Object.freeze({
   pane: 'tasks', // tasks | folders: the left pane a new window opens with, the one picked last
   showHidden: false, // files the Mac keeps out of sight, shown dimmed
   pins: [], // pinned folders, as paths, in the order shown
+  // Which places Other Places shows (Recents and iCloud Drive in the tree too).
+  places: {
+    recents: true, home: true, desktop: true, documents: true, downloads: true,
+    applications: true, icloud: true, computer: true, trash: true
+  },
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   openWith: {}, // extension -> the apps picked for it in the app list, last picked first
   sort: {

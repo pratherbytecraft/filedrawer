@@ -19,7 +19,7 @@ function itemEl(p) {
 
 // text, when given, is what the user typed last time (after a name was turned down).
 function startRename(p, text) {
-  if (renaming || cwd === COMPUTER) return;
+  if (renaming || cwd === COMPUTER || cwd === TRASH) return;
   const it = items.find((x) => x.path === p);
   const el = itemEl(p);
   const nm = el && el.querySelector('.nm');
@@ -153,6 +153,12 @@ $('files').addEventListener('dblclick', () => {
 
 async function trashSelected() {
   if (cwd === COMPUTER) return;
+  // In the Trash, Command Delete deletes for good, after asking.
+  if (cwd === TRASH) {
+    const paths = selectedItems().map((it) => it.path);
+    if (paths.length) api.deleteNow(paths);
+    return;
+  }
   const picked = selectedItems().filter((it) => !it.volume);
   if (!picked.length || picked.some((it) => it.fixed)) return;
   sel.clear();
@@ -214,7 +220,7 @@ async function aliasSelected() {
 function copyPaths() {
   const picked = selectedItems().map((it) => it.path);
   if (picked.length) api.copyPath(picked);
-  else if (cwd !== COMPUTER) api.copyPath([cwd]);
+  else if (!isPlace(cwd)) api.copyPath([cwd]);
 }
 
 // ---------- Cut, Copy and Paste ----------
@@ -238,7 +244,7 @@ function clipCommand(which) {
 }
 
 async function pasteInto(dir) {
-  if (dir === COMPUTER || (dir === cwd && (listError || !cwdWritable))) return;
+  if (isPlace(dir) || (dir === cwd && (listError || !cwdWritable))) return;
   const res = await api.paste(dir);
   if (dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
 }
@@ -276,18 +282,21 @@ function dropTarget(e) {
     const it = items[item.dataset.i];
     if (isFolder(it)) return { dir: it.path, el: item };
   }
-  if (e.target.closest('#files')) return cwd === COMPUTER || listError ? null : { dir: cwd, el: null };
+  if (e.target.closest('#files')) {
+    if (cwd === TRASH && !listError) return { trash: true, el: null };
+    return isPlace(cwd) || listError ? null : { dir: cwd, el: null };
+  }
   const node = e.target.closest('#tree-list .n');
   if (node) {
     const p = node.dataset.path;
-    if (p === COMPUTER) return null;
-    return p === 'trash' ? { trash: true, el: node } : { dir: p, el: node };
+    if (p === TRASH) return { trash: true, el: node };
+    return isPlace(p) ? null : { dir: p, el: node };
   }
   const place = e.target.closest('#pane [data-place]');
   if (place) {
     const p = place.dataset.place;
-    if (p === COMPUTER) return null;
-    return p === 'trash' ? { trash: true, el: place } : { dir: p, el: place };
+    if (p === TRASH) return { trash: true, el: place };
+    return isPlace(p) ? null : { dir: p, el: place };
   }
   return null;
 }
@@ -330,7 +339,7 @@ document.addEventListener('drop', async (e) => {
 function showProps() {
   const picked = selectedItems().map((it) => it.path);
   if (picked.length) api.showProps(picked);
-  else if (cwd !== COMPUTER) api.showProps([cwd]);
+  else if (!isPlace(cwd)) api.showProps([cwd]);
 }
 
 // Space shows the selected file in Quick Look. Once the preview is up it
@@ -375,15 +384,29 @@ async function eject(volume) {
   if (!res.error && cwd === COMPUTER) navigate(cwd, { push: false, keep: true });
 }
 
-// The Trash in Other Places and the tree: open it in Finder, or empty it.
-const trashEntries = () => [{ label: 'Open', bold: true, click: () => api.openTrash() }, 'sep', { label: 'Empty Trash', icon: 'p-trash', click: () => api.emptyTrash() }];
+// A place in Other Places or Pinned: open it here or in a new window, and
+// for the Trash, empty it, for a pin, unpin it.
+function placeEntries(p) {
+  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
+  if (!isPlace(p)) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
+  if (p === TRASH) entries.push('sep', { label: 'Empty Trash...', icon: 'p-trash', click: () => api.emptyTrash() });
+  if (isPinned(p)) entries.push('sep', { label: 'Unpin', icon: 'p-pin', click: () => unpin(p) });
+  return entries;
+}
 
 $('pane').addEventListener('contextmenu', (e) => {
-  const place = e.target.closest('[data-place="trash"]');
+  const place = e.target.closest('[data-place]');
   if (!place) return;
   e.preventDefault();
-  openMenu(trashEntries(), e.clientX, e.clientY);
+  openMenu(placeEntries(place.dataset.place), e.clientX, e.clientY);
 });
+
+// Put Back, for the selection or the given paths, and the Trash is shown again.
+async function putBackSelected(paths = selectedItems().map((it) => it.path)) {
+  if (!paths.length) return;
+  await api.putBack(paths);
+  navigate(cwd, { push: false, keep: true, changed: true });
+}
 
 // The Folders tree's own right click menu.
 $('tree-list').addEventListener('contextmenu', (e) => {
@@ -391,8 +414,8 @@ $('tree-list').addEventListener('contextmenu', (e) => {
   if (!n) return;
   e.preventDefault();
   const p = n.dataset.path;
-  if (p === 'trash') {
-    openMenu(trashEntries(), e.clientX, e.clientY);
+  if (isPlace(p) && p !== COMPUTER) {
+    openMenu(placeEntries(p), e.clientX, e.clientY);
     return;
   }
   const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
@@ -407,7 +430,7 @@ $('tree-list').addEventListener('contextmenu', (e) => {
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {
-  if (cwd === COMPUTER || listError || !cwdWritable) return;
+  if (isPlace(cwd) || listError || !cwdWritable) return;
   const res = kind === 'folder' ? await api.newFolder(cwd) : await api.newText(cwd);
   if (res.error) return;
   await navigate(cwd, { push: false, select: res.path });

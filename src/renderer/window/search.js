@@ -10,7 +10,7 @@ const searchOn = () => !!search;
 
 function rootChoices() {
   const out = [];
-  if (cwd !== COMPUTER && cwd !== app.home) out.push([cwd, placeLabel(cwd)]);
+  if (!isPlace(cwd) && cwd !== app.home) out.push([cwd, placeLabel(cwd)]);
   out.push([app.home, `${placeLabel(app.home)} (your home folder)`]);
   out.push([COMPUTER, 'Computer (every disk)']);
   return out;

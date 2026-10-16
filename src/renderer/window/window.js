@@ -17,6 +17,11 @@ let volumeName = '';
 let view = 'details'; // thumbs | tiles | icons | list | details, this window's own
 let pane = 'tasks'; // tasks | folders, this window's own
 let COMPUTER = '::computer'; // the place listing the volumes, from the main process
+// The places that aren't one folder, from the main process too.
+let TRASH = '::trash';
+let RECENTS = '::recents';
+let ICLOUD = '::icloud';
+const isPlace = (p) => p === COMPUTER || p === TRASH || p === RECENTS || p === ICLOUD;
 let folderModified = null; // the open folder's own date, for the Details box
 let cwdWritable = true; // new items and pastes can go in the open folder
 const iconUrls = new Map(); // by icon key and pixel size
@@ -26,13 +31,17 @@ const isVolumeRoot = (p) => p === '/' || /^\/Volumes\/[^/]+$/.test(p);
 
 // The folder above p: a volume's top goes up to Computer, and Computer is the top.
 function parentOf(p) {
-  if (p === COMPUTER) return null;
+  if (isPlace(p)) return null;
   if (isVolumeRoot(p)) return COMPUTER;
+  if (app && p.startsWith(app.home + '/.Trash/') && dirname(p) === app.home + '/.Trash') return TRASH;
   return dirname(p);
 }
 
 function placeLabel(p) {
   if (p === COMPUTER) return 'Computer';
+  if (p === TRASH) return 'Trash';
+  if (p === RECENTS) return 'Recents';
+  if (p === ICLOUD) return 'iCloud Drive';
   if (p === '/') return volumeName || 'Macintosh HD';
   if (app && p === app.home) return app.user;
   return basename(p);
@@ -43,7 +52,7 @@ function specialIcon(p) {
   if (!app) return null;
   const h = app.home;
   return { [h]: 'p-home', [h + '/Desktop']: 'p-desktop', [h + '/Documents']: 'p-docs', [h + '/Downloads']: 'p-down',
-    '/Applications': 'p-apps', [COMPUTER]: 'p-computer' }[p] || (isVolumeRoot(p) ? 'p-drive' : null);
+    '/Applications': 'p-apps', [COMPUTER]: 'p-computer', [TRASH]: 'p-trash', [RECENTS]: 'p-recents', [ICLOUD]: 'p-icloud' }[p] || (isVolumeRoot(p) ? 'p-drive' : null);
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const basename = (p) => (p === '/' ? '/' : p.replace(/\/+$/, '').split('/').pop());
@@ -173,17 +182,22 @@ function watchThumbs() {
 // ---------- the list ----------
 
 function sortItems(list) {
-  const { key, dir } = cwd === COMPUTER && !searchOn() ? { key: 'name', dir: 'asc' } : app.settings.sort;
+  // Computer is always by name and Recents newest first, whatever the folders' sort.
+  const fixedSort = searchOn() ? null : cwd === COMPUTER ? { key: 'name', dir: 'asc' } : cwd === RECENTS ? { key: 'used', dir: 'desc' } : null;
+  const { key, dir } = fixedSort || app.settings.sort;
   const m = dir === 'desc' ? -1 : 1;
   const byName = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' });
   return list.slice().sort((a, b) => {
     const fa = isFolder(a);
     const fb = isFolder(b);
-    if (fa !== fb && app.settings.foldersFirst) return fa ? -1 : 1; // folders first, like the old windows
+    if (fa !== fb && app.settings.foldersFirst && cwd !== RECENTS) return fa ? -1 : 1; // folders first, like the old windows
     let c = 0;
     if (key === 'size') c = (a.size ?? -1) - (b.size ?? -1);
     else if (key === 'kind') c = a.kind.localeCompare(b.kind);
     else if (key === 'modified') c = a.modified - b.modified;
+    else if (key === 'deleted') c = (a.deleted || 0) - (b.deleted || 0);
+    else if (key === 'used') c = (a.used || 0) - (b.used || 0);
+    else if (key === 'from') c = (a.from || '').localeCompare(b.from || '');
     return (c || byName(a, b)) * m;
   });
 }
@@ -203,12 +217,32 @@ const COMPUTER_COLUMNS = [
   { key: 'free', label: 'Free Space', width: '20%', cls: 'r' }
 ];
 
+// The Trash says where each item came from and when it was deleted, like
+// the old Recycle Bin. Recents says where each file is and when it was opened.
+const TRASH_COLUMNS = [
+  { key: 'name', label: 'Name', width: '30%' },
+  { key: 'from', label: 'Original Location', width: '26%' },
+  { key: 'deleted', label: 'Date Deleted', width: '20%' },
+  { key: 'size', label: 'Size', width: '10%', cls: 'r' },
+  { key: 'kind', label: 'Kind', width: '14%' }
+];
+const RECENTS_COLUMNS = [
+  { key: 'name', label: 'Name', width: '30%' },
+  { key: 'folder', label: 'Where', width: '26%' },
+  { key: 'used', label: 'Date Last Opened', width: '20%' },
+  { key: 'size', label: 'Size', width: '10%', cls: 'r' },
+  { key: 'kind', label: 'Kind', width: '14%' }
+];
+
 function cellFor(col, it) {
   if (col.key === 'name') return `<div class="cell">${iconHtml(it)}<span class="nm">${esc(it.display)}</span></div>`;
   if (col.key === 'size') return fmtKB(it.size);
   if (col.key === 'kind') return esc(it.kind);
   if (col.key === 'folder') return `<span title="${esc(dirname(it.path))}">${esc(shortFolder(it.path))}</span>`;
   if (col.key === 'total' || col.key === 'free') return it[col.key] != null ? fmtBytes(it[col.key]) : '';
+  if (col.key === 'from') return it.from ? `<span title="${esc(dirname(it.from))}">${esc(shortFolder(it.from))}</span>` : '';
+  if (col.key === 'deleted') return it.deleted ? fmtDate(it.deleted) : '';
+  if (col.key === 'used') return it.used ? fmtDate(it.used) : '';
   return fmtDate(it.modified);
 }
 
@@ -222,10 +256,10 @@ const SEARCH_COLUMNS = [
 ];
 
 function renderDetails() {
-  const computer = cwd === COMPUTER && !searchOn();
-  const cols = searchOn() ? SEARCH_COLUMNS : computer ? COMPUTER_COLUMNS : COLUMNS;
+  const fixedHead = (cwd === COMPUTER || cwd === RECENTS) && !searchOn(); // headers that don't sort
+  const cols = searchOn() ? SEARCH_COLUMNS : cwd === COMPUTER ? COMPUTER_COLUMNS : cwd === TRASH ? TRASH_COLUMNS : cwd === RECENTS ? RECENTS_COLUMNS : COLUMNS;
   const { key, dir } = app.settings.sort;
-  const head = cols.map((c) => computer || c.key === 'folder' ? `<th class="${c.cls || ''}">${c.label}</th>` :
+  const head = cols.map((c) => fixedHead || c.key === 'folder' ? `<th class="${c.cls || ''}">${c.label}</th>` :
     `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
   const rows = items.map((it, i) =>
     `<tr ${itemAttrs(it, i)}>` +
@@ -237,6 +271,8 @@ function renderDetails() {
 const NOTES = {
   denied: 'Filedrawer can\'t open this folder because macOS hasn\'t given it access.',
   missing: 'This folder isn\'t there anymore.',
+  fda: '<b>Filedrawer needs Full Disk Access to show the Trash</b><br>macOS keeps the Trash private from other apps. Turn on Filedrawer under Full Disk Access in Privacy and Security, then pick Quit &amp; Reopen when macOS asks.',
+  icloud: 'iCloud Drive isn\'t turned on for this Mac.',
   other: 'This folder couldn\'t be opened.'
 };
 
@@ -286,9 +322,14 @@ function render() {
   f.dataset.view = view;
   if (listError) {
     f.innerHTML = `<div class="note">${NOTES[listError]}` +
-      (listError === 'denied' ? '<br><button id="b-privacy">Open Privacy Settings</button>' : '') + '</div>';
+      (listError === 'denied' ? '<br><button id="b-privacy">Open Privacy Settings</button>' : '') +
+      (listError === 'fda' ? '<br><button id="b-fda">Open Privacy Settings</button> <button id="b-finder-trash">Open in Finder</button>' : '') + '</div>';
     const b = $('b-privacy');
     if (b) b.addEventListener('click', () => api.openPrivacy());
+    if ($('b-fda')) {
+      $('b-fda').addEventListener('click', () => api.openFullDiskAccess());
+      $('b-finder-trash').addEventListener('click', () => api.openTrash());
+    }
   } else {
     f.innerHTML = RENDER[view]();
     fitList();
@@ -341,7 +382,7 @@ function renderStatus() {
 
 async function loadVolume() {
   const dir = cwd;
-  if (dir === COMPUTER) {
+  if (isPlace(dir) && dir !== TRASH) {
     $('st3').textContent = '';
     updateTitle();
     return;
@@ -356,20 +397,20 @@ async function loadVolume() {
 // ---------- going places ----------
 
 function updateTitle() {
-  const short = cwd === COMPUTER || cwd === '/' ? placeLabel(cwd) : basename(cwd);
-  const name = searchOn() ? 'Search Results' : app.settings.fullPathTitle && cwd !== COMPUTER ? cwd : short;
+  const short = isPlace(cwd) || cwd === '/' ? placeLabel(cwd) : basename(cwd);
+  const name = searchOn() ? 'Search Results' : app.settings.fullPathTitle && !isPlace(cwd) ? cwd : short;
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
 }
 
-const shownPath = (p) => (p === COMPUTER ? 'Computer' : p);
+const shownPath = (p) => (isPlace(p) ? placeLabel(p) : p);
 
 function updateChrome() {
   if (document.activeElement !== $('path')) $('path').value = shownPath(cwd);
   $('b-back').classList.toggle('off', hIndex === 0);
   $('b-forward').classList.toggle('off', hIndex >= history.length - 1);
-  $('b-up').classList.toggle('off', cwd === COMPUTER);
+  $('b-up').classList.toggle('off', !parentOf(cwd));
   $('b-term').classList.toggle('off', !targetFolder());
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
@@ -710,7 +751,17 @@ $('files').addEventListener('contextmenu', async (e) => {
   if (!el) {
     sel.clear();
     showSelection();
-    const here = cwd === COMPUTER ? [] : ['sep',
+    if (cwd === TRASH) {
+      openMenu([
+        { label: 'Empty Trash...', icon: 'p-trash', click: () => api.emptyTrash() },
+        'sep',
+        { label: 'View', sub: viewEntries() },
+        { label: 'Arrange Icons By', sub: sortEntries() },
+        { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) }
+      ], e.clientX, e.clientY);
+      return;
+    }
+    const here = isPlace(cwd) ? [] : ['sep',
       { label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(cwd) },
       isPinned(cwd) ? { label: 'Unpin This Folder', icon: 'p-pin', click: () => unpin(cwd) }
         : { label: 'Pin This Folder', icon: 'p-pin', click: () => pin(cwd) }];
@@ -719,7 +770,7 @@ $('files').addEventListener('contextmenu', async (e) => {
       { label: 'Arrange Icons By', sub: sortEntries() },
       { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) },
       ...here,
-      ...(cwd === COMPUTER || listError ? [] : [
+      ...(isPlace(cwd) || listError ? [] : [
         ...(cwdWritable ? ['sep', { label: 'Paste', click: () => pasteInto(cwd) }, 'sep', { label: 'New', sub: [
           { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
           { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
@@ -735,6 +786,21 @@ $('files').addEventListener('contextmenu', async (e) => {
     showSelection();
   }
   const picked = items.filter((x) => sel.has(x.path));
+  if (cwd === TRASH) {
+    const paths = picked.map((x) => x.path);
+    openMenu([
+      { label: 'Put Back', bold: true, click: () => putBackSelected() },
+      { label: 'Delete Immediately...', click: () => api.deleteNow(paths) },
+      'sep',
+      { label: 'Open', click: () => openSelected() },
+      ...(picked.some(isFolder) ? [] : [{ label: 'Quick Look', click: () => api.quickLook(it.path) }]),
+      { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
+      { label: 'Copy Path', click: () => copyPaths() },
+      'sep',
+      { label: 'Properties', icon: 'p-props', click: () => showProps() }
+    ], e.clientX, e.clientY);
+    return;
+  }
   // In groups like the old windows: opening, pinning, then changing.
   const groups = [[{ label: 'Open', bold: true, click: () => openSelected() }], [], []];
   if (picked.every(isFolder)) groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
@@ -989,7 +1055,7 @@ api.onCommand(({ command, arg }) => {
     case 'copy':
     case 'paste': clipCommand(command); break;
     case 'terminal': openTerminal(); break;
-    case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
+    case 'pinHere': if (!isPlace(cwd)) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
     case 'address': path.focus(); break;
     default:
@@ -1031,13 +1097,19 @@ function applyState(state) {
     render();
   } else if (old && JSON.stringify(old.cut) !== JSON.stringify(state.cut)) {
     showCut();
-  } else if (old && JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins)) {
+  } else if (old && (JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins) ||
+    JSON.stringify(old.settings.places) !== JSON.stringify(state.settings.places))) {
     renderPane();
     renderTree();
   }
 }
 
 api.onState(applyState);
+// Full Disk Access is turned on in System Settings, so the Trash looks
+// again when the window comes back to the front.
+window.addEventListener('focus', () => {
+  if (cwd === TRASH && listError === 'fda') navigate(cwd, { push: false });
+});
 api.onFolderChanged((dir) => {
   if (dir !== cwd || searchOn()) return;
   if (renaming) {
@@ -1054,6 +1126,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const s = state.settings;
     view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
     COMPUTER = state.computer;
+    TRASH = state.trash;
+    RECENTS = state.recents;
+    ICLOUD = state.icloud;
     setPane(state.settings.pane, { save: false });
     const params = new URLSearchParams(location.search);
     if (params.get('wait')) {
@@ -1081,7 +1156,7 @@ const pins = () => (app ? app.settings.pins : []);
 const isPinned = (p) => pins().includes(p);
 
 function pin(p) {
-  if (!p || p === COMPUTER || isPinned(p)) return;
+  if (!p || isPlace(p) || isPinned(p)) return;
   api.updateSettings({ pins: [...pins(), p] });
 }
 
@@ -1094,7 +1169,7 @@ function targetFolder() {
   const picked = selectedItems();
   if (picked.length === 1 && isFolder(picked[0]) && !picked[0].volume) return picked[0].path;
   if (picked.length === 1 && picked[0].volume) return picked[0].path;
-  return cwd === COMPUTER ? null : cwd;
+  return isPlace(cwd) ? null : cwd;
 }
 
 function openTerminal(p = targetFolder()) {
@@ -1110,10 +1185,13 @@ $('b-term').addEventListener('click', () => openTerminal());
 
 const collapsed = new Set(); // boxes folded shut in this window
 
+// Other Places, less the ones switched off on the Folder Options page.
 const PLACES = () => [
-  [app.home, 'Home'], [app.home + '/Desktop', 'Desktop'], [app.home + '/Documents', 'Documents'],
-  [app.home + '/Downloads', 'Downloads'], ['/Applications', 'Applications'], [COMPUTER, 'Computer'], ['trash', 'Trash']
-];
+  [RECENTS, 'Recents', 'recents'], [app.home, 'Home', 'home'], [app.home + '/Desktop', 'Desktop', 'desktop'],
+  [app.home + '/Documents', 'Documents', 'documents'], [app.home + '/Downloads', 'Downloads', 'downloads'],
+  ['/Applications', 'Applications', 'applications'], [ICLOUD, 'iCloud Drive', 'icloud'], [COMPUTER, 'Computer', 'computer'],
+  [TRASH, 'Trash', 'trash']
+].filter(([p, , key]) => app.settings.places[key] !== false && (p !== ICLOUD || app.icloudOn));
 
 function box(id, title, body, first = false) {
   if (!body) return '';
@@ -1132,8 +1210,15 @@ function tasksBox() {
   const picked = selectedItems();
   const one = picked.length === 1 ? picked[0] : null;
   const pinRow = (p) => isPinned(p) ? taskRow('unpin', 'p-pin', 'Unpin this folder') : taskRow('pin', 'p-pin', 'Pin this folder');
+  if (cwd === TRASH) {
+    if (listError === 'fda') return box('tasks', 'Trash Tasks', taskRow('fda', 'p-props', 'Open Privacy Settings') + taskRow('finderTrash', 'p-open', 'Open the Trash in Finder'), true);
+    if (listError) return '';
+    if (!picked.length) return box('tasks', 'Trash Tasks', taskRow('emptyTrash', 'p-trash', 'Empty the Trash') + (items.length ? taskRow('putBackAll', 'p-putback', 'Put back all items') : ''), true);
+    return box('tasks', 'Trash Tasks', taskRow('putBack', 'p-putback', one ? 'Put back this item' : 'Put back the selected items') +
+      taskRow('deleteNow', 'p-trash', one ? 'Delete this item immediately' : 'Delete the selected items immediately'), true);
+  }
   if (!picked.length) {
-    if (cwd === COMPUTER) return '';
+    if (isPlace(cwd)) return '';
     return box('tasks', 'Folder Tasks', (cwdWritable ? taskRow('newFolder', 'p-newfolder', 'Make a new folder') : '') +
       taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
       taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
@@ -1151,7 +1236,7 @@ function tasksBox() {
       (one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this file') + taskRow('trash', 'p-trash', 'Move this file to the Trash')), true);
   }
   return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items') +
-    (cwd === COMPUTER || picked.some((it) => it.fixed) ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
+    ((cwd === COMPUTER || cwd === TRASH) || picked.some((it) => it.fixed) ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
 }
 
 function pinnedBox() {
@@ -1165,7 +1250,7 @@ function pinnedBox() {
 // it's in shown in bold.
 function placesBox() {
   return box('places', 'Other Places', PLACES().map(([p, label]) =>
-    `<div class="row${p === cwd ? ' here' : ''}" data-place="${esc(p)}"><svg><use href="#${p === 'trash' ? 'p-trash' : specialIcon(p) || 'i-folder'}"/></svg>${esc(label)}</div>`).join(''));
+    `<div class="row${p === cwd ? ' here' : ''}" data-place="${esc(p)}"><svg><use href="#${specialIcon(p) || 'i-folder'}"/></svg>${esc(label)}</div>`).join(''));
 }
 
 let countFor = null; // the folder whose count the Details box is waiting on
@@ -1177,7 +1262,7 @@ function detailsBox() {
   let html;
   countFor = null;
   if (!picked.length) {
-    html = `<b>${esc(placeLabel(cwd))}</b>` + line(cwd === COMPUTER ? 'Computer' : isVolumeRoot(cwd) ? 'Volume' : 'Folder') +
+    html = `<b>${esc(placeLabel(cwd))}</b>` + line(isPlace(cwd) ? `${items.length} item${items.length === 1 ? '' : 's'}` : isVolumeRoot(cwd) ? 'Volume' : 'Folder') +
       (folderModified ? line(`Modified: ${fmtDate(folderModified)}`) : '');
   } else if (one) {
     html = `<b>${esc(one.display)}</b>` + line(esc(one.kind));
@@ -1225,8 +1310,7 @@ $('pane').addEventListener('click', (e) => {
   }
   const place = e.target.closest('[data-place]');
   if (place) {
-    if (place.dataset.place === 'trash') api.openTrash();
-    else navigate(place.dataset.place);
+    navigate(place.dataset.place);
     return;
   }
   const task = e.target.closest('[data-act]');
@@ -1243,6 +1327,12 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'rename') renameSelected();
   else if (act === 'trash') trashSelected();
   else if (act === 'eject') eject(targetFolder());
+  else if (act === 'fda') api.openFullDiskAccess();
+  else if (act === 'finderTrash') api.openTrash();
+  else if (act === 'emptyTrash') api.emptyTrash();
+  else if (act === 'putBack') putBackSelected();
+  else if (act === 'putBackAll') putBackSelected(items.map((it) => it.path));
+  else if (act === 'deleteNow') api.deleteNow(selectedItems().map((it) => it.path));
 });
 
 // Pinning by dropping a folder on the Pinned box (not on a pin, which moves
@@ -1325,7 +1415,9 @@ function treeRoots() {
     { path: app.home, label: app.user, icon: 'p-home' },
     { path: COMPUTER, label: 'Computer', icon: 'p-computer' },
     { path: '/Applications', label: 'Applications', icon: 'p-apps' },
-    { path: 'trash', label: 'Trash', icon: 'p-trash', leaf: true }
+    ...(app.settings.places.recents !== false ? [{ path: RECENTS, label: 'Recents', icon: 'p-recents', leaf: true }] : []),
+    ...(app.icloudOn && app.settings.places.icloud !== false ? [{ path: ICLOUD, label: 'iCloud Drive', icon: 'p-icloud', leaf: true }] : []),
+    { path: TRASH, label: 'Trash', icon: 'p-trash', leaf: true }
   ];
 }
 
@@ -1412,8 +1504,7 @@ $('tree-list').addEventListener('click', async (e) => {
     drawTree();
     return;
   }
-  if (p === 'trash') api.openTrash();
-  else navigate(p);
+  navigate(p);
 });
 
 $('tree-close').addEventListener('click', () => setPane('tasks'));

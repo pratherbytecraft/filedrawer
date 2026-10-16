@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const helper = require('./helper');
+const places = require('./places');
 
 const HOME = os.homedir();
 const COMPUTER = '::computer'; // the place that lists the volumes
@@ -76,6 +77,7 @@ async function addInfo(items) {
           it.aliasDir = info.aliasDir;
         }
         it.hidden = it.hidden || info.hidden;
+        if (info.added) it.added = info.added;
         it.package = it.dir && info.package;
         if (it.package && !it.ext) it.ext = path.extname(it.name).slice(1).toLowerCase();
         it.kind = info.kind || fallbackKind(it);
@@ -118,6 +120,20 @@ const writable = (dir) => fs.promises.access(dir, fs.constants.W_OK).then(() => 
 // changed itself has canAdd false.
 async function list(dir, { hidden = false, extensions = false } = {}) {
   if (dir === COMPUTER) return { path: dir, items: await volumes() };
+  const place = { [places.TRASH]: places.listTrash, [places.RECENTS]: places.listRecents, [places.ICLOUD]: places.listICloud }[dir];
+  if (place) {
+    const res = await place(readItem, addInfo, { hidden });
+    if (res.items) {
+      if (extensions) res.items.forEach((it) => { it.display = it.name; });
+      // Things in Recents and iCloud Drive can be changed like anywhere else.
+      if (dir !== places.TRASH) {
+        const canWrite = new Map();
+        for (const d of new Set(res.items.map((it) => path.dirname(it.path)))) canWrite.set(d, await writable(d));
+        res.items.forEach((it) => { it.fixed = !canWrite.get(path.dirname(it.path)); });
+      }
+    }
+    return res;
+  }
   let names;
   try {
     names = await fs.promises.readdir(dir);
@@ -162,6 +178,8 @@ async function count(dir, cwd) {
   return names ? names.filter((n) => !n.startsWith('.')).length : null;
 }
 
+const isPlace = (p) => p === COMPUTER || p === places.TRASH || p === places.RECENTS || p === places.ICLOUD;
+
 function expand(text, cwd) {
   let t = text.trim().replace(/^(["'])(.*)\1$/, '$2');
   if (t.startsWith('file://')) {
@@ -172,14 +190,16 @@ function expand(text, cwd) {
     }
   }
   if (t === '~' || t.startsWith('~/')) t = HOME + t.slice(1);
-  return path.resolve(cwd && cwd !== COMPUTER ? cwd : HOME, t);
+  return path.resolve(cwd && !isPlace(cwd) ? cwd : HOME, t);
 }
 
 // What an address typed into the address bar points at.
 // { type: 'dir' | 'file' | 'missing', path }
 async function resolve(text, cwd) {
-  if (text.trim().toLowerCase() === 'computer') return { type: 'dir', path: COMPUTER };
+  const named = { computer: COMPUTER, trash: places.TRASH, recents: places.RECENTS, 'icloud drive': places.ICLOUD }[text.trim().toLowerCase()];
+  if (named) return { type: 'dir', path: named };
   const full = expand(text, cwd);
+  if (full === places.HOME_TRASH) return { type: 'dir', path: places.TRASH };
   try {
     const st = await fs.promises.stat(full);
     return { type: st.isDirectory() ? 'dir' : 'file', path: full };

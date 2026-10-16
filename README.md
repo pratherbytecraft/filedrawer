@@ -39,6 +39,8 @@ The Search button finds files by name, by a word inside them, by date or by size
 
 Computer lists your disks with their size and free space, and ejects them.
 
+The Trash shows where each item came from and when it was deleted. Put Back moves items to where they were, and Delete Immediately removes them for good. Recents lists the files you opened in the last 30 days, newest first, and iCloud Drive opens here too.
+
 ## Themes
 
 The System theme follows your Mac's light or dark setting and your accent color. Classic 2009, Classic 2001 and Classic 1995 are in Settings if you want a retro look, each with its own color schemes.
@@ -51,7 +53,7 @@ The System theme follows your Mac's light or dark setting and your accent color.
 
 ## Settings
 
-Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder Options sets whether folders open in the same window or a new one, single or double click to open, the left pane, a view per folder, hidden files and file extensions. Settings also has open at login, the update check, and export, import and reset.
+Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder Options sets whether folders open in the same window or a new one, single or double click to open, the left pane, a view per folder, hidden files, file extensions and which places Other Places shows. Settings also has open at login, the update check, and export, import and reset.
 
 ![Filedrawer Settings](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/settings.png)
 
@@ -61,7 +63,7 @@ When a folder opens in Finder, from the Dock, the Desktop, Finder itself or `ope
 
 On its first launch Filedrawer asks for the two permissions this needs. Accessibility lets it see when Finder opens a window, and Control Finder lets it ask which folder that window shows.
 
-Finder keeps the Desktop, Get Info windows, Recents, AirDrop, Network, the Trash and the top of iCloud Drive. Hold Option while opening a folder to open it in Finder instead.
+Finder keeps the Desktop, Get Info windows, AirDrop and Network. The Trash moves over too once Filedrawer has Full Disk Access. Hold Option while opening a folder to open it in Finder instead.
 
 The Default File Manager page in Settings turns this off and shows any permission that's still missing. Filedrawer has to be running for it to work, so it opens when you log in while this is on. If you use an app that quits other apps after their last window closes, add Filedrawer to that app's exceptions.
 
@@ -71,7 +73,7 @@ The Default File Manager page in Settings turns this off and shows any permissio
 
 macOS asks before Filedrawer opens your Desktop, Documents and Downloads folders for the first time. If you said no, Filedrawer shows a button that opens Privacy & Security, where you can switch it on under Files and Folders.
 
-The Trash opens in Finder, since macOS keeps the Trash's list to Finder.
+The Trash needs Full Disk Access, since macOS keeps the Trash private from other apps. Open the Trash in Filedrawer and it shows a button to Privacy & Security. Switch on Filedrawer under Full Disk Access, then pick Quit & Reopen when macOS asks.
 
 ## Updates
 
