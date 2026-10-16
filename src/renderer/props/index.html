@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>Properties</title>
+<link rel="stylesheet" href="props.css">
+</head>
+<body>
+<div class="tabs"><span class="tab on">General</span></div>
+<div class="page">
+  <div class="head">
+    <img id="icon" alt="">
+    <input id="name" spellcheck="false">
+  </div>
+  <div class="rule"></div>
+  <div class="grid">
+    <span>Kind:</span><span id="kind"></span>
+    <span>Location:</span><span id="location" class="wrap"></span>
+    <span>Size:</span><span id="size">Counting...</span>
+    <span>Size on disk:</span><span id="disk">Counting...</span>
+    <span id="contains-label">Contains:</span><span id="contains"></span>
+  </div>
+  <div class="rule" id="dates-rule"></div>
+  <div class="grid" id="dates">
+    <span>Created:</span><span id="created"></span>
+    <span>Modified:</span><span id="modified"></span>
+    <span>Accessed:</span><span id="accessed"></span>
+  </div>
+  <div class="rule" id="flags-rule"></div>
+  <div class="grid" id="flags">
+    <span>Attributes:</span>
+    <span class="checks"><label><input type="checkbox" id="locked"> Locked</label><label><input type="checkbox" id="hidden"> Hidden</label></span>
+  </div>
+</div>
+<div class="buttons"><button id="cancel">Cancel</button><button id="ok" class="main">OK</button></div>
+<script src="../shared/theme.js"></script>
+<script src="props.js"></script>
+</body>
+</html>

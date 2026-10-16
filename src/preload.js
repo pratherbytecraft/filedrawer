@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('filedrawer', {
   startDrag: (paths) => ipcRenderer.send('drag:start', paths),
   // copy forces a copy, otherwise items move on the same disk and copy to another.
   drop: (paths, dest, copy) => ipcRenderer.invoke('op:drop', paths, dest, copy),
+  showProps: (paths) => ipcRenderer.send('props:open', paths),
+  openWithApps: (p) => ipcRenderer.invoke('openWith:apps', p),
+  openWith: (appPath, paths) => ipcRenderer.send('openWith:open', appPath, paths),
+  openWithOther: (paths) => ipcRenderer.send('openWith:other', paths),
+  quickLook: (p) => ipcRenderer.send('quicklook', p),
+  // The Properties window.
+  getProps: () => ipcRenderer.invoke('props:get'),
+  onPropsSize: on('props:size'),
+  applyProps: (change) => ipcRenderer.invoke('props:apply', change),
   // The progress window of a copy or move.
   onJob: on('job:update'),
   answerJob: (id, choice, all) => ipcRenderer.send('job:answer', id, choice, all),

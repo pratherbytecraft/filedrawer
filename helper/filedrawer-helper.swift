@@ -26,6 +26,12 @@
 //     -> {"id":7,"change":42}   (the clipboard's change count after writing)
 //   {"id":8,"cmd":"clipRead"}
 //     -> {"id":8,"paths":["/Users/you/a.txt"],"change":42}
+//   {"id":9,"cmd":"openWith","path":"/Users/you/a.txt"}
+//     -> {"id":9,"apps":[{"path":"/System/Applications/TextEdit.app","name":"TextEdit","default":true}]}
+//   {"id":10,"cmd":"flags","path":"/Users/you/a.txt"}
+//     -> {"id":10,"locked":false,"hidden":false}
+//   {"id":11,"cmd":"setFlags","path":"/Users/you/a.txt","locked":true,"hidden":false}
+//     -> {"id":11,"ok":true}
 // A request that fails gets {"id":n,"error":"..."}.
 import AppKit
 import Foundation
@@ -151,6 +157,30 @@ func handle(_ req: [String: Any]) {
         let board = NSPasteboard.general
         let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         reply(["id": id, "paths": urls.map { $0.path }, "change": board.changeCount])
+    case "openWith":
+        let url = URL(fileURLWithPath: req["path"] as? String ?? "/")
+        let fallback = NSWorkspace.shared.urlForApplication(toOpen: url)
+        var seen = Set<String>()
+        var apps: [[String: Any]] = []
+        for app in NSWorkspace.shared.urlsForApplications(toOpen: url) where !seen.contains(app.path) {
+            seen.insert(app.path)
+            apps.append(["path": app.path, "name": FileManager.default.displayName(atPath: app.path), "default": app == fallback])
+        }
+        reply(["id": id, "apps": apps])
+    case "flags":
+        let v = try? URL(fileURLWithPath: req["path"] as? String ?? "/").resourceValues(forKeys: [.isUserImmutableKey, .isHiddenKey])
+        reply(["id": id, "locked": v?.isUserImmutable ?? false, "hidden": v?.isHidden ?? false])
+    case "setFlags":
+        var url = URL(fileURLWithPath: req["path"] as? String ?? "/")
+        var values = URLResourceValues()
+        if let locked = req["locked"] as? Bool { values.isUserImmutable = locked }
+        if let hidden = req["hidden"] as? Bool { values.isHidden = hidden }
+        do {
+            try url.setResourceValues(values)
+            reply(["id": id, "ok": true])
+        } catch {
+            reply(["id": id, "error": (error as NSError).localizedDescription])
+        }
     case "volume":
         reply(["id": id].merging(volume(req["path"] as? String ?? "/")) { a, _ in a })
     default:

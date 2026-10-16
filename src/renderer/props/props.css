@@ -1,0 +1,39 @@
+/* The Properties window, in the System theme or Classic 2001. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; user-select: none; cursor: default; overflow: hidden; }
+[hidden] { display: none !important; }
+.tabs { display: flex; padding: 8px 10px 0; }
+.page { flex: 1; margin: 0 10px; padding: 14px 14px 10px; overflow: auto; }
+.head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.head img { width: 36px; height: 36px; flex: none; }
+.head input { flex: 1; min-width: 0; font: inherit; padding: 3px 5px; user-select: text; }
+.rule { height: 1px; margin: 10px 0; }
+.grid { display: grid; grid-template-columns: 96px 1fr; gap: 6px 8px; align-items: baseline; }
+.grid > span:nth-child(odd) { white-space: nowrap; }
+.wrap { word-break: break-all; user-select: text; }
+.checks { display: flex; gap: 16px; }
+.checks label { display: flex; align-items: center; gap: 4px; }
+.buttons { display: flex; justify-content: flex-end; gap: 8px; padding: 10px; }
+button { font: inherit; min-width: 72px; }
+
+[data-theme="system"] body { font: 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; background: #ececec; color: #1d1d1f; }
+[data-theme="system"][data-appearance="dark"] body { background: #2a2a2c; color: #f2f2f7; color-scheme: dark; }
+[data-theme="system"] .tab { font-weight: 600; padding: 4px 10px; }
+[data-theme="system"] .page { background: rgba(0,0,0,.04); border-radius: 10px; }
+[data-theme="system"][data-appearance="dark"] .page { background: rgba(255,255,255,.05); }
+[data-theme="system"] .grid > span:nth-child(odd) { color: #86868b; text-align: right; }
+[data-theme="system"] .rule { background: rgba(128,128,128,.25); }
+[data-theme="system"] .head input { border: 0; border-radius: 5px; background: rgba(128,128,128,.15); color: inherit; outline: none; }
+[data-theme="system"] .head input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-theme="system"] button { padding: 3px 12px; border-radius: 6px; border: 0; background: rgba(128,128,128,.2); color: inherit; }
+[data-theme="system"] button.main { background: var(--accent); color: var(--accent-text); }
+
+[data-theme="classic-2001"] body { font: 11px Tahoma, Geneva, Verdana, sans-serif; background: #ece9d8; color: #000; color-scheme: light; }
+[data-theme="classic-2001"] .tab { padding: 3px 9px; border: 1px solid #919b9c; border-bottom: 0; border-radius: 3px 3px 0 0; background: #fcfcfe; box-shadow: inset 0 2px #ffc83c; position: relative; top: 1px; }
+[data-theme="classic-2001"] .page { background: #fcfcfe; border: 1px solid #919b9c; }
+[data-theme="classic-2001"] .rule { background: #d0d0bf; }
+[data-theme="classic-2001"] .head input { border: 1px solid #7f9db9; background: #fff; color: #000; }
+[data-theme="classic-2001"] button { padding: 3px 10px; border: 1px solid #003c74; border-radius: 3px; background: linear-gradient(#fff, #ece9d8 90%, #d6d0c5); color: #000; }
+[data-theme="classic-2001"] button:hover { box-shadow: inset 0 0 0 2px #f9b119; }
+[data-theme="classic-2001"] button.main { box-shadow: inset 0 0 0 1px #9bb8f1; }

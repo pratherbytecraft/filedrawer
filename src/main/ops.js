@@ -47,6 +47,10 @@ async function rename(from, name) {
     await fs.promises.rename(from, to);
     return { path: to };
   } catch (err) {
+    if (err.code === 'EPERM') {
+      const flags = await helper.request('flags', { path: from });
+      if (flags && flags.locked) return { error: `"${path.basename(from)}" is locked. Unlock it in Properties to rename it.` };
+    }
     return { error: message(err, 'rename it') };
   }
 }

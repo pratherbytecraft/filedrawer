@@ -654,7 +654,7 @@ document.addEventListener('mousedown', (e) => {
 }, true);
 window.addEventListener('blur', closeMenu);
 
-$('files').addEventListener('contextmenu', (e) => {
+$('files').addEventListener('contextmenu', async (e) => {
   e.preventDefault();
   const el = e.target.closest('.item');
   if (!el) {
@@ -672,7 +672,7 @@ $('files').addEventListener('contextmenu', (e) => {
       ...(cwd === COMPUTER || listError ? [] : ['sep', { label: 'Paste', click: () => pasteInto(cwd) }, 'sep', { label: 'New', sub: [
         { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
         { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
-      ] }])
+      ] }, 'sep', { label: 'Properties', icon: 'p-props', click: () => showProps() }])
     ], e.clientX, e.clientY);
     return;
   }
@@ -686,6 +686,10 @@ $('files').addEventListener('contextmenu', (e) => {
   // In groups like the old windows: opening, pinning, then changing.
   const groups = [[{ label: 'Open', bold: true, click: () => openSelected() }], [], []];
   if (picked.every(isFolder)) groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+  if (!picked.some(isFolder)) {
+    groups[0].push({ label: 'Open With', sub: await openWithEntries(picked.map((x) => x.path)) });
+    groups[0].push({ label: 'Quick Look', click: () => api.quickLook(it.path) });
+  }
   if (picked.length === 1 && isFolder(it)) {
     groups[0].push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(it.path) });
     if (!it.volume) {
@@ -702,6 +706,7 @@ $('files').addEventListener('contextmenu', (e) => {
     if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
     groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
   }
+  groups.push([{ label: 'Properties', icon: 'p-props', click: () => showProps() }]);
   const entries = groups.filter((g) => g.length).flatMap((g, i) => (i ? ['sep', ...g] : g));
   openMenu(entries, e.clientX, e.clientY);
 });
@@ -905,6 +910,7 @@ api.onCommand(({ command, arg }) => {
     }
     case 'undo':
     case 'redo': undoOrRedo(command); break;
+    case 'props': if (!typing) showProps(); break;
     case 'cut':
     case 'copy':
     case 'paste': clipCommand(command); break;

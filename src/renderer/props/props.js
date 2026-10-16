@@ -1,0 +1,77 @@
+// The Properties window: what an item is, its sizes and dates, and its
+// name and switches, which OK applies.
+const api = window.filedrawer;
+const $ = (id) => document.getElementById(id);
+let data = null;
+
+api.onState((state) => window.applyTheme(state));
+api.getState().then((state) => window.applyTheme(state));
+
+function fmtBytes(n) {
+  if (n < 1000) return `${n} bytes`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = n;
+  let i = -1;
+  do {
+    v /= 1000;
+    i++;
+  } while (v >= 1000 && i < units.length - 1);
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')} ${units[i]} (${n.toLocaleString('en-US')} bytes)`;
+}
+
+const fmtDate = (ms) => {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
+};
+
+api.getProps().then((d) => {
+  data = d;
+  if (!d) return;
+  document.title = d.one ? `${d.fullName} Properties` : 'Properties';
+  if (d.icon) $('icon').src = d.icon;
+  $('name').value = d.name;
+  $('name').disabled = !d.one;
+  $('kind').textContent = d.kind;
+  $('location').textContent = d.location;
+  $('contains-label').hidden = $('contains').hidden = !d.folder;
+  for (const k of ['created', 'modified', 'accessed']) $(k).textContent = d[k] ? fmtDate(d[k]) : '';
+  $('dates').hidden = $('dates-rule').hidden = !d.one;
+  $('flags').hidden = $('flags-rule').hidden = !d.one;
+  $('locked').checked = !!d.locked;
+  $('hidden').checked = !!d.hidden;
+  $('ok').focus();
+});
+
+api.onPropsSize((t) => {
+  const more = t.done ? '' : '...';
+  $('size').textContent = fmtBytes(t.bytes) + more;
+  $('disk').textContent = fmtBytes(t.disk) + more;
+  const files = `${t.files.toLocaleString('en-US')} file${t.files === 1 ? '' : 's'}`;
+  const inner = Math.max(0, t.folders - (data && data.one ? 1 : 0));
+  $('contains').textContent = `${files}, ${inner.toLocaleString('en-US')} folder${inner === 1 ? '' : 's'}${more}`;
+});
+
+async function ok() {
+  if (!data) return window.close();
+  const change = {};
+  const name = $('name').value.trim();
+  if (data.one && name && name !== data.name) change.name = name + (data.fullName.startsWith(data.name) ? data.fullName.slice(data.name.length) : '');
+  if (data.one && $('locked').checked !== !!data.locked) change.locked = $('locked').checked;
+  if (data.one && $('hidden').checked !== !!data.hidden) change.hidden = $('hidden').checked;
+  if (Object.keys(change).length) {
+    const res = await api.applyProps(change);
+    if (res.error) return;
+  }
+  window.close();
+}
+
+$('ok').addEventListener('click', ok);
+$('cancel').addEventListener('click', () => window.close());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    ok();
+  } else if (e.key === 'Escape') {
+    window.close();
+  }
+});

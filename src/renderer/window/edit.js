@@ -264,6 +264,33 @@ document.addEventListener('drop', async (e) => {
   if (t.dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
 });
 
+// ---------- Properties, Open With and Quick Look ----------
+
+// Properties of the selection, or of the open folder when nothing is selected.
+function showProps() {
+  const picked = selectedItems().map((it) => it.path);
+  if (picked.length) api.showProps(picked);
+  else if (cwd !== COMPUTER) api.showProps([cwd]);
+}
+
+// Space shows the selected file in Quick Look. Once the preview is up it
+// takes the keys itself, and Space closes it again.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== ' ' || typed || e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const it = selectedItems()[0];
+  if (!it) return;
+  e.preventDefault();
+  api.quickLook(it.path);
+});
+
+// The apps that can open the right clicked file, with its usual app first.
+async function openWithEntries(paths) {
+  const apps = await api.openWithApps(paths[0]);
+  const sorted = apps.slice().sort((a, b) => (b.default - a.default) || a.name.localeCompare(b.name));
+  const rows = sorted.map((a) => ({ label: a.default ? `${a.name} (default)` : a.name, click: () => api.openWith(a.path, paths) }));
+  return [...rows, ...(rows.length ? ['sep'] : []), { label: 'Other...', click: () => api.openWithOther(paths) }];
+}
+
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {

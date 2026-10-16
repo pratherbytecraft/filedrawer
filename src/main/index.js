@@ -12,6 +12,7 @@ const folders = require('./folders');
 const ops = require('./ops');
 const undo = require('./undo');
 const copier = require('./copier');
+const props = require('./props');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -238,6 +239,7 @@ function buildMenu() {
         cmd('New Text Document', 'newText', null),
         cmd('Rename', 'rename', 'F2'),
         cmd('Move to Trash', 'trash', 'CmdOrCtrl+Backspace'),
+        cmd('Properties', 'props', 'CmdOrCtrl+I'),
         { type: 'separator' },
         { role: 'close', label: 'Close Window' }
       ]
@@ -472,8 +474,9 @@ async function runUndo(which, e) {
 }
 ipcMain.handle('op:undo', (e, which) => runUndo(which, e));
 
-ipcMain.handle('op:rename', async (e, from, name) => {
-  const res = await answer(e, await ops.rename(from, name));
+// Renames and puts it on the Undo list. Used by the window and Properties.
+async function renameWithUndo(from, name) {
+  const res = await ops.rename(from, name);
   if (res.path && res.path !== from) {
     const to = res.path;
     undo.push({
@@ -483,6 +486,39 @@ ipcMain.handle('op:rename', async (e, from, name) => {
     });
   }
   return res;
+}
+ipcMain.handle('op:rename', async (e, from, name) => answer(e, await renameWithUndo(from, name)));
+
+// Properties, Open With and Quick Look.
+ipcMain.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
+ipcMain.handle('openWith:apps', async (_e, p) => {
+  const res = await helper.request('openWith', { path: p });
+  return res ? res.apps : [];
+});
+ipcMain.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
+ipcMain.on('openWith:other', async (e, paths) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const res = await dialog.showOpenDialog(win, {
+    title: 'Open With',
+    buttonLabel: 'Open',
+    defaultPath: '/Applications',
+    filters: [{ name: 'Applications', extensions: ['app'] }],
+    properties: ['openFile']
+  });
+  if (!res.canceled && res.filePaths[0]) execFile('open', ['-a', res.filePaths[0], ...paths], () => {});
+});
+// Space again on the same item closes its preview.
+const previewing = new WeakMap(); // window -> the path in Quick Look
+ipcMain.on('quicklook', (e, p) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return;
+  if (!p || previewing.get(win) === p) {
+    win.closeFilePreview();
+    previewing.delete(win);
+  } else {
+    win.previewFile(p, path.basename(p));
+    previewing.set(win, p);
+  }
 });
 
 // A new item's undo moves it to the Trash, and its redo takes it out again.
@@ -553,6 +589,7 @@ ipcMain.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:c
 app.whenReady().then(() => {
   settings.init();
   helper.start();
+  props.init({ rename: renameWithUndo });
   app.setAboutPanelOptions({
     applicationName: 'Filedrawer',
     applicationVersion: VERSION,
