@@ -324,6 +324,7 @@ function rows() {
 
 function showSelection() {
   for (const el of rows()) el.classList.toggle('sel', sel.has(items[el.dataset.i].path));
+  $('b-term').classList.toggle('off', !targetFolder());
   renderStatus();
   renderPane();
 }
@@ -369,6 +370,7 @@ function updateChrome() {
   $('b-back').classList.toggle('off', hIndex === 0);
   $('b-forward').classList.toggle('off', hIndex >= history.length - 1);
   $('b-up').classList.toggle('off', cwd === COMPUTER);
+  $('b-term').classList.toggle('off', !targetFolder());
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
   $('title-icon').innerHTML = icon;
@@ -986,7 +988,7 @@ api.onCommand(({ command, arg }) => {
     case 'cut':
     case 'copy':
     case 'paste': clipCommand(command); break;
-    case 'terminal': openTerminal(cwd === COMPUTER ? null : cwd); break;
+    case 'terminal': openTerminal(); break;
     case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
     case 'address': path.focus(); break;
@@ -1101,7 +1103,8 @@ function openTerminal(p = targetFolder()) {
 
 // The toolbar button and the File menu open the folder that's open, the
 // task and the right click open the folder they're about.
-$('b-term').addEventListener('click', () => openTerminal(cwd === COMPUTER ? null : cwd));
+// The selected folder, when one is, or the open one.
+$('b-term').addEventListener('click', () => openTerminal());
 
 // ---------- the left pane: Tasks ----------
 
