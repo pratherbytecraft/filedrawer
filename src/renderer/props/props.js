@@ -35,6 +35,10 @@ api.getProps().then((d) => {
   $('location').textContent = d.location;
   $('contains-label').hidden = $('contains').hidden = !d.folder;
   showOpensWith(d.opensWith);
+  $('version-label').hidden = $('version').hidden = !d.version;
+  $('version').textContent = d.version || '';
+  $('from-label').hidden = $('from').hidden = !(d.whereFrom && d.whereFrom.length);
+  $('from').innerHTML = (d.whereFrom || []).map((u) => u.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])).join('<br>');
   if (d.volume) {
     // A disk: how full it is, in place of the sizes and the switches.
     document.querySelector('.grid').querySelectorAll(':scope > span').forEach((el, i) => {
@@ -51,8 +55,25 @@ api.getProps().then((d) => {
   $('flags').hidden = $('flags-rule').hidden = !d.one || !!d.volume;
   $('locked').checked = !!d.locked;
   $('hidden').checked = !!d.hidden;
+  $('hide-ext-box').hidden = d.hideExt === null || d.hideExt === undefined;
+  $('hide-ext').checked = !!d.hideExt;
+  $('comment-label').hidden = $('comment-box').hidden = d.comment === null || d.comment === undefined || !!d.volume;
+  $('comment').value = d.comment || '';
   $('ok').focus();
+  fit();
 });
+
+// The window grows or shrinks to what this item shows: everything outside
+// the page, plus the page's padding and the bottom of its last shown row.
+function fit() {
+  const page = document.querySelector('.page');
+  const box = page.getBoundingClientRect();
+  const shown = [...page.children].filter((el) => el.offsetParent);
+  const bottom = Math.max(...shown.map((el) => el.getBoundingClientRect().bottom)) + page.scrollTop;
+  const style = getComputedStyle(page);
+  const padding = parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
+  api.fitProps(window.innerHeight - box.height + (bottom - box.top) + padding + 1);
+}
 
 // The app these files open with, for files of one extension.
 function showOpensWith(app) {
@@ -81,6 +102,8 @@ async function ok() {
   if (data.one && name && name !== data.name) change.name = name + (data.fullName.startsWith(data.name) ? data.fullName.slice(data.name.length) : '');
   if (data.one && $('locked').checked !== !!data.locked) change.locked = $('locked').checked;
   if (data.one && $('hidden').checked !== !!data.hidden) change.hidden = $('hidden').checked;
+  if (data.one && !$('hide-ext-box').hidden && $('hide-ext').checked !== !!data.hideExt) change.hideExt = $('hide-ext').checked;
+  if (data.one && !$('comment-box').hidden && $('comment').value !== (data.comment || '')) change.comment = $('comment').value;
   if (Object.keys(change).length) {
     const res = await api.applyProps(change);
     if (res.error) return;
@@ -91,7 +114,8 @@ async function ok() {
 $('ok').addEventListener('click', ok);
 $('cancel').addEventListener('click', () => window.close());
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
+  // Return in Comments starts a new line, as in Finder.
+  if (e.key === 'Enter' && !e.target.closest('textarea')) {
     e.preventDefault();
     ok();
   } else if (e.key === 'Escape') {

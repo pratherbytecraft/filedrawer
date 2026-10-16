@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('filedrawer', {
   onPropsSize: on('props:size'),
   applyProps: (change) => ipcRenderer.invoke('props:apply', change),
   changeDefaultApp: () => ipcRenderer.send('props:changeApp'),
+  fitProps: (height) => ipcRenderer.send('props:fit', height),
   onPropsOpensWith: on('props:opensWith'),
   // The app list window behind Change... and Choose App...
   chooserGet: () => ipcRenderer.invoke('chooser:get'),

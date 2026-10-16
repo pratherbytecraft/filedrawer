@@ -34,9 +34,12 @@
 //     macOS asks the user before it changes the app for a whole kind, so the
 //     reply comes once that's answered, while other requests carry on.
 //   {"id":10,"cmd":"flags","path":"/Users/you/a.txt"}
-//     -> {"id":10,"locked":false,"hidden":false}
-//   {"id":11,"cmd":"setFlags","path":"/Users/you/a.txt","locked":true,"hidden":false}
+//     -> {"id":10,"locked":false,"hidden":false,"hideExt":false}
+//   {"id":11,"cmd":"setFlags","path":"/Users/you/a.txt","locked":true,"hidden":false,"hideExt":true}
 //     -> {"id":11,"ok":true}
+//   {"id":16,"cmd":"extra","path":"/Users/you/Downloads/a.txt"}
+//     -> {"id":16,"version":"","whereFrom":["https://example.com/a.txt"],"comment":""}
+//     (version for apps, whereFrom for downloads, comment is Finder's)
 //   {"id":12,"cmd":"alias","path":"/Users/you/a.txt","to":"/Users/you/Desktop/a.txt alias"}
 //     -> {"id":12,"ok":true}   (a Finder alias, which follows the item when it moves)
 //   {"id":13,"cmd":"viewer"}
@@ -147,6 +150,18 @@ func volume(_ path: String) -> [String: Any] {
     return ["name": v?.volumeLocalizedName ?? v?.volumeName ?? "", "free": free, "total": v?.volumeTotalCapacity ?? 0]
 }
 
+// A Spotlight value Finder keeps on the file itself, such as where a
+// download came from, read from its extended attribute.
+func metadata(_ path: String, _ key: String) -> Any? {
+    let name = "com.apple.metadata:" + key
+    let size = getxattr(path, name, nil, 0, 0, 0)
+    guard size > 0 else { return nil }
+    var data = Data(count: size)
+    let read = data.withUnsafeMutableBytes { getxattr(path, name, $0.baseAddress, size, 0, 0) }
+    guard read == size else { return nil }
+    return try? PropertyListSerialization.propertyList(from: data, format: nil)
+}
+
 // Whether an app names this exact kind of file or extension among its
 // document types, as opposed to a wider kind (any text, any file).
 func claims(_ app: URL, _ file: URL) -> Bool {
@@ -244,19 +259,29 @@ func handle(_ req: [String: Any]) {
             NSWorkspace.shared.setDefaultApplication(at: app, toOpenContentTypeOfFileAt: file, completion: finished)
         }
     case "flags":
-        let v = try? URL(fileURLWithPath: req["path"] as? String ?? "/").resourceValues(forKeys: [.isUserImmutableKey, .isHiddenKey])
-        reply(["id": id, "locked": v?.isUserImmutable ?? false, "hidden": v?.isHidden ?? false])
+        let v = try? URL(fileURLWithPath: req["path"] as? String ?? "/").resourceValues(forKeys: [.isUserImmutableKey, .isHiddenKey, .hasHiddenExtensionKey])
+        reply(["id": id, "locked": v?.isUserImmutable ?? false, "hidden": v?.isHidden ?? false, "hideExt": v?.hasHiddenExtension ?? false])
     case "setFlags":
         var url = URL(fileURLWithPath: req["path"] as? String ?? "/")
         var values = URLResourceValues()
         if let locked = req["locked"] as? Bool { values.isUserImmutable = locked }
         if let hidden = req["hidden"] as? Bool { values.isHidden = hidden }
+        if let hideExt = req["hideExt"] as? Bool { values.hasHiddenExtension = hideExt }
         do {
             try url.setResourceValues(values)
             reply(["id": id, "ok": true])
         } catch {
             reply(["id": id, "error": (error as NSError).localizedDescription])
         }
+    case "extra":
+        let path = req["path"] as? String ?? "/"
+        let version = Bundle(path: path).flatMap { b -> String? in
+            guard b.bundleURL.pathExtension == "app", let short = b.infoDictionary?["CFBundleShortVersionString"] as? String else { return nil }
+            let build = b.infoDictionary?["CFBundleVersion"] as? String
+            return build != nil && build != short ? "\(short) (\(build!))" : short
+        } ?? ""
+        let whereFrom = (metadata(path, "kMDItemWhereFroms") as? [String] ?? []).filter { !$0.isEmpty }
+        reply(["id": id, "version": version, "whereFrom": whereFrom, "comment": metadata(path, "kMDItemFinderComment") as? String ?? ""])
     case "alias":
         do {
             let src = URL(fileURLWithPath: req["path"] as? String ?? "")

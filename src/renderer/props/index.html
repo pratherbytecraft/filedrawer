@@ -18,7 +18,9 @@
     <span>Kind:</span><span id="kind"></span>
     <span id="opens-label" class="mid" hidden>Opens with:</span>
     <span id="opens" class="opens" hidden><span class="app"><img id="opens-icon" alt=""><span id="opens-name"></span></span><button id="change" class="small">Change...</button></span>
+    <span id="version-label" hidden>Version:</span><span id="version" hidden></span>
     <span>Location:</span><span id="location" class="wrap"></span>
+    <span id="from-label" hidden>Where from:</span><span id="from" class="wrap" hidden></span>
     <span>Size:</span><span id="size">Counting...</span>
     <span>Size on disk:</span><span id="disk">Counting...</span>
     <span id="contains-label">Contains:</span><span id="contains"></span>
@@ -37,7 +39,8 @@
   <div class="rule" id="flags-rule"></div>
   <div class="grid" id="flags">
     <span>Attributes:</span>
-    <span class="checks"><label><input type="checkbox" id="locked"> Locked</label><label><input type="checkbox" id="hidden"> Hidden</label></span>
+    <span class="checks"><label><input type="checkbox" id="locked"> Locked</label><label><input type="checkbox" id="hidden"> Hidden</label><label id="hide-ext-box"><input type="checkbox" id="hide-ext"> Hide extension</label></span>
+    <span id="comment-label" class="top" hidden>Comments:</span><span id="comment-box" hidden><textarea id="comment" rows="2" spellcheck="false"></textarea></span>
   </div>
 </div>
 <div class="buttons"><button id="cancel">Cancel</button><button id="ok" class="main">OK</button></div>
