@@ -10,6 +10,7 @@ const DEFAULTS = Object.freeze({
   appearance: 'auto', // auto | light | dark
   accent: 'auto', // auto | blue | purple | pink | red | orange | yellow | green | graphite
   view: 'details', // the view a new window opens in, the one picked last
+  pane: 'tasks', // tasks | folders: the left pane a new window opens with, the one picked last
   sort: {
     key: 'name', // name | size | kind | modified
     dir: 'asc' // asc | desc

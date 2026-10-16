@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="window.css">
 <link rel="stylesheet" id="theme-css" href="../themes/system.css">
 </head>
-<body>
+<body data-pane="tasks">
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -43,12 +43,28 @@
       <rect x="3" y="13" width="8" height="8" rx="1" fill="#6cc04a" stroke="#2f8a1c"/>
       <rect x="13" y="13" width="8" height="8" rx="1" fill="#d9534f" stroke="#a52a26"/>
     </symbol>
+    <symbol id="t-folders" viewBox="0 0 24 24">
+      <path d="M2 4.5A1 1 0 0 1 3 3.5h5l1.5 1.5H15a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" style="fill:var(--fold-front);stroke:var(--fold-line);stroke-width:.5"/>
+      <path d="M6 12v7h4M6 15.5h4" stroke="#7d7a6f" fill="none"/>
+      <path d="M10 14a1 1 0 0 1 1-1h3.5l1 1H21a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H11a1 1 0 0 1-1-1zM10 18.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H11a1 1 0 0 1-1-1z" style="fill:var(--fold-front);stroke:var(--fold-line);stroke-width:.5"/>
+    </symbol>
     <symbol id="t-drop" viewBox="0 0 8 8"><path d="M0 2h8L4 6.5z" fill="currentColor"/></symbol>
+    <symbol id="t-chev-up" viewBox="0 0 8 8"><path d="M1 4l3-3 3 3M1 6.5l3-3 3 3" stroke="currentColor" stroke-width="1.3" fill="none"/></symbol>
+    <linearGradient id="g-drive" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e9e9"/><stop offset="1" stop-color="#a9a9a9"/></linearGradient>
+    <symbol id="p-home" viewBox="0 0 16 16"><path d="M8 1.5l6.5 6H13v7H9.5V10h-3v4.5H3v-7H1.5z" fill="#d9534f" stroke="#8a2a26" stroke-width=".7"/><rect x="6.5" y="10" width="3" height="4.5" fill="#7a4a1e"/></symbol>
+    <symbol id="p-desktop" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="10" rx="1" fill="#3b7dd8" stroke="#1d4f9a"/><rect x="5" y="13" width="6" height="1.5" fill="#888"/></symbol>
+    <symbol id="p-docs" viewBox="0 0 16 16"><use href="#i-folder" width="16" height="16"/><rect x="5" y="7" width="6" height="5" fill="#fff" stroke="#8f8f8f" stroke-width=".5"/></symbol>
+    <symbol id="p-down" viewBox="0 0 16 16"><use href="#i-folder" width="16" height="16"/><path d="M8 7v5M5.8 10L8 12.3 10.2 10" stroke="#2f9a1c" stroke-width="1.6" fill="none"/></symbol>
+    <symbol id="p-apps" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.3" fill="#e8b84a"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.3" fill="#5b8fe0"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.3" fill="#6cc04a"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.3" fill="#d9534f"/></symbol>
+    <symbol id="p-computer" viewBox="0 0 16 16"><rect x="1" y="4.5" width="14" height="7" rx="1.2" fill="url(#g-drive)" stroke="#6b6b6b" stroke-width=".7"/><circle cx="12.3" cy="9.3" r=".9" fill="#45d045"/><rect x="2.5" y="6" width="7" height="1" fill="#8a8a8a"/></symbol>
+    <symbol id="p-drive" viewBox="0 0 16 16"><use href="#p-computer"/></symbol>
+    <symbol id="p-trash" viewBox="0 0 16 16"><path d="M3.5 4.5h9l-.9 10h-7.2z" fill="#cfe3f5" stroke="#4d6f94" stroke-width=".8"/><rect x="2.5" y="3" width="11" height="1.6" rx=".5" fill="#9fbad6" stroke="#4d6f94" stroke-width=".6"/><path d="M6 6.5v6M8 6.5v6M10 6.5v6" stroke="#4d6f94" stroke-width=".6"/></symbol>
+    <symbol id="p-open" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="#fff" stroke="#6b6b6b" stroke-width=".7"/><rect x="1.5" y="2.5" width="13" height="2.5" fill="#3b7dd8"/></symbol>
   </defs>
 </svg>
 
 <div class="titlebar">
-  <svg class="t-icon"><use href="#i-folder"/></svg>
+  <svg class="t-icon" id="title-icon"><use href="#i-folder"/></svg>
   <div class="title" id="title"></div>
 </div>
 
@@ -57,13 +73,15 @@
   <div class="tb off" id="b-forward" title="Forward"><svg class="ic"><use href="#t-forward"/></svg><span class="tb-drop" data-drop="forward"><svg class="drop"><use href="#t-drop"/></svg></span></div>
   <div class="tb" id="b-up" title="Up"><svg class="ic"><use href="#t-up"/></svg></div>
   <div class="tbsep"></div>
+  <div class="tb" id="b-folders" title="Folders"><svg class="ic"><use href="#t-folders"/></svg><span class="lb">Folders</span></div>
+  <div class="tbsep"></div>
   <div class="tb" id="b-views" title="Views"><svg class="ic"><use href="#t-views"/></svg><span class="tb-drop"><svg class="drop"><use href="#t-drop"/></svg></span></div>
 </div>
 
 <div class="addrrow">
   <span class="lab">Address</span>
   <div class="addr">
-    <svg class="fi"><use href="#i-folder"/></svg>
+    <svg class="fi" id="addr-icon"><use href="#i-folder"/></svg>
     <input class="path" id="path" spellcheck="false" autocomplete="off">
     <div class="dd" id="b-places" title="Folders above this one"><svg><use href="#t-drop"/></svg></div>
   </div>
@@ -73,6 +91,11 @@
 </div>
 
 <div class="body">
+  <div class="pane" id="pane"></div>
+  <div class="tree" id="tree">
+    <div class="head"><span>Folders</span><span class="x" id="tree-close" title="Close">&times;</span></div>
+    <div class="tree-list" id="tree-list"></div>
+  </div>
   <div class="files" id="files" tabindex="0"></div>
 </div>
 

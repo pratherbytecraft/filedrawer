@@ -8,6 +8,11 @@ const path = require('path');
 const helper = require('./helper');
 
 const HOME = os.homedir();
+const COMPUTER = '::computer'; // the place that lists the volumes
+
+// Folders macOS asks about before an app may look inside. Filedrawer only
+// looks inside one when the user opens it, never just to count its items.
+const PROTECTED = ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents'].map((d) => path.join(HOME, d));
 const INFO_CHUNK = 500; // paths per helper request
 
 // Finder's Applications folder also shows the apps in /System/Applications.
@@ -77,8 +82,31 @@ async function addInfo(items) {
   }
 }
 
-// { path, items } or { path, error } where error is missing, denied or other.
+// The volumes, for Computer: the startup disk and whatever is in /Volumes
+// (where the startup disk also has a link to itself, which is skipped).
+async function volumes() {
+  const names = await fs.promises.readdir('/Volumes').catch(() => []);
+  const mounts = ['/'];
+  for (const n of names) {
+    const m = path.join('/Volumes', n);
+    const st = await fs.promises.lstat(m).catch(() => null);
+    if (st && st.isDirectory() && !st.isSymbolicLink()) mounts.push(m);
+  }
+  return Promise.all(mounts.map(async (m) => {
+    const res = await helper.request('volume', { path: m });
+    const st = await fs.promises.stat(m).catch(() => null);
+    const name = (res && res.name) || (m === '/' ? 'Macintosh HD' : path.basename(m));
+    return {
+      name, display: name, path: m, dir: true, package: false, volume: true, link: false, ext: '',
+      size: null, modified: st ? st.mtimeMs : 0, created: st ? st.birthtimeMs : 0, hidden: false,
+      kind: 'Volume', free: res ? res.free : null, total: res ? res.total : null
+    };
+  }));
+}
+
+// { path, items, modified } or { path, error } where error is missing, denied or other.
 async function list(dir, { hidden = false } = {}) {
+  if (dir === COMPUTER) return { path: dir, items: await volumes() };
   let names;
   try {
     names = await fs.promises.readdir(dir);
@@ -101,7 +129,20 @@ async function list(dir, { hidden = false } = {}) {
     });
   }
   if (!hidden) items = items.filter((it) => !it.hidden);
-  return { path: dir, items };
+  const self = await fs.promises.stat(dir).catch(() => null);
+  return { path: dir, items, modified: self ? self.mtimeMs : null };
+}
+
+// The number of items in a folder, for the Details box, or null when
+// counting would mean looking inside a folder macOS guards (see PROTECTED)
+// or a volume other than the one being looked at.
+async function count(dir, cwd) {
+  const inside = (root) => cwd === root || (cwd || '').startsWith(root + '/');
+  if (PROTECTED.includes(dir) && !inside(dir)) return null;
+  const vol = dir.match(/^\/Volumes\/[^/]+/);
+  if (vol && !inside(vol[0])) return null;
+  const names = await fs.promises.readdir(dir).catch(() => null);
+  return names ? names.filter((n) => !n.startsWith('.')).length : null;
 }
 
 function expand(text, cwd) {
@@ -114,12 +155,13 @@ function expand(text, cwd) {
     }
   }
   if (t === '~' || t.startsWith('~/')) t = HOME + t.slice(1);
-  return path.resolve(cwd || HOME, t);
+  return path.resolve(cwd && cwd !== COMPUTER ? cwd : HOME, t);
 }
 
 // What an address typed into the address bar points at.
 // { type: 'dir' | 'file' | 'missing', path }
 async function resolve(text, cwd) {
+  if (text.trim().toLowerCase() === 'computer') return { type: 'dir', path: COMPUTER };
   const full = expand(text, cwd);
   try {
     const st = await fs.promises.stat(full);
@@ -242,4 +284,4 @@ async function thumbs(paths, px) {
   return out;
 }
 
-module.exports = { HOME, list, resolve, complete, volume, icons, thumbs };
+module.exports = { HOME, COMPUTER, list, count, resolve, complete, volume, icons, thumbs };

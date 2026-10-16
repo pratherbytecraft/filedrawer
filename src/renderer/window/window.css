@@ -37,6 +37,28 @@ svg { display: block; }
 .suggest .row svg { width: 16px; height: 16px; flex: none; }
 
 .body { flex: 1; display: flex; min-height: 0; }
+
+/* The left pane: Tasks (boxes of tasks, places and details) or the Folders tree. */
+.pane, .tree { flex: none; overflow: auto; }
+body[data-pane="tasks"] .tree, body[data-pane="folders"] .pane { display: none; }
+.tree { display: flex; flex-direction: column; }
+.tree .head { flex: none; display: flex; align-items: center; justify-content: space-between; }
+.tree .head .x { cursor: default; padding: 0 4px; }
+.tree-list { flex: 1; overflow: auto; }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.tree .n { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.tree .n .tw { width: 11px; height: 11px; display: grid; place-items: center; flex: none; margin-right: 2px; line-height: 1; }
+.tree .n .tw.none { visibility: hidden; }
+.tree .n svg { width: 16px; height: 16px; flex: none; }
+.tree .n .lb { overflow: hidden; text-overflow: ellipsis; }
+.box h3 { margin: 0; display: flex; align-items: center; justify-content: space-between; cursor: default; }
+.box h3 .chev { display: grid; place-items: center; }
+.box h3 .chev svg { width: 8px; height: 8px; transition: transform .15s; }
+.box.shut h3 .chev svg { transform: rotate(180deg); }
+.box.shut .bd { display: none; }
+.box .row { display: flex; align-items: center; gap: 6px; cursor: default; }
+.box .row svg { width: 16px; height: 16px; flex: none; }
+.box .det b { display: block; margin-bottom: 2px; word-break: break-word; }
 .files { flex: 1; overflow: auto; position: relative; outline: none; }
 
 /* Details */

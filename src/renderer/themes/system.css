@@ -7,11 +7,11 @@
   --fold-back: #62a9ea; --fold-front: url(#g-macfolder); --fold-line: #4c8fd0;
   --round-bg: transparent; --round-ink: currentColor; --round-ring: transparent;
   --bg: #fff; --chrome: #f3f3f5; --line: rgba(0,0,0,.1); --text: #1d1d1f; --dim: #86868b;
-  --hover: rgba(0,0,0,.06); --zebra: #f5f5f7; --field: rgba(0,0,0,.05); --idle-sel: #dcdce0;
+  --hover: rgba(0,0,0,.06); --zebra: #f5f5f7; --field: rgba(0,0,0,.05); --idle-sel: #dcdce0; --side: #ececef;
 }
 [data-appearance="dark"] {
   --bg: #1e1e1e; --chrome: #2a2a2c; --line: rgba(255,255,255,.1); --text: #f2f2f7; --dim: #98989d;
-  --hover: rgba(255,255,255,.08); --zebra: #242426; --field: rgba(255,255,255,.07); --idle-sel: #3a3a3c;
+  --hover: rgba(255,255,255,.08); --zebra: #242426; --field: rgba(255,255,255,.07); --idle-sel: #3a3a3c; --side: #252527;
 }
 body { background: var(--bg); color: var(--text); }
 
@@ -45,6 +45,25 @@ body { background: var(--bg); color: var(--text); }
 .suggest .row { border-radius: 4px; padding: 3px 8px; }
 .suggest .row.on { background: var(--accent); color: var(--accent-text); }
 .addr-error { padding: 6px 10px; }
+
+.pane, .tree { background: var(--side); border-right: 1px solid var(--line); width: 220px; }
+.pane { padding: 10px 8px; }
+.box { margin-bottom: 14px; }
+.box h3 { color: var(--dim); font-size: 11px; font-weight: 600; height: 20px; padding: 0 4px 0 8px; }
+.box h3 .chev { color: var(--dim); }
+.box .bd { padding: 2px 0; }
+.box .row { color: var(--text); padding: 4px 8px; border-radius: 6px; gap: 8px; }
+.box .row:hover { background: var(--hover); }
+.box .det { color: var(--text); padding: 2px 8px; font-size: 12px; line-height: 1.5; }
+.box .det .d { color: var(--dim); }
+.tree .head { color: var(--dim); font-size: 11px; font-weight: 600; padding: 10px 8px 4px 14px; }
+.tree .head .x { color: var(--dim); font-size: 14px; border-radius: 4px; }
+.tree .head .x:hover { background: var(--hover); }
+.tree-list { padding: 0 0 8px; }
+.tree .n { height: 24px; margin: 0 8px; padding-right: 6px; border-radius: 6px; }
+.tree .n:hover { background: var(--hover); }
+.tree .n .tw { color: var(--dim); font-size: 11px; }
+.tree .n.sel { background: color-mix(in srgb, var(--text) 12%, transparent); }
 
 .files { background: var(--bg); }
 table.det th { background: var(--bg); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; font-weight: 500; height: 26px; padding: 0 10px; }

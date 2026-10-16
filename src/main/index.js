@@ -2,6 +2,7 @@
 // everything that touches the disk. Renderers only draw.
 const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme } = require('electron');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const settings = require('./settings');
 const system = require('./system');
@@ -27,7 +28,9 @@ function state() {
   return {
     settings: settings.get(),
     system: system.snapshot(),
-    home: folders.HOME
+    home: folders.HOME,
+    computer: folders.COMPUTER,
+    user: os.userInfo().username
   };
 }
 
@@ -136,7 +139,7 @@ function send(command, arg) {
 function buildMenu() {
   const s = { ...settings.get() };
   const front = BrowserWindow.getFocusedWindow();
-  if (front && viewOf.has(front)) s.view = viewOf.get(front);
+  if (front && viewOf.has(front)) Object.assign(s, viewOf.get(front));
   const hasWindow = !!BrowserWindow.getFocusedWindow();
   const cmd = (label, command, accelerator, extra = {}) => ({ label, accelerator, enabled: hasWindow, click: () => send(command), ...extra });
   const template = [
@@ -197,12 +200,15 @@ function buildMenu() {
           }))
         },
         { type: 'separator' },
+        cmd('Folders', 'pane', 'CmdOrCtrl+Shift+F', { type: 'checkbox', checked: s.pane === 'folders' }),
+        { type: 'separator' },
         cmd('Refresh', 'refresh', 'CmdOrCtrl+R'),
         { type: 'separator' },
         cmd('Back', 'back', 'CmdOrCtrl+['),
         cmd('Forward', 'forward', 'CmdOrCtrl+]'),
         cmd('Up One Folder', 'up', 'CmdOrCtrl+Up'),
         cmd('Home', 'home', 'CmdOrCtrl+Shift+H'),
+        cmd('Computer', 'computer', 'CmdOrCtrl+Shift+C'),
         cmd('Go to Folder...', 'address', 'CmdOrCtrl+L'),
         { type: 'separator' },
         { role: 'togglefullscreen' }
@@ -225,23 +231,26 @@ ipcMain.handle('folder:list', (_e, dir, opts) => folders.list(dir, opts));
 ipcMain.handle('folder:resolve', (_e, text, cwd) => folders.resolve(text, cwd));
 ipcMain.handle('folder:complete', (_e, text, cwd) => folders.complete(text, cwd));
 ipcMain.handle('folder:volume', (_e, dir) => folders.volume(dir));
+ipcMain.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
 ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipcMain.handle('settings:update', (_e, patch) => {
   const s = settings.update(patch);
-  if (patch && (patch.view || patch.sort)) buildMenu();
+  if (patch && (patch.view || patch.sort || patch.pane)) buildMenu();
   return s;
 });
 ipcMain.on('open', (_e, p) => shell.openPath(p));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
-// Each window has its own view, so the View menu checks the front one's.
+// Each window has its own view and left pane, so the View menu checks the front one's.
 const viewOf = new WeakMap();
-ipcMain.on('window:view', (e, view) => {
+ipcMain.on('window:view', (e, look) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
-  viewOf.set(win, view);
+  viewOf.set(win, look);
   buildMenu();
 });
+// Finder keeps the Trash to itself, so the Trash opens there.
+ipcMain.on('trash:open', () => shell.openPath(path.join(folders.HOME, '.Trash')));
 ipcMain.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;

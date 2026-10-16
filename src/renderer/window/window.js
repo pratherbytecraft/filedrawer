@@ -15,9 +15,35 @@ let cursor = null; // the item the arrow keys move from
 let listToken = 0;
 let volumeName = '';
 let view = 'details'; // thumbs | tiles | icons | list | details, this window's own
+let pane = 'tasks'; // tasks | folders, this window's own
+let COMPUTER = '::computer'; // the place listing the volumes, from the main process
+let folderModified = null; // the open folder's own date, for the Details box
 const iconUrls = new Map(); // by icon key and pixel size
 
 const isFolder = (it) => it.dir && !it.package;
+const isVolumeRoot = (p) => p === '/' || /^\/Volumes\/[^/]+$/.test(p);
+
+// The folder above p: a volume's top goes up to Computer, and Computer is the top.
+function parentOf(p) {
+  if (p === COMPUTER) return null;
+  if (isVolumeRoot(p)) return COMPUTER;
+  return dirname(p);
+}
+
+function placeLabel(p) {
+  if (p === COMPUTER) return 'Computer';
+  if (p === '/') return volumeName || 'Macintosh HD';
+  if (app && p === app.home) return app.user;
+  return basename(p);
+}
+
+// Folders with an icon of their own, by path.
+function specialIcon(p) {
+  if (!app) return null;
+  const h = app.home;
+  return { [h]: 'p-home', [h + '/Desktop']: 'p-desktop', [h + '/Documents']: 'p-docs', [h + '/Downloads']: 'p-down',
+    '/Applications': 'p-apps', [COMPUTER]: 'p-computer' }[p] || (isVolumeRoot(p) ? 'p-drive' : null);
+}
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const basename = (p) => (p === '/' ? '/' : p.replace(/\/+$/, '').split('/').pop());
 const dirname = (p) => (p === '/' ? '/' : p.replace(/\/[^/]*\/?$/, '') || '/');
@@ -63,11 +89,13 @@ function iconPx() {
 }
 
 function iconKey(it) {
-  return it.package || !it.ext ? it.path : '.' + it.ext;
+  return it.package || it.volume || !it.ext ? it.path : '.' + it.ext;
 }
 
+const drawn = (it) => isFolder(it) && !it.volume;
+
 function iconHtml(it, cls = 'ic') {
-  if (isFolder(it)) return `<svg class="${cls}"><use href="#i-folder"/></svg>`;
+  if (drawn(it)) return `<svg class="${cls}"><use href="#${specialIcon(it.path) || 'i-folder'}"/></svg>`;
   const url = iconUrls.get(`${iconKey(it)}@${iconPx()}`);
   return `<img class="${cls}" alt="" data-key="${esc(iconKey(it))}"${url ? ` src="${url}"` : ''}>`;
 }
@@ -77,7 +105,7 @@ async function loadIcons() {
   const px = iconPx();
   const want = new Map();
   for (const it of items) {
-    if (isFolder(it)) continue;
+    if (drawn(it)) continue;
     const key = iconKey(it);
     if (!iconUrls.has(`${key}@${px}`) && !want.has(key)) want.set(key, { key, path: it.path, ext: it.ext, package: it.package });
   }
@@ -143,7 +171,7 @@ function watchThumbs() {
 // ---------- the list ----------
 
 function sortItems(list) {
-  const { key, dir } = app.settings.sort;
+  const { key, dir } = cwd === COMPUTER ? { key: 'name', dir: 'asc' } : app.settings.sort;
   const m = dir === 'desc' ? -1 : 1;
   const byName = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' });
   return list.slice().sort((a, b) => {
@@ -165,20 +193,32 @@ const COLUMNS = [
   { key: 'modified', label: 'Date Modified', width: '24%' }
 ];
 
+// Computer lists volumes, with their sizes instead of dates.
+const COMPUTER_COLUMNS = [
+  { key: 'name', label: 'Name', width: '40%' },
+  { key: 'kind', label: 'Kind', width: '20%' },
+  { key: 'total', label: 'Total Size', width: '20%', cls: 'r' },
+  { key: 'free', label: 'Free Space', width: '20%', cls: 'r' }
+];
+
 function cellFor(col, it) {
   if (col.key === 'name') return `<div class="cell">${iconHtml(it)}<span class="nm">${esc(it.display)}</span></div>`;
   if (col.key === 'size') return fmtKB(it.size);
   if (col.key === 'kind') return esc(it.kind);
+  if (col.key === 'total' || col.key === 'free') return it[col.key] != null ? fmtBytes(it[col.key]) : '';
   return fmtDate(it.modified);
 }
 
 function renderDetails() {
+  const computer = cwd === COMPUTER;
+  const cols = computer ? COMPUTER_COLUMNS : COLUMNS;
   const { key, dir } = app.settings.sort;
-  const head = COLUMNS.map((c) => `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
+  const head = cols.map((c) => computer ? `<th class="${c.cls || ''}">${c.label}</th>` :
+    `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
   const rows = items.map((it, i) =>
     `<tr class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}">` +
-    COLUMNS.map((c) => `<td class="${c.cls || ''}">${cellFor(c, it)}</td>`).join('') + '</tr>').join('');
-  return `<table class="det"><colgroup>${COLUMNS.map((c) => `<col style="width:${c.width}">`).join('')}</colgroup>` +
+    cols.map((c) => `<td class="${c.cls || ''}">${cellFor(c, it)}</td>`).join('') + '</tr>').join('');
+  return `<table class="det"><colgroup>${cols.map((c) => `<col style="width:${c.width}">`).join('')}</colgroup>` +
     `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -195,10 +235,15 @@ function renderIcons() {
   return '<div class="g-icons">' + items.map((it, i) => `<div ${itemAttrs(it, i)}>${iconHtml(it, 'big')}${nameHtml(it)}</div>`).join('') + '</div>';
 }
 
+function tileLine(it) {
+  if (it.volume && it.free != null) return `<div class="sub">${fmtBytes(it.free)} free of ${fmtBytes(it.total)}</div>`;
+  return it.size != null ? `<div class="sub">${fmtKB(it.size)}</div>` : '';
+}
+
 function renderTiles() {
   return '<div class="g-tiles">' + items.map((it, i) =>
     `<div ${itemAttrs(it, i)}>${iconHtml(it, 'big')}<div class="meta">${nameHtml(it)}` +
-    `<div class="sub">${esc(it.kind)}</div>${it.size != null ? `<div class="sub">${fmtKB(it.size)}</div>` : ''}</div></div>`).join('') + '</div>';
+    `<div class="sub">${esc(it.kind)}</div>${tileLine(it)}</div></div>`).join('') + '</div>';
 }
 
 function renderList() {
@@ -236,6 +281,7 @@ function render() {
     fitList();
   }
   renderStatus();
+  renderPane();
   loadIcons();
   watchThumbs();
 }
@@ -243,7 +289,7 @@ function render() {
 function setView(v) {
   if (!RENDER[v] || v === view) return;
   view = v;
-  api.setView(v);
+  api.setView({ view, pane });
   api.updateSettings({ view: v });
   const keep = $('files').scrollTop;
   render();
@@ -264,6 +310,7 @@ function rows() {
 function showSelection() {
   for (const el of rows()) el.classList.toggle('sel', sel.has(items[el.dataset.i].path));
   renderStatus();
+  renderPane();
 }
 
 function renderStatus() {
@@ -277,6 +324,11 @@ function renderStatus() {
 
 async function loadVolume() {
   const dir = cwd;
+  if (dir === COMPUTER) {
+    $('st3').textContent = '';
+    updateTitle();
+    return;
+  }
   const v = await api.volume(dir);
   if (dir !== cwd) return;
   volumeName = v && v.name ? v.name : '';
@@ -287,18 +339,24 @@ async function loadVolume() {
 // ---------- going places ----------
 
 function updateTitle() {
-  const name = cwd === '/' ? volumeName || '/' : basename(cwd);
+  const name = cwd === COMPUTER || cwd === '/' ? placeLabel(cwd) : basename(cwd);
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
 }
 
+const shownPath = (p) => (p === COMPUTER ? 'Computer' : p);
+
 function updateChrome() {
-  if (document.activeElement !== $('path')) $('path').value = cwd;
+  if (document.activeElement !== $('path')) $('path').value = shownPath(cwd);
   $('b-back').classList.toggle('off', hIndex === 0);
   $('b-forward').classList.toggle('off', hIndex >= history.length - 1);
-  $('b-up').classList.toggle('off', cwd === '/');
+  $('b-up').classList.toggle('off', cwd === COMPUTER);
+  const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
+  $('addr-icon').innerHTML = icon;
+  $('title-icon').innerHTML = icon;
   updateTitle();
+  renderTree();
 }
 
 // Opens dir in this window. select picks an item once it's listed, keep
@@ -315,6 +373,7 @@ async function navigate(dir, { push = true, select = null, keep = false } = {}) 
   const same = dir === cwd;
   cwd = dir;
   listError = res.error || null;
+  folderModified = res.modified || null;
   items = res.error ? [] : sortItems(res.items);
   const paths = new Set(items.map((it) => it.path));
   if (keep && same) {
@@ -341,8 +400,8 @@ const back = () => goHistory(hIndex - 1);
 const forward = () => goHistory(hIndex + 1);
 
 function up() {
-  if (cwd === '/') return;
-  navigate(dirname(cwd), { select: cwd });
+  const parent = parentOf(cwd);
+  if (parent) navigate(parent, { select: cwd });
 }
 
 function openItem(it, { newWindow = false } = {}) {
@@ -608,7 +667,7 @@ function historyMenu(which, anchorEl) {
   else for (let i = hIndex + 1; i < history.length && entries.length < 12; i++) entries.push(i);
   const r = anchorEl.getBoundingClientRect();
   anchorEl.closest('.tb').classList.add('down');
-  openMenu(entries.map((i) => ({ label: basename(history[i]), icon: 'i-folder', click: () => goHistory(i) })), r.left, r.bottom + 2);
+  openMenu(entries.map((i) => ({ label: placeLabel(history[i]), icon: specialIcon(history[i]) || 'i-folder', click: () => goHistory(i) })), r.left, r.bottom + 2);
 }
 
 $('b-back').addEventListener('click', (e) => {
@@ -642,13 +701,10 @@ $('b-places').addEventListener('mousedown', (e) => {
     return;
   }
   const list = [];
-  for (let p = cwd; ; p = dirname(p)) {
-    list.push(p);
-    if (p === '/') break;
-  }
+  for (let p = cwd; p; p = parentOf(p)) list.push(p);
   const r = $('b-places').closest('.addr').getBoundingClientRect();
   $('b-places').classList.add('down');
-  openMenu(list.map((p) => ({ label: p === '/' ? volumeName || '/' : basename(p), icon: 'i-folder', checked: p === cwd, click: () => navigate(p) })), r.left, r.bottom + 2);
+  openMenu(list.map((p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', checked: p === cwd, click: () => navigate(p) })), r.left, r.bottom + 2);
 });
 
 // ---------- address bar ----------
@@ -715,7 +771,7 @@ path.addEventListener('keydown', (e) => {
       hideSuggest();
       hideAddrError();
     } else {
-      path.value = cwd;
+      path.value = shownPath(cwd);
       $('files').focus();
     }
   }
@@ -723,7 +779,7 @@ path.addEventListener('keydown', (e) => {
 
 path.addEventListener('blur', () => {
   hideSuggest();
-  if (!$('addr-error').classList.contains('open')) path.value = cwd;
+  if (!$('addr-error').classList.contains('open')) path.value = shownPath(cwd);
 });
 
 $('suggest').addEventListener('mousedown', (e) => {
@@ -743,7 +799,7 @@ async function go() {
   hideSuggest();
   const text = path.value.trim();
   if (!text) {
-    path.value = cwd;
+    path.value = shownPath(cwd);
     return;
   }
   const res = await api.resolve(text, cwd);
@@ -754,7 +810,7 @@ async function go() {
   } else if (res.type === 'file') {
     hideAddrError();
     api.open(res.path);
-    path.value = cwd;
+    path.value = shownPath(cwd);
     $('files').focus();
   } else {
     const box = $('addr-error');
@@ -777,13 +833,19 @@ api.onCommand(({ command, arg }) => {
         showSelection();
       }
       break;
-    case 'refresh': navigate(cwd, { push: false, keep: true }); break;
+    case 'refresh':
+      treeKids.delete(cwd);
+      treeShownFor = null;
+      navigate(cwd, { push: false, keep: true });
+      break;
     case 'view': setView(arg); break;
     case 'sort': sortBy(arg); break;
     case 'back': back(); break;
     case 'forward': forward(); break;
     case 'up': up(); break;
     case 'home': navigate(app.home); break;
+    case 'computer': navigate(COMPUTER); break;
+    case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
     case 'address': path.focus(); break;
     default:
   }
@@ -805,7 +867,224 @@ api.onState(applyState);
 api.getState().then((state) => {
   applyState(state);
   view = state.settings.view;
-  api.setView(view);
+  COMPUTER = state.computer;
+  setPane(state.settings.pane, { save: false });
   navigate(cwd, { push: false });
   $('files').focus();
 });
+
+// ---------- the left pane: Tasks ----------
+
+const collapsed = new Set(); // boxes folded shut in this window
+
+const PLACES = () => [
+  [app.home, 'Home'], [app.home + '/Desktop', 'Desktop'], [app.home + '/Documents', 'Documents'],
+  [app.home + '/Downloads', 'Downloads'], ['/Applications', 'Applications'], [COMPUTER, 'Computer'], ['trash', 'Trash']
+];
+
+function box(id, title, body, first = false) {
+  if (!body) return '';
+  return `<div class="box${first ? ' first' : ''}${collapsed.has(id) ? ' shut' : ''}" data-box="${id}">` +
+    `<h3><span>${esc(title)}</span><span class="chev"><svg><use href="#t-chev-up"/></svg></span></h3>` +
+    `<div class="bd">${body}</div></div>`;
+}
+
+const taskRow = (act, icon, label) => `<div class="row" data-act="${act}"><svg><use href="#${icon}"/></svg>${esc(label)}</div>`;
+
+function selectedItems() {
+  return items.filter((it) => sel.has(it.path));
+}
+
+function tasksBox() {
+  const picked = selectedItems();
+  const one = picked.length === 1 ? picked[0] : null;
+  if (!picked.length) {
+    if (cwd === COMPUTER) return '';
+    return box('tasks', 'Folder Tasks', taskRow('newWindowHere', 'p-open', 'Open this folder in a new window'), true);
+  }
+  if (one && isFolder(one)) {
+    return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
+      taskRow('openNew', 'p-open', 'Open in a new window'), true);
+  }
+  if (one) return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file'), true);
+  return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items'), true);
+}
+
+function placesBox() {
+  const parent = parentOf(cwd);
+  const list = PLACES().filter(([p]) => p !== cwd);
+  if (parent && !list.some(([p]) => p === parent)) list.unshift([parent, placeLabel(parent)]);
+  return box('places', 'Other Places', list.map(([p, label]) =>
+    `<div class="row" data-place="${esc(p)}"><svg><use href="#${p === 'trash' ? 'p-trash' : specialIcon(p) || 'i-folder'}"/></svg>${esc(label)}</div>`).join(''));
+}
+
+let countFor = null; // the folder whose count the Details box is waiting on
+
+function detailsBox() {
+  const picked = selectedItems();
+  const one = picked.length === 1 ? picked[0] : null;
+  const line = (t) => `<span class="d">${t}</span><br>`;
+  let html;
+  countFor = null;
+  if (!picked.length) {
+    html = `<b>${esc(placeLabel(cwd))}</b>` + line(cwd === COMPUTER ? 'Computer' : isVolumeRoot(cwd) ? 'Volume' : 'Folder') +
+      (folderModified ? line(`Modified: ${fmtDate(folderModified)}`) : '');
+  } else if (one) {
+    html = `<b>${esc(one.display)}</b>` + line(esc(one.kind));
+    if (one.volume && one.free != null) html += line(`Free space: ${fmtBytes(one.free)}`) + line(`Total size: ${fmtBytes(one.total)}`);
+    else if (isFolder(one)) {
+      html += '<span class="d" id="det-count"></span>';
+      countFor = one.path;
+    } else html += line(`Size: ${fmtBytes(one.size)}`);
+    if (!one.volume) html += line(`Modified: ${fmtDate(one.modified)}`);
+  } else {
+    const files = picked.filter((it) => it.size != null);
+    html = `<b>${picked.length} items selected.</b>` + (files.length ? '<br>' + line(`Total size: ${fmtBytes(files.reduce((n, it) => n + it.size, 0))}`) : '');
+  }
+  return box('details', 'Details', `<div class="det">${html}</div>`);
+}
+
+async function loadCount() {
+  const p = countFor;
+  if (!p) return;
+  const n = await api.count(p, cwd);
+  const el = $('det-count');
+  if (countFor !== p || !el || n == null) return;
+  el.innerHTML = `${n} item${n === 1 ? '' : 's'}<br>`;
+}
+
+function renderPane() {
+  if (pane !== 'tasks' || !app) return;
+  $('pane').innerHTML = tasksBox() + placesBox() + detailsBox();
+  loadCount();
+}
+
+$('pane').addEventListener('click', (e) => {
+  const h = e.target.closest('h3');
+  if (h) {
+    const b = h.closest('.box');
+    if (collapsed.has(b.dataset.box)) collapsed.delete(b.dataset.box);
+    else collapsed.add(b.dataset.box);
+    b.classList.toggle('shut');
+    return;
+  }
+  const place = e.target.closest('[data-place]');
+  if (place) {
+    if (place.dataset.place === 'trash') api.openTrash();
+    else navigate(place.dataset.place);
+    return;
+  }
+  const task = e.target.closest('[data-act]');
+  if (!task) return;
+  const act = task.dataset.act;
+  if (act === 'open') openSelected();
+  else if (act === 'openNew') openSelected({ newWindow: true });
+  else if (act === 'newWindowHere') api.openWindow(cwd);
+});
+
+// ---------- the left pane: the Folders tree ----------
+
+const treeKids = new Map(); // path -> child folders, once listed
+const treeOpen = new Set(); // paths shown open
+let treeShownFor = null; // the folder the tree last opened its way down to
+
+function treeRoots() {
+  return [
+    { path: app.home, label: app.user, icon: 'p-home' },
+    { path: COMPUTER, label: 'Computer', icon: 'p-computer' },
+    { path: '/Applications', label: 'Applications', icon: 'p-apps' },
+    { path: 'trash', label: 'Trash', icon: 'p-trash', leaf: true }
+  ];
+}
+
+async function loadKids(p) {
+  if (treeKids.has(p)) return;
+  treeKids.set(p, null); // asked for
+  const res = await api.list(p, { hidden: false });
+  const dirs = (res.items || []).filter(isFolder)
+    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' }))
+    .map((it) => ({ path: it.path, label: it.display, icon: it.volume ? 'p-drive' : specialIcon(it.path) || 'i-folder' }));
+  treeKids.set(p, dirs);
+}
+
+// The folders from the tree's top down to p, which the tree opens.
+function chainTo(p) {
+  const chain = [];
+  if (p === app.home || p.startsWith(app.home + '/')) {
+    for (let q = p; ; q = dirname(q)) {
+      chain.unshift(q);
+      if (q === app.home) break;
+    }
+  } else {
+    for (let q = p; q; q = parentOf(q)) chain.unshift(q);
+  }
+  return chain;
+}
+
+function nodeHtml(n, depth) {
+  const kids = treeKids.get(n.path);
+  const open = treeOpen.has(n.path);
+  const tw = n.leaf || (kids && !kids.length) ? '<span class="tw none"></span>' : `<span class="tw">${open ? '&minus;' : '+'}</span>`;
+  let html = `<li><div class="n${n.path === cwd ? ' sel' : ''}" data-path="${esc(n.path)}" style="padding-left:${4 + depth * 16}px">` +
+    `${tw}<svg><use href="#${n.icon}"/></svg><span class="lb">${esc(n.label)}</span></div>`;
+  if (open && kids && kids.length) html += '<ul>' + kids.map((k) => nodeHtml(k, depth + 1)).join('') + '</ul>';
+  return html + '</li>';
+}
+
+function drawTree() {
+  const keep = $('tree-list').scrollTop;
+  $('tree-list').innerHTML = '<ul>' + treeRoots().map((n) => nodeHtml(n, 0)).join('') + '</ul>';
+  $('tree-list').scrollTop = keep;
+}
+
+async function renderTree() {
+  if (pane !== 'folders' || !app) return;
+  if (treeShownFor !== cwd) {
+    treeShownFor = cwd;
+    const chain = chainTo(cwd);
+    chain.forEach((p) => treeOpen.add(p));
+    drawTree();
+    for (const p of chain) {
+      await loadKids(p);
+      if (treeShownFor !== cwd) return;
+      drawTree();
+    }
+    const selEl = $('tree-list').querySelector('.n.sel');
+    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+  } else {
+    drawTree();
+  }
+}
+
+$('tree-list').addEventListener('click', async (e) => {
+  const n = e.target.closest('.n');
+  if (!n) return;
+  const p = n.dataset.path;
+  if (e.target.closest('.tw')) {
+    if (treeOpen.has(p)) treeOpen.delete(p);
+    else {
+      treeOpen.add(p);
+      drawTree();
+      await loadKids(p);
+    }
+    drawTree();
+    return;
+  }
+  if (p === 'trash') api.openTrash();
+  else navigate(p);
+});
+
+$('tree-close').addEventListener('click', () => setPane('tasks'));
+$('b-folders').addEventListener('click', () => setPane(pane === 'folders' ? 'tasks' : 'folders'));
+
+function setPane(p, { save = true } = {}) {
+  pane = p === 'folders' ? 'folders' : 'tasks';
+  document.body.dataset.pane = pane;
+  $('b-folders').classList.toggle('down', pane === 'folders');
+  api.setView({ view, pane });
+  if (save) api.updateSettings({ pane });
+  treeShownFor = null;
+  renderPane();
+  renderTree();
+  fitList();
+}
