@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+*.png
+*.jpg
+!docs/screenshots/*.png
+*.mov
+helper/filedrawer-helper
+npm-debug.log*
+bundle/
+*.tgz

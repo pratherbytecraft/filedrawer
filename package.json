@@ -1,0 +1,43 @@
+{
+  "name": "filedrawer",
+  "version": "0.1.0",
+  "description": "A file manager for macOS, laid out like the classic file windows: a toolbar, a text address bar, a task pane and Icons, Tiles, List, Details and Thumbnails views.",
+  "author": "Prather Bytecraft",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": false,
+  "homepage": "https://github.com/pratherbytecraft/filedrawer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pratherbytecraft/filedrawer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pratherbytecraft/filedrawer/issues"
+  },
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "src/main/index.js",
+  "bin": {
+    "filedrawer": "bin/filedrawer.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "helper/filedrawer-helper.swift",
+    "scripts",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/filedrawer.js --foreground",
+    "postinstall": "node scripts/fix-electron.js && node scripts/build-helper.js && node scripts/build-app.js",
+    "build-app": "node scripts/build-app.js"
+  },
+  "dependencies": {
+    "electron": "^33.2.1"
+  }
+}

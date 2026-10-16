@@ -1,0 +1,65 @@
+/* The window's layout, the same in every theme. Colors, fonts and the look
+   of each part are in the theme's stylesheet (../themes/<theme>.css). */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column; overflow: hidden; user-select: none; cursor: default;
+  font-family: var(--font); font-size: var(--fs);
+}
+svg { display: block; }
+
+/* The window can be dragged by the title bar and the empty toolbar. The
+   Mac's window buttons sit in the title bar's left end. */
+.titlebar { flex: none; display: flex; align-items: center; gap: 5px; padding: 0 80px; -webkit-app-region: drag; }
+.titlebar .t-icon { width: 16px; height: 16px; flex: none; }
+.titlebar .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.toolbar { flex: none; display: flex; align-items: center; -webkit-app-region: drag; }
+.toolbar > *, .addrrow > * { -webkit-app-region: no-drag; }
+.tb { display: flex; align-items: center; white-space: nowrap; }
+.tb .ic { width: var(--tb-icon); height: var(--tb-icon); flex: none; }
+.tb .tb-drop { display: grid; place-items: center; align-self: stretch; padding: 0 1px; }
+.tb .drop { width: 7px; height: 7px; }
+.tb.off { pointer-events: none; }
+.tbsep { width: 1px; flex: none; }
+
+.addrrow { flex: none; display: flex; align-items: center; gap: 4px; position: relative; }
+.addr { flex: 1; display: flex; align-items: center; min-width: 0; }
+.addr .fi { width: 16px; height: 16px; flex: none; }
+.addr .path { flex: 1; min-width: 0; outline: none; border: 0; padding: 0; background: none; color: inherit; font: inherit; user-select: text; cursor: text; }
+.addr .dd { display: grid; place-items: center; align-self: stretch; }
+.addr .dd svg { width: 8px; height: 8px; }
+.go { display: flex; align-items: center; gap: 3px; }
+.go svg { width: 18px; height: 18px; }
+.suggest, .addr-error { display: none; position: absolute; z-index: 20; max-width: calc(100% - 20px); }
+.suggest.open, .addr-error.open { display: block; }
+.suggest .row { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest .row svg { width: 16px; height: 16px; flex: none; }
+
+.body { flex: 1; display: flex; min-height: 0; }
+.files { flex: 1; overflow: auto; position: relative; outline: none; }
+
+/* Details */
+table.det { border-collapse: collapse; width: 100%; table-layout: fixed; }
+table.det th { position: sticky; top: 0; z-index: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.det th.r, table.det td.r { text-align: right; }
+table.det td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.det td .cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
+table.det td .nm { overflow: hidden; text-overflow: ellipsis; }
+.ic { flex: none; }
+img.ic:not([src]) { visibility: hidden; }
+
+.note { padding: 40px 24px; text-align: center; line-height: 1.5; }
+.note button { margin-top: 10px; font: inherit; }
+
+.status { flex: none; display: flex; }
+.status > div { display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+.status .s1 { flex: 1; }
+
+/* Menus drawn in the window: right click menus and the toolbar's drop downs. */
+.menu { display: none; position: fixed; z-index: 30; min-width: 180px; max-height: calc(100vh - 16px); overflow: auto; }
+.menu.open { display: block; }
+.menu .mi { display: flex; align-items: center; gap: 6px; position: relative; white-space: nowrap; }
+.menu .mi .mic { width: 16px; height: 16px; flex: none; }
+.menu .mi .key { margin-left: auto; padding-left: 24px; }
+.menu .mi.disabled { pointer-events: none; opacity: .45; }

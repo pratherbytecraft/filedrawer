@@ -1,0 +1,80 @@
+/* System theme: the Mac's light or dark look and accent color. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --fs: 13px;
+  --tb-icon: 18px;
+  --fold-back: #62a9ea; --fold-front: url(#g-macfolder); --fold-line: #4c8fd0;
+  --round-bg: transparent; --round-ink: currentColor; --round-ring: transparent;
+  --bg: #fff; --chrome: #f3f3f5; --line: rgba(0,0,0,.1); --text: #1d1d1f; --dim: #86868b;
+  --hover: rgba(0,0,0,.06); --zebra: #f5f5f7; --field: rgba(0,0,0,.05); --idle-sel: #dcdce0;
+}
+[data-appearance="dark"] {
+  --bg: #1e1e1e; --chrome: #2a2a2c; --line: rgba(255,255,255,.1); --text: #f2f2f7; --dim: #98989d;
+  --hover: rgba(255,255,255,.08); --zebra: #242426; --field: rgba(255,255,255,.07); --idle-sel: #3a3a3c;
+}
+body { background: var(--bg); color: var(--text); }
+
+.titlebar { height: 30px; justify-content: center; background: var(--chrome); font-weight: 600; }
+
+.toolbar { background: var(--chrome); padding: 0 10px 4px; min-height: 34px; gap: 2px; }
+.tb { border-radius: 6px; padding: 4px 7px; color: var(--dim); gap: 5px; }
+.tb .lb { color: var(--text); font-size: 12px; }
+.tb:hover { background: var(--hover); }
+.tb .tb-drop { margin-right: -3px; border-radius: 4px; }
+.tb .tb-drop:hover { background: var(--hover); }
+.tb.down { background: var(--hover); color: var(--accent); }
+.tb.off { opacity: .35; }
+.tbsep { background: var(--line); height: 18px; margin: 0 4px; }
+
+.addrrow { background: var(--chrome); border-bottom: 1px solid var(--line); padding: 0 10px 8px; }
+.addrrow .lab { display: none; }
+.addr { height: 26px; border-radius: 6px; background: var(--field); padding: 0 0 0 8px; gap: 6px; }
+.addr:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+.addr .dd { width: 24px; color: var(--dim); border-radius: 0 6px 6px 0; }
+.addr .dd:hover { background: var(--hover); }
+.go { border-radius: 6px; padding: 4px 8px; color: var(--dim); }
+.go:hover { background: var(--hover); }
+.go .lb { display: none; }
+.suggest, .addr-error {
+  left: 10px; top: 30px; border-radius: 8px; background: var(--chrome); color: var(--text);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+[data-appearance="dark"] .suggest, [data-appearance="dark"] .addr-error { box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 8px 24px rgba(0,0,0,.5); }
+.suggest { padding: 4px; min-width: 360px; }
+.suggest .row { border-radius: 4px; padding: 3px 8px; }
+.suggest .row.on { background: var(--accent); color: var(--accent-text); }
+.addr-error { padding: 6px 10px; }
+
+.files { background: var(--bg); }
+table.det th { background: var(--bg); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; font-weight: 500; height: 26px; padding: 0 10px; }
+table.det th:last-child { border-right: 0; }
+table.det th:hover { background: color-mix(in srgb, var(--text) 4%, var(--bg)); }
+table.det th.sorted { color: var(--text); }
+table.det th.sorted.asc::after { content: " \2303"; color: var(--dim); }
+table.det th.sorted.desc::after { content: " \2304"; color: var(--dim); }
+table.det td { height: 24px; padding: 0 10px; }
+table.det td:not(:first-child) { color: var(--dim); }
+table.det td .cell { gap: 6px; }
+table.det td .ic { width: 18px; height: 18px; }
+table.det tbody tr:nth-child(even) td { background: var(--zebra); }
+table.det tr.item.sel td { background: var(--accent); color: var(--accent-text); }
+body.idle table.det tr.item.sel td { background: var(--idle-sel); color: var(--text); }
+
+.note { color: var(--dim); }
+
+.status { background: var(--chrome); border-top: 1px solid var(--line); height: 26px; padding: 0 12px; }
+.status > div { color: var(--dim); font-size: 11px; padding: 0 4px; }
+.status .s1 { justify-content: center; order: 2; }
+.status .s2 { order: 1; justify-content: flex-start; min-width: 90px; }
+.status .s3 { order: 3; justify-content: flex-end; min-width: 90px; }
+
+.menu { background: var(--chrome); color: var(--text); border-radius: 8px; padding: 5px; box-shadow: 0 0 0 .5px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.3); }
+[data-appearance="dark"] .menu { box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 10px 30px rgba(0,0,0,.5); }
+.menu .mi { border-radius: 4px; height: 23px; padding: 0 20px 0 8px; }
+.menu .mi:hover { background: var(--accent); color: var(--accent-text); }
+.menu .mi b { font-weight: 600; }
+.menu .mi.chk { padding-left: 20px; }
+.menu .mi.chk::before { content: "\2713"; position: absolute; left: 5px; font-size: 11px; }
+.menu .sep { height: 1px; background: var(--line); margin: 4px 8px; }
+.menu .mi .key { color: var(--dim); }
+.menu .mi:hover .key { color: inherit; }
