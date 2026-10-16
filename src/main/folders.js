@@ -108,8 +108,14 @@ async function volumes() {
   }));
 }
 
-// { path, items, modified } or { path, error } where error is missing, denied or other.
-// hidden keeps hidden items in, extensions shows every name whole.
+const writable = (dir) => fs.promises.access(dir, fs.constants.W_OK).then(() => true, () => false);
+
+// { path, items, modified, writable } or { path, error } where error is
+// missing, denied or other. hidden keeps hidden items in, extensions shows
+// every name whole. An item in a folder that can't be changed (/System,
+// the top of the disk) is marked fixed: it can't be renamed, moved or
+// trashed, and nothing can be made next to it. A folder that can't be
+// changed itself has canAdd false.
 async function list(dir, { hidden = false, extensions = false } = {}) {
   if (dir === COMPUTER) return { path: dir, items: await volumes() };
   let names;
@@ -135,8 +141,13 @@ async function list(dir, { hidden = false, extensions = false } = {}) {
   }
   if (!hidden) items = items.filter((it) => !it.hidden);
   if (extensions) items.forEach((it) => { it.display = it.name; });
+  const canWrite = new Map();
+  for (const d of new Set(items.map((it) => path.dirname(it.path)).concat(dir))) canWrite.set(d, await writable(d));
+  items.forEach((it) => { it.fixed = !canWrite.get(path.dirname(it.path)); });
+  // Folders say whether things can be pasted or dropped into them.
+  await Promise.all(items.filter((it) => it.dir && !it.package).map(async (it) => { it.canAdd = await writable(it.path); }));
   const self = await fs.promises.stat(dir).catch(() => null);
-  return { path: dir, items, modified: self ? self.mtimeMs : null };
+  return { path: dir, items, modified: self ? self.mtimeMs : null, writable: canWrite.get(dir) };
 }
 
 // The number of items in a folder, for the Details box, or null when

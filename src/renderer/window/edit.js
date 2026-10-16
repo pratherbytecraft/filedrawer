@@ -23,7 +23,7 @@ function startRename(p, text) {
   const it = items.find((x) => x.path === p);
   const el = itemEl(p);
   const nm = el && el.querySelector('.nm');
-  if (!it || !nm || it.volume) return;
+  if (!it || !nm || it.volume || it.fixed) return;
   scrollToItem(p);
   const input = document.createElement('input');
   input.className = 'ren';
@@ -154,7 +154,7 @@ $('files').addEventListener('dblclick', () => {
 async function trashSelected() {
   if (cwd === COMPUTER) return;
   const picked = selectedItems().filter((it) => !it.volume);
-  if (!picked.length) return;
+  if (!picked.length || picked.some((it) => it.fixed)) return;
   sel.clear();
   const res = await api.trash(picked.map((it) => it.path));
   // Search results don't follow the disk, so trashed ones are taken out here.
@@ -190,8 +190,11 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- Duplicate, Make Alias and Copy Path ----------
 
-// The selected items that are files or folders, not disks.
-const workItems = () => (cwd === COMPUTER ? [] : selectedItems().filter((it) => !it.volume));
+// The selected items that are files or folders, not disks, when they can be changed.
+function workItems() {
+  const picked = cwd === COMPUTER ? [] : selectedItems().filter((it) => !it.volume);
+  return picked.some((it) => it.fixed) ? [] : picked;
+}
 
 async function duplicateSelected() {
   const picked = workItems();
@@ -227,14 +230,15 @@ function clipCommand(which) {
     pasteInto(cwd);
     return;
   }
-  const paths = selectedItems().filter((it) => !it.volume).map((it) => it.path);
-  if (!paths.length) return;
+  const picked = selectedItems().filter((it) => !it.volume);
+  if (!picked.length || (which === 'cut' && picked.some((it) => it.fixed))) return;
+  const paths = picked.map((it) => it.path);
   if (which === 'cut') api.cutFiles(paths);
   else api.copyFiles(paths);
 }
 
 async function pasteInto(dir) {
-  if (dir === COMPUTER || (dir === cwd && listError)) return;
+  if (dir === COMPUTER || (dir === cwd && (listError || !cwdWritable))) return;
   const res = await api.paste(dir);
   if (dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
 }
@@ -403,7 +407,7 @@ $('tree-list').addEventListener('contextmenu', (e) => {
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {
-  if (cwd === COMPUTER || listError) return;
+  if (cwd === COMPUTER || listError || !cwdWritable) return;
   const res = kind === 'folder' ? await api.newFolder(cwd) : await api.newText(cwd);
   if (res.error) return;
   await navigate(cwd, { push: false, select: res.path });

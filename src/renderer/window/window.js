@@ -18,6 +18,7 @@ let view = 'details'; // thumbs | tiles | icons | list | details, this window's 
 let pane = 'tasks'; // tasks | folders, this window's own
 let COMPUTER = '::computer'; // the place listing the volumes, from the main process
 let folderModified = null; // the open folder's own date, for the Details box
+let cwdWritable = true; // new items and pastes can go in the open folder
 const iconUrls = new Map(); // by icon key and pixel size
 
 const isFolder = (it) => it.dir && !it.package;
@@ -418,6 +419,7 @@ async function navigate(dir, { push = true, select = null, selectMany = null, ke
   }
   listError = res.error || null;
   folderModified = res.modified || null;
+  cwdWritable = res.writable !== false;
   items = res.error ? [] : sortItems(res.items);
   const paths = new Set(items.map((it) => it.path));
   if (selectMany) {
@@ -715,10 +717,12 @@ $('files').addEventListener('contextmenu', async (e) => {
       { label: 'Arrange Icons By', sub: sortEntries() },
       { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) },
       ...here,
-      ...(cwd === COMPUTER || listError ? [] : ['sep', { label: 'Paste', click: () => pasteInto(cwd) }, 'sep', { label: 'New', sub: [
-        { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
-        { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
-      ] }, 'sep', { label: 'Properties', icon: 'p-props', click: () => showProps() }])
+      ...(cwd === COMPUTER || listError ? [] : [
+        ...(cwdWritable ? ['sep', { label: 'Paste', click: () => pasteInto(cwd) }, 'sep', { label: 'New', sub: [
+          { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
+          { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
+        ] }] : []),
+        'sep', { label: 'Properties', icon: 'p-props', click: () => showProps() }])
     ], e.clientX, e.clientY);
     return;
   }
@@ -747,17 +751,21 @@ $('files').addEventListener('contextmenu', async (e) => {
   }
   if (picked.length === 1 && it.volume && ejectable(it.path)) groups[1].push({ label: 'Eject', icon: 'p-eject', click: () => eject(it.path) });
   if (cwd !== COMPUTER && !it.volume) {
+    // Items in a folder that can't be changed can still be copied, not moved or renamed.
+    const fixed = picked.some((x) => x.fixed);
     groups[1].push({ label: 'Send To', sub: sendToEntries(picked.map((x) => x.path)) });
     groups.splice(2, 0, [
-      { label: 'Cut', click: () => clipCommand('cut') },
+      ...(fixed ? [] : [{ label: 'Cut', click: () => clipCommand('cut') }]),
       { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
-      ...(picked.length === 1 && isFolder(it) ? [{ label: 'Paste', click: () => pasteInto(it.path) }] : []),
+      ...(picked.length === 1 && isFolder(it) && it.canAdd !== false ? [{ label: 'Paste', click: () => pasteInto(it.path) }] : []),
       { label: 'Copy Path', click: () => copyPaths() },
-      { label: 'Duplicate', click: () => duplicateSelected() }
+      ...(fixed ? [] : [{ label: 'Duplicate', click: () => duplicateSelected() }])
     ]);
-    groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
-    if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
-    groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
+    if (!fixed) {
+      groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
+      if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
+      groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
+    }
   }
   groups.push([{ label: 'Properties', icon: 'p-props', click: () => showProps() }]);
   const entries = groups.filter((g) => g.length).flatMap((g, i) => (i ? ['sep', ...g] : g));
@@ -1123,7 +1131,7 @@ function tasksBox() {
   const pinRow = (p) => isPinned(p) ? taskRow('unpin', 'p-pin', 'Unpin this folder') : taskRow('pin', 'p-pin', 'Pin this folder');
   if (!picked.length) {
     if (cwd === COMPUTER) return '';
-    return box('tasks', 'Folder Tasks', taskRow('newFolder', 'p-newfolder', 'Make a new folder') +
+    return box('tasks', 'Folder Tasks', (cwdWritable ? taskRow('newFolder', 'p-newfolder', 'Make a new folder') : '') +
       taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
       taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
       taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files'), true);
@@ -1131,16 +1139,16 @@ function tasksBox() {
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
       (one.volume && ejectable(one.path) ? taskRow('eject', 'p-eject', 'Eject this volume') : '') +
-      (one.volume ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
+      (one.volume || one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
       taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + (one.volume ? '' : pinRow(one.path)) +
-      (one.volume ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
+      (one.volume || one.fixed ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
   }
   if (one) {
-    return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') + taskRow('rename', 'p-rename', 'Rename this file') +
-      taskRow('trash', 'p-trash', 'Move this file to the Trash'), true);
+    return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') +
+      (one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this file') + taskRow('trash', 'p-trash', 'Move this file to the Trash')), true);
   }
   return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items') +
-    (cwd === COMPUTER ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
+    (cwd === COMPUTER || picked.some((it) => it.fixed) ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
 }
 
 function pinnedBox() {
