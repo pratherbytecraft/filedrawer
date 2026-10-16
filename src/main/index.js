@@ -59,7 +59,8 @@ function state() {
     update: updates.get(),
     themes: THEME_LIST,
     finder: finder.permission,
-    startbar: startbarInstalled()
+    startbar: startbarInstalled(),
+    startFolder: prefs.startFolder()
   };
 }
 
@@ -459,6 +460,15 @@ function buildMenu() {
             else openWindow(prefs.startFolder());
           }
         },
+        {
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && windows.has(win)) send('newTab');
+            else openWindow(prefs.startFolder());
+          }
+        },
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
         cmd('Open Terminal Here', 'terminal', 'CmdOrCtrl+Alt+T'),
         cmd('Find...', 'find', 'CmdOrCtrl+F'),
@@ -471,7 +481,18 @@ function buildMenu() {
         cmd('Move to Trash', 'trash', 'CmdOrCtrl+Backspace'),
         cmd('Properties', 'props', 'CmdOrCtrl+I'),
         { type: 'separator' },
-        { role: 'close', label: 'Close Window' }
+        // In a Filedrawer window Command W closes the tab (and the window with
+        // its last one); other windows, Settings and Properties, just close.
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && windows.has(win)) send('closeTab');
+            else if (win) win.close();
+          }
+        },
+        { label: 'Close Window', accelerator: 'Shift+CmdOrCtrl+W', click: () => BrowserWindow.getFocusedWindow()?.close() }
       ]
     },
     {
@@ -543,7 +564,19 @@ function buildMenu() {
         })) : [{ label: 'No Pinned Folders', enabled: false }])
       ]
     },
-    { role: 'windowMenu' },
+    {
+      label: 'Window',
+      role: 'window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        cmd('Show Previous Tab', 'prevTab', 'Ctrl+Shift+Tab'),
+        cmd('Show Next Tab', 'nextTab', 'Ctrl+Tab'),
+        { type: 'separator' },
+        { role: 'front' }
+      ]
+    },
     {
       role: 'help',
       submenu: [

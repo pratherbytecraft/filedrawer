@@ -27,6 +27,8 @@ Then move Filedrawer from the Applications folder in your home folder to the Tra
 
 ## What it does
 
+Each window has tabs, in a strip under the title bar. Command T opens a new tab, Command W closes one, Control Tab moves between them, and a folder's right click or a middle click opens it in a new tab. Each tab keeps its own folder, history and view.
+
 Type a path into the address bar and press Return, and it fills in folder names as you type. Back and Forward each keep a list of where you've been, and Up goes to the folder above. The arrow at the end of the address bar lists the folders above this one and your pinned folders.
 
 The left pane shows tasks for what's selected, your pinned folders, other places and the details of the selection. The Folders button swaps it for a folder tree. Drop a folder on Pinned to pin it, or right click a folder and pick Pin to Pinned.
@@ -53,7 +55,7 @@ The System theme follows your Mac's light or dark setting and your accent color.
 
 ## Settings
 
-Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder Options sets whether folders open in the same window or a new one, single or double click to open, the left pane, a view per folder, hidden files, file extensions and which places Other Places shows. Settings also has open at login, the update check, and export, import and reset.
+Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder Options sets whether folders open in the same window, a new window or a new tab, single or double click to open, the left pane, a view per folder, hidden files, file extensions and which places Other Places shows. Settings also has open at login, the update check, and export, import and reset.
 
 ![Filedrawer Settings](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/settings.png)
 

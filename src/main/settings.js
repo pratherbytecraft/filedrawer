@@ -19,7 +19,7 @@ const DEFAULTS = Object.freeze({
   newWindowView: 'last', // last (the view picked last) | thumbs | tiles | icons | list | details
   startFolder: 'home', // home | documents | desktop | computer | custom (startPath)
   startPath: '',
-  openFolders: 'same', // same | new: opening a folder replaces this window's, or opens a new window
+  openFolders: 'same', // same | new | tab: opening a folder replaces this window's, opens a new window or a new tab
   clickToOpen: 'double', // double | single
   showPane: true, // the left pane; off, the Folders button still shows the tree
   perFolderView: false, // each folder keeps its own view (folderViews)

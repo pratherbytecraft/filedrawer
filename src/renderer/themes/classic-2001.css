@@ -21,6 +21,13 @@ body { background: #0831d9; color: var(--text); padding: 0 3px 3px; }
 }
 body.idle .titlebar { background: linear-gradient(#7697e7, #7e9ee3 10%, #94afe8 90%, #97a5cb); color: #d8e4f8; text-shadow: none; }
 
+/* Tabs like the old property windows': beige, an orange line on the front one. */
+.tabstrip { background: var(--face); border-bottom: 1px solid #919b9c; }
+.tab { background: linear-gradient(#fff, #ecebe5 70%, #d8d2c2); border: 1px solid #919b9c; border-bottom: 0; border-radius: 3px 3px 0 0; height: 21px; }
+.tab:hover { box-shadow: inset 0 2px #ffc83c; }
+.tab.on { background: #fcfcfe; box-shadow: inset 0 3px #ffc83c; height: 24px; margin-bottom: -1px; z-index: 1; }
+.tab-add { color: var(--link); }
+
 .toolbar { gap: 1px; padding: 2px 4px; min-height: 38px; background: linear-gradient(#f7f6f1, var(--face)); border-bottom: 1px solid var(--edge); }
 .tb { gap: 4px; padding: 2px 5px 2px 3px; border: 1px solid transparent; border-radius: 3px; }
 .tb:hover { border-color: #cecec3; background: linear-gradient(#fff, #f1efe6); box-shadow: 0 1px 1px rgba(0,0,0,.08); }

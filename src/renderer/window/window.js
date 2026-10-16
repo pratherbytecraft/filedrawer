@@ -402,6 +402,7 @@ function updateTitle() {
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
+  drawTabs();
 }
 
 const shownPath = (p) => (isPlace(p) ? placeLabel(p) : p);
@@ -496,26 +497,23 @@ function up() {
   if (parent) navigate(parent, { select: cwd });
 }
 
-// Folders open here or in a new window, per Folder Options.
-function openItem(it, { newWindow = app.settings.openFolders === 'new' } = {}) {
-  if (it.alias && it.aliasDir) {
-    if (newWindow) api.openWindow(it.alias);
-    else navigate(it.alias);
-  } else if (isFolder(it)) {
-    if (newWindow) api.openWindow(it.path);
-    else navigate(it.path);
-  } else {
-    api.open(it.path);
-  }
+// Folders open here, in a new window or in a new tab, per Folder Options.
+function openItem(it, { newWindow = app.settings.openFolders === 'new', inTab = app.settings.openFolders === 'tab' } = {}) {
+  const dir = it.alias && it.aliasDir ? it.alias : isFolder(it) ? it.path : null;
+  if (!dir) api.open(it.path);
+  else if (newWindow) api.openWindow(dir);
+  else if (inTab) newTab(dir);
+  else navigate(dir);
 }
 
 // Return opens the selection. One folder opens here, more than one each
 // open in their own window.
-function openSelected({ newWindow = app.settings.openFolders === 'new' } = {}) {
+function openSelected({ newWindow = app.settings.openFolders === 'new', inTab = app.settings.openFolders === 'tab' } = {}) {
   const picked = items.filter((it) => sel.has(it.path));
   if (!picked.length) return;
+  // More than one folder each open in their own tab, or window.
   const many = picked.filter(isFolder).length > 1;
-  for (const it of picked) openItem(it, { newWindow: newWindow || many });
+  for (const it of picked) openItem(it, { newWindow, inTab: inTab || (many && !newWindow) });
 }
 
 // ---------- selection with the mouse and keys ----------
@@ -574,6 +572,20 @@ $('files').addEventListener('dblclick', (e) => {
   const el = e.target.closest('.item');
   if (!el || app.settings.clickToOpen === 'single') return;
   openItem(items[el.dataset.i], e.metaKey ? { newWindow: true } : undefined);
+});
+
+// A middle click opens a folder, or a place in the left pane, in a new tab.
+document.addEventListener('auxclick', (e) => {
+  if (e.button !== 1) return;
+  const el = e.target.closest('#files .item');
+  const place = e.target.closest('#pane [data-place], #tree-list .n');
+  if (el) {
+    const it = items[el.dataset.i];
+    const dir = it.alias && it.aliasDir ? it.alias : isFolder(it) ? it.path : null;
+    if (dir) newTab(dir);
+  } else if (place) {
+    newTab(place.dataset.place || place.dataset.path);
+  }
 });
 
 // With single click, a plain click on an item opens it once the button comes
@@ -803,7 +815,10 @@ $('files').addEventListener('contextmenu', async (e) => {
   }
   // In groups like the old windows: opening, pinning, then changing.
   const groups = [[{ label: 'Open', bold: true, click: () => openSelected() }], [], []];
-  if (picked.every(isFolder)) groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+  if (picked.every(isFolder)) {
+    groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+    groups[0].push({ label: 'Open in New Tab', click: () => openSelected({ newWindow: false, inTab: true }) });
+  }
   // Apps and other bundles open like files, and can be looked inside too.
   if (picked.length === 1 && it.package && !it.volume) groups[0].push({ label: 'Show Package Contents', click: () => navigate(it.path) });
   if (!picked.some(isFolder)) {
@@ -1009,6 +1024,10 @@ api.onCommand(({ command, arg }) => {
   const typing = !!field;
   switch (command) {
     case 'newWindow': api.openWindow(cwd); break;
+    case 'newTab': newTab(); break;
+    case 'closeTab': closeTab(); break;
+    case 'nextTab': nextTab(1); break;
+    case 'prevTab': nextTab(-1); break;
     // The Finder window's name, shown until its folder comes.
     case 'waitTitle': $('title').textContent = arg; break;
     case 'open': if (!typing) openSelected(); break;
@@ -1125,6 +1144,7 @@ window.addEventListener('DOMContentLoaded', () => {
     applyState(state);
     const s = state.settings;
     view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
+    startTabs();
     COMPUTER = state.computer;
     TRASH = state.trash;
     RECENTS = state.recents;

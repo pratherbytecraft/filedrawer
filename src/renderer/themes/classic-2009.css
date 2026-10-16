@@ -40,12 +40,20 @@ body.idle { background: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,
 
 /* The address bar sits in the glass above the command bar. */
 .titlebar { order: 0; }
+.tabstrip { order: 0; }
 .addrrow { order: 1; }
 .toolbar { order: 2; }
 .body { order: 3; }
 .status { order: 4; }
 
 .titlebar { height: 28px; margin: 0 -7px; padding-left: 80px; color: #000; font: 12px var(--font); text-shadow: 0 0 8px #fff, 0 0 3px #fff, 0 0 2px #fff; justify-content: flex-start; }
+
+/* Glass tabs, the front one white. */
+.tabstrip { padding: 2px 0 0; margin: 0 0 4px; }
+.tab { background: linear-gradient(rgba(255,255,255,.45), rgba(255,255,255,.2)); border: 1px solid rgba(0,0,0,.35); border-bottom: 0; border-radius: 5px 5px 0 0; color: var(--ink); height: 23px; box-shadow: inset 0 1px rgba(255,255,255,.6); }
+.tab:hover { background: linear-gradient(rgba(255,255,255,.7), rgba(255,255,255,.35)); }
+.tab.on { background: linear-gradient(#fff, #f3f8fd); color: #000; height: 25px; box-shadow: none; }
+.tab-add { color: var(--ink); }
 
 .addrrow { padding: 0 0 6px; }
 .addrrow .lab { display: none; }

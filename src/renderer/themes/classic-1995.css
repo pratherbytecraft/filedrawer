@@ -39,6 +39,11 @@ body { background: var(--face); color: var(--text); padding: 0 3px 3px; box-shad
 .titlebar { height: 26px; margin: 0 -3px 2px; padding-left: 78px; color: #fff; background: linear-gradient(90deg, var(--t1), var(--t2)); font: bold 11px var(--font); }
 body.idle .titlebar { background: linear-gradient(90deg, #808080, #b5b5b5); color: #d4d0c8; }
 
+.tabstrip { background: var(--face); box-shadow: inset 0 -1px #fff; padding: 4px 4px 0; }
+.tab { background: var(--face); box-shadow: inset 1px 1px #fff, inset -1px 0 #0a0a0a, inset -2px 0 #808080; height: 20px; }
+.tab.on { height: 23px; }
+.tab-add { color: #000; }
+
 .toolbar { gap: 1px; padding: 2px 4px; min-height: 36px; background: var(--face); box-shadow: 0 1px #fff, inset 0 -1px #808080; margin-bottom: 1px; }
 .tb { gap: 4px; padding: 3px 6px; border: 0; }
 .tb:hover { box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; }

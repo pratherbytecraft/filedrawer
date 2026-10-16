@@ -387,7 +387,8 @@ async function eject(volume) {
 // A place in Other Places or Pinned: open it here or in a new window, and
 // for the Trash, empty it, for a pin, unpin it.
 function placeEntries(p) {
-  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
+  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
+    { label: 'Open in New Tab', click: () => newTab(p) }];
   if (!isPlace(p)) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
   if (p === TRASH) entries.push('sep', { label: 'Empty Trash...', icon: 'p-trash', click: () => api.emptyTrash() });
   if (isPinned(p)) entries.push('sep', { label: 'Unpin', icon: 'p-pin', click: () => unpin(p) });
@@ -418,7 +419,8 @@ $('tree-list').addEventListener('contextmenu', (e) => {
     openMenu(placeEntries(p), e.clientX, e.clientY);
     return;
   }
-  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
+  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
+    { label: 'Open in New Tab', click: () => newTab(p) }];
   if (p !== COMPUTER) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
   if (ejectable(p)) entries.push('sep', { label: 'Eject', icon: 'p-eject', click: () => eject(p) });
   else if (p !== COMPUTER && !isVolumeRoot(p)) {
