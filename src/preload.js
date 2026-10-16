@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('filedrawer', {
   getState: () => ipcRenderer.invoke('state'),
   onState: on('state'),
   onCommand: on('command'),
+  onFolderChanged: on('folder:changed'),
+  watch: (dir) => ipcRenderer.send('folder:watch', dir),
   list: (dir, opts) => ipcRenderer.invoke('folder:list', dir, opts),
   resolve: (text, cwd) => ipcRenderer.invoke('folder:resolve', text, cwd),
   complete: (text, cwd) => ipcRenderer.invoke('folder:complete', text, cwd),

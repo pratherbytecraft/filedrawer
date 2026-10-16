@@ -6,11 +6,12 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULTS = Object.freeze({
-  theme: 'system', // system
+  theme: 'system', // system | classic-2001
   appearance: 'auto', // auto | light | dark
   accent: 'auto', // auto | blue | purple | pink | red | orange | yellow | green | graphite
   view: 'details', // the view a new window opens in, the one picked last
   pane: 'tasks', // tasks | folders: the left pane a new window opens with, the one picked last
+  showHidden: false, // files the Mac keeps out of sight, shown dimmed
   pins: [], // pinned folders, as paths, in the order shown
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   sort: {

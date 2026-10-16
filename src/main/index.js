@@ -86,9 +86,54 @@ function openWindow(dir) {
   win.on('focus', buildMenu);
   win.on('closed', () => {
     windows.delete(win);
+    unwatch(win);
     buildMenu();
   });
   return win;
+}
+
+// Each window watches the folder it shows and is told when something in it
+// changes, a moment after the changes stop. Computer watches /Volumes, so
+// disks show up and go away. A folder's own watch hears nothing when the
+// folder itself is deleted, moved or renamed, so every two seconds the window
+// also checks that its folder is still there.
+const watchers = new Map(); // window -> { dir, watcher, check, timer }
+
+function unwatch(win) {
+  const w = watchers.get(win);
+  if (!w) return;
+  clearTimeout(w.timer);
+  clearInterval(w.check);
+  w.watcher.close();
+  watchers.delete(win);
+}
+
+function watch(win, dir) {
+  const w = watchers.get(win);
+  if (w && w.dir === dir) return;
+  unwatch(win);
+  const target = dir === folders.COMPUTER ? '/Volumes' : dir;
+  let watcher;
+  try {
+    watcher = fs.watch(target, { persistent: false });
+  } catch {
+    return; // a folder that can't be watched is still shown, just not kept up to date
+  }
+  const entry = { dir, watcher, check: null, timer: null };
+  const changed = () => {
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+      if (!win.isDestroyed()) win.webContents.send('folder:changed', dir);
+    }, 250);
+  };
+  watcher.on('change', changed);
+  watcher.on('error', () => unwatch(win));
+  entry.check = setInterval(() => {
+    fs.access(target, (err) => {
+      if (err && err.code === 'ENOENT') changed();
+    });
+  }, 2000);
+  watchers.set(win, entry);
 }
 
 // A file handed to Filedrawer opens its folder.
@@ -129,6 +174,7 @@ app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => helper.stop());
 
+const THEMES = [['system', 'System'], ['classic-2001', 'Classic 2001']];
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
 const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
 
@@ -212,6 +258,16 @@ function buildMenu() {
         },
         { type: 'separator' },
         cmd('Folders', 'pane', 'CmdOrCtrl+Shift+F', { type: 'checkbox', checked: s.pane === 'folders' }),
+        {
+          label: 'Show Hidden Files', accelerator: 'CmdOrCtrl+Shift+.', type: 'checkbox', checked: s.showHidden,
+          click: () => settings.update({ showHidden: !settings.get().showHidden })
+        },
+        {
+          label: 'Theme',
+          submenu: THEMES.map(([theme, label]) => ({
+            label, type: 'radio', checked: s.theme === theme, click: () => settings.update({ theme })
+          }))
+        },
         { type: 'separator' },
         cmd('Refresh', 'refresh', 'CmdOrCtrl+R'),
         { type: 'separator' },
@@ -260,14 +316,14 @@ ipcMain.handle('folder:volume', (_e, dir) => folders.volume(dir));
 ipcMain.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
 ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
-ipcMain.handle('settings:update', (_e, patch) => {
-  const s = settings.update(patch);
-  if (patch && (patch.view || patch.sort || patch.pane || patch.pins)) buildMenu();
-  return s;
-});
+ipcMain.handle('settings:update', (_e, patch) => settings.update(patch));
 ipcMain.on('open', (_e, p) => shell.openPath(p));
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
+ipcMain.on('folder:watch', (e, dir) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (win) watch(win, dir);
+});
 // Each window has its own view, left pane and folder, so the menus show the front one's.
 const viewOf = new WeakMap();
 ipcMain.on('window:view', (e, look) => {
@@ -296,7 +352,10 @@ app.whenReady().then(() => {
     version: '',
     copyright: 'Prather Bytecraft. All rights reserved.'
   });
-  settings.onChange(pushState);
+  settings.onChange(() => {
+    pushState();
+    buildMenu();
+  });
   system.watch(pushState);
   buildMenu();
   ready = true;

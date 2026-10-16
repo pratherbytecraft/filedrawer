@@ -123,7 +123,8 @@ async function loadIcons() {
 // Thumbnails: Quick Look pictures of the files in sight, asked for as they
 // scroll into view. A file Quick Look can't draw keeps its icon.
 const THUMB_PX = 192;
-const thumbUrls = new Map(); // by path, null when there's no picture
+const thumbUrls = new Map(); // by path and date, null when there's no picture
+const thumbKey = (it) => `${it.path}:${it.modified}`;
 let thumbWant = new Set();
 let thumbTimer = null;
 const thumbSeen = new IntersectionObserver((entries) => {
@@ -131,22 +132,22 @@ const thumbSeen = new IntersectionObserver((entries) => {
     if (!en.isIntersecting) continue;
     thumbSeen.unobserve(en.target);
     const it = items[en.target.closest('.item').dataset.i];
-    if (it && !thumbUrls.has(it.path)) thumbWant.add(it.path);
+    if (it && !thumbUrls.has(thumbKey(it))) thumbWant.add(it);
   }
   clearTimeout(thumbTimer);
   thumbTimer = setTimeout(loadThumbs, 40);
 }, { root: document.getElementById('files'), rootMargin: '200px' });
 
 async function loadThumbs() {
-  const paths = [...thumbWant];
+  const want = [...thumbWant];
   thumbWant = new Set();
-  if (!paths.length) return;
-  const got = await api.thumbs(paths, THUMB_PX);
-  for (const [p, url] of Object.entries(got)) thumbUrls.set(p, url);
+  if (!want.length) return;
+  const got = await api.thumbs(want.map((it) => it.path), THUMB_PX);
+  for (const it of want) thumbUrls.set(thumbKey(it), got[it.path] || null);
   if (view !== 'thumbs') return;
   for (const el of rows()) {
     const it = items[el.dataset.i];
-    const url = it && thumbUrls.get(it.path);
+    const url = it && thumbUrls.get(thumbKey(it));
     if (url) showThumb(el, url);
   }
 }
@@ -162,7 +163,7 @@ function watchThumbs() {
   for (const el of rows()) {
     const it = items[el.dataset.i];
     if (isFolder(it)) continue;
-    const url = thumbUrls.get(it.path);
+    const url = thumbUrls.get(thumbKey(it));
     if (url) showThumb(el, url);
     else if (url === undefined) thumbSeen.observe(el.querySelector('.frame'));
   }
@@ -228,7 +229,7 @@ const NOTES = {
   other: 'This folder couldn\'t be opened.'
 };
 
-const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
+const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}${it.hidden ? ' hid' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
 const nameHtml = (it) => `<span class="nm">${esc(it.display)}</span>`;
 
 function renderIcons() {
@@ -252,7 +253,7 @@ function renderList() {
 
 function renderThumbs() {
   return '<div class="g-thumbs">' + items.map((it, i) => {
-    const url = thumbUrls.get(it.path);
+    const url = thumbUrls.get(thumbKey(it));
     const inside = url ? `<img class="pic" alt="" src="${url}">` : iconHtml(it, 'big');
     return `<div ${itemAttrs(it, i)}><div class="frame">${inside}</div>${nameHtml(it)}</div>`;
   }).join('') + '</div>';
@@ -362,10 +363,23 @@ function updateChrome() {
 
 // Opens dir in this window. select picks an item once it's listed, keep
 // holds on to the selection (a refresh).
-async function navigate(dir, { push = true, select = null, keep = false } = {}) {
+async function navigate(dir, { push = true, select = null, keep = false, changed = false } = {}) {
   const token = ++listToken;
-  const res = await api.list(dir, { hidden: false });
+  const res = await api.list(dir, { hidden: app.settings.showHidden });
   if (token !== listToken) return;
+  // The open folder was deleted or moved away: go to the nearest folder above it that's still there.
+  if (changed && res.error === 'missing') {
+    for (let p = parentOf(dir); p; p = parentOf(p)) {
+      if (p === COMPUTER || (await api.resolve(p, '/')).type === 'dir') {
+        treeKids.delete(p);
+        treeShownFor = null;
+        navigate(p, { push: false });
+        return;
+      }
+    }
+    return;
+  }
+  if (!res.error) api.watch(dir);
   if (push && dir !== cwd) {
     history = history.slice(0, hIndex + 1);
     history.push(dir);
@@ -876,7 +890,13 @@ function applyState(state) {
   const old = app;
   app = state;
   window.applyTheme(state);
-  if (old && JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort)) {
+  if (old && (old.settings.showHidden !== state.settings.showHidden)) {
+    treeShownFor = null;
+    navigate(cwd, { push: false, keep: true });
+  } else if (old && old.settings.theme !== state.settings.theme) {
+    // Icon sizes come from the theme, so everything is drawn again once its stylesheet is in.
+    $('theme-css').addEventListener('load', () => render(), { once: true });
+  } else if (old && JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort)) {
     items = sortItems(items);
     render();
   } else if (old && JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins)) {
@@ -886,6 +906,11 @@ function applyState(state) {
 }
 
 api.onState(applyState);
+api.onFolderChanged((dir) => {
+  if (dir !== cwd) return;
+  treeKids.delete(cwd);
+  navigate(cwd, { push: false, keep: true, changed: true });
+});
 api.getState().then((state) => {
   applyState(state);
   view = state.settings.view;
@@ -954,7 +979,8 @@ function tasksBox() {
   if (!picked.length) {
     if (cwd === COMPUTER) return '';
     return box('tasks', 'Folder Tasks', taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
-      taskRow('newWindowHere', 'p-open', 'Open this folder in a new window'), true);
+      taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
+      taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files'), true);
   }
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
@@ -1049,6 +1075,7 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'terminal') openTerminal();
   else if (act === 'pin') pin(targetFolder());
   else if (act === 'unpin') unpin(targetFolder());
+  else if (act === 'hidden') api.updateSettings({ showHidden: !app.settings.showHidden });
 });
 
 // Pinning by dropping a folder on the Pinned box, from this window or from
@@ -1152,10 +1179,11 @@ function treeRoots() {
 async function loadKids(p) {
   if (treeKids.has(p)) return;
   treeKids.set(p, null); // asked for
-  const res = await api.list(p, { hidden: false });
+  // Hidden folders are kept, so the way down to an open hidden folder can show.
+  const res = await api.list(p, { hidden: true });
   const dirs = (res.items || []).filter(isFolder)
     .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' }))
-    .map((it) => ({ path: it.path, label: it.display, icon: it.volume ? 'p-drive' : specialIcon(it.path) || 'i-folder' }));
+    .map((it) => ({ path: it.path, label: it.display, hidden: it.hidden, icon: it.volume ? 'p-drive' : specialIcon(it.path) || 'i-folder' }));
   treeKids.set(p, dirs);
 }
 
@@ -1173,12 +1201,20 @@ function chainTo(p) {
   return chain;
 }
 
+// A hidden folder shows when hidden files are on, or when it's on the way to the open folder.
+function shownKids(p) {
+  const kids = treeKids.get(p);
+  if (!kids || app.settings.showHidden) return kids;
+  const chain = chainTo(cwd);
+  return kids.filter((k) => !k.hidden || chain.includes(k.path));
+}
+
 function nodeHtml(n, depth) {
   if (n.group !== undefined) return `<li class="grp">${esc(n.group)}</li>`;
-  const kids = treeKids.get(n.path);
+  const kids = shownKids(n.path);
   const open = treeOpen.has(n.path);
   const tw = n.leaf || (kids && !kids.length) ? '<span class="tw none"></span>' : `<span class="tw">${open ? '&minus;' : '+'}</span>`;
-  let html = `<li><div class="n${n.path === cwd ? ' sel' : ''}" data-path="${esc(n.path)}" style="padding-left:${4 + depth * 16}px">` +
+  let html = `<li><div class="n${n.path === cwd ? ' sel' : ''}${n.hidden ? ' hid' : ''}" data-path="${esc(n.path)}" style="padding-left:${4 + depth * 16}px">` +
     `${tw}<svg><use href="#${n.icon}"/></svg><span class="lb">${esc(n.label)}</span></div>`;
   if (!n.leaf && open && kids && kids.length) html += '<ul>' + kids.map((k) => nodeHtml(k, depth + 1)).join('') + '</ul>';
   return html + '</li>';

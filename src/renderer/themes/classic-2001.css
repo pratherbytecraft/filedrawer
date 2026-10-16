@@ -1,0 +1,118 @@
+/* Classic 2001 theme: the blue title bar, the beige toolbars and the blue
+   task pane of the 2001 file windows. The Mac's window buttons stay on the
+   left of the title bar. It has one look, light, whatever the Mac is set to. */
+:root {
+  color-scheme: light;
+  --font: Tahoma, Geneva, Verdana, sans-serif;
+  --fs: 11px;
+  --tb-icon: 24px;
+  --icon-details: 16; --icon-list: 16; --icon-icons: 32; --icon-tiles: 48; --icon-thumbs: 48; --list-row: 18px;
+  --fold-back: #e3a92e; --fold-front: url(#g-manila); --fold-line: #b9821b;
+  --round-bg: url(#g-green); --round-ink: #fff; --round-ring: #2c7d1b;
+  --sel: #316ac5; --sel-text: #fff; --idle-sel: #d4d0c8;
+  --face: #ece9d8; --edge: #d8d2bd; --text: #000; --dim: #7d7a6f; --link: #215dc6;
+}
+body { background: #0831d9; color: var(--text); padding: 0 3px 3px; }
+
+.titlebar {
+  height: 30px; margin: 0 -3px; padding-left: 78px; color: #fff;
+  background: linear-gradient(#0997ff, #0053ee 8%, #0050ee 40%, #06f 88%, #06f 93%, #005bff 95%, #003dd7 96%, #003dd7);
+  font: bold 13px "Trebuchet MS", Tahoma, sans-serif; text-shadow: 1px 1px #0f1089;
+}
+body.idle .titlebar { background: linear-gradient(#7697e7, #7e9ee3 10%, #94afe8 90%, #97a5cb); color: #d8e4f8; text-shadow: none; }
+
+.toolbar { gap: 1px; padding: 2px 4px; min-height: 38px; background: linear-gradient(#f7f6f1, var(--face)); border-bottom: 1px solid var(--edge); }
+.tb { gap: 4px; padding: 2px 5px 2px 3px; border: 1px solid transparent; border-radius: 3px; }
+.tb:hover { border-color: #cecec3; background: linear-gradient(#fff, #f1efe6); box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+.tb .tb-drop { margin-left: 1px; }
+.tb.down { background: #e3e0d0; border-color: #a6a291; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
+.tb.off { opacity: .55; --round-bg: url(#g-grey); --round-ring: #8a8a8a; }
+.tbsep { height: 28px; margin: 0 3px; background: #c9c5b3; box-shadow: 1px 0 #fff; }
+
+.addrrow { padding: 2px 4px 3px; border-bottom: 1px solid var(--edge); background: var(--face); }
+.addrrow .lab { color: var(--dim); padding: 0 2px 0 3px; }
+.addr { gap: 4px; height: 22px; padding: 0 0 0 3px; background: #fff; border: 1px solid #7f9db9; }
+.addr .dd { width: 18px; border-left: 1px solid #c3d3fd; background: linear-gradient(#e6eefc, #c3d3fd); color: #4d6185; }
+.addr .dd:hover, .addr .dd.down { background: linear-gradient(#fdfeff, #d7e3fd); }
+.go { padding: 1px 6px 1px 3px; border: 1px solid transparent; border-radius: 3px; }
+.go:hover { border-color: #cecec3; background: #fff; }
+.suggest, .addr-error { left: 62px; top: 26px; background: #fff; border: 1px solid #000; box-shadow: 2px 2px 3px rgba(0,0,0,.25); }
+.suggest { padding: 1px 0; min-width: 360px; }
+.suggest .row { padding: 2px 5px; }
+.suggest .row.on { background: var(--sel); color: var(--sel-text); }
+.addr-error { padding: 4px 8px; background: #ffffe1; }
+
+.pane, .tree { width: 214px; }
+.pane { background: linear-gradient(#7ba2e7, #6375d6); padding: 12px 12px 4px; }
+.box { margin-bottom: 12px; }
+.box h3 { height: 25px; padding: 0 2px 0 12px; font: bold 11px var(--font); color: var(--link); border-radius: 3px 3px 0 0; background: linear-gradient(to right, #fff 30%, #c6d3f7); }
+.box h3:hover { color: #428eff; }
+.box h3 .chev { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #b7c6eb; color: var(--link); }
+.box .bd { background: #d6dff7; border: 1px solid #fff; border-top: 0; padding: 8px 10px 9px; }
+.box .row { padding: 2px 0; color: var(--link); }
+.box .row:hover { color: #428eff; text-decoration: underline; }
+.box .row .x { color: #7f8fb8; text-decoration: none; }
+.box .hint { color: #5d6c94; padding-top: 3px; }
+.box.first h3 { background: linear-gradient(to right, #0054e3, #2c74f0); color: #fff; }
+.box.first h3:hover { color: #c6d3f7; }
+.box.first .bd { background: #eff3ff; }
+.box .det { line-height: 1.5; color: #000; }
+
+.tree { background: #fff; border-right: 1px solid #aca899; }
+.tree .head { height: 22px; padding: 0 3px 0 6px; background: var(--face); border-bottom: 1px solid #aca899; }
+.tree .head .x:hover { background: #fff; box-shadow: 0 0 0 1px #aca899; }
+.tree .n { height: 18px; padding-right: 6px; }
+.tree .n .tw { width: 9px; height: 9px; border: 1px solid #919b9c; background: #fff; font-size: 8px; color: #000; }
+.tree .n .tw.none { border: 0; }
+.tree .n.sel .lb { background: var(--sel); color: var(--sel-text); }
+body.idle .tree .n.sel .lb { background: var(--idle-sel); color: #000; }
+.tree .n .lb { padding: 0 2px; }
+.tree .grp { padding: 6px 6px 2px; color: var(--dim); }
+.tree .grp:empty { padding: 2px 0 0; }
+
+.files { background: #fff; }
+table.det th {
+  height: 20px; padding: 0 6px; font-weight: normal; color: #000;
+  background: linear-gradient(#fff, #ebeadb 85%, #d6d2c2); border-right: 1px solid #c7c5b2; border-bottom: 1px solid #d6d2c2;
+}
+table.det th:hover { background: linear-gradient(#fff, #f6f5ee); box-shadow: inset 0 -3px #f9b119; }
+table.det th.sorted.asc::after { content: " \25B4"; color: #aca899; }
+table.det th.sorted.desc::after { content: " \25BE"; color: #aca899; }
+table.det td { height: 18px; padding: 0 6px; }
+table.det td .ic { width: 16px; height: 16px; }
+
+/* Selected: the name in blue, the icon tinted to match. */
+.item .nm { padding: 0 2px; }
+.item.sel .nm { background: var(--sel); color: var(--sel-text); }
+body.idle .item.sel .nm { background: var(--idle-sel); color: #000; }
+.item.sel svg.big, .item.sel img.big, table.det tr.item.sel .ic { filter: brightness(.82) sepia(.3) hue-rotate(180deg) saturate(2); }
+.g-icons { grid-template-columns: repeat(auto-fill, 78px); gap: 14px 6px; padding: 10px; }
+.g-icons .item { gap: 3px; }
+.g-icons .nm { line-height: 1.25; max-width: 76px; }
+.g-tiles { grid-template-columns: repeat(auto-fill, 230px); gap: 8px 14px; padding: 10px; }
+.g-tiles .item { height: 56px; }
+.g-tiles .meta { line-height: 1.4; }
+.g-tiles .sub { color: var(--dim); padding: 0 2px; }
+.g-list { gap: 0 10px; padding: 4px 6px; grid-auto-columns: 210px; }
+.g-thumbs { grid-template-columns: repeat(auto-fill, 116px); gap: 14px 10px; padding: 12px; }
+.g-thumbs .frame { width: 102px; height: 102px; border: 1px solid #d0d0bf; background: #fff; padding: 4px; }
+.g-thumbs .item.sel .frame { border: 2px solid var(--sel); padding: 3px; }
+body.idle .g-thumbs .item.sel .frame { border-color: var(--idle-sel); }
+.g-thumbs .item.sel .pic { filter: none; }
+.g-thumbs .nm { max-width: 110px; }
+
+.note { color: var(--dim); }
+
+.status { height: 22px; background: var(--face); border-top: 1px solid #fff; padding: 2px 2px 1px; gap: 2px; }
+.status > div { padding: 0 6px; box-shadow: inset 1px 1px #aca899, inset -1px -1px #fff; }
+.status .s2 { width: 90px; justify-content: flex-end; }
+.status .s3 { width: 210px; }
+
+.menu { min-width: 190px; padding: 2px; background: #fff; border: 1px solid #aca899; box-shadow: 2px 2px 3px rgba(0,0,0,.3); }
+.menu .mi { height: 21px; padding: 0 18px 0 6px; }
+.menu .mi b { font-weight: bold; }
+.menu .mi:hover, .menu .mi.on { background: var(--sel); color: var(--sel-text); }
+.menu .mi .key { color: var(--dim); }
+.menu .mi:hover .key { color: var(--sel-text); }
+.menu .mi.chk::before { content: "\25CF"; position: absolute; left: 10px; font-size: 7px; }
+.menu .sep { height: 1px; margin: 3px 1px; background: #aca899; }

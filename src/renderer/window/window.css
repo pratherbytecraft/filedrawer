@@ -51,6 +51,7 @@ body[data-pane="tasks"] .tree, body[data-pane="folders"] .pane { display: none; 
 .tree .n .tw.none { visibility: hidden; }
 .tree .n svg { width: 16px; height: 16px; flex: none; }
 .tree .n .lb { overflow: hidden; text-overflow: ellipsis; }
+.tree .n.hid svg, .tree .n.hid .lb { opacity: .5; }
 .box h3 { margin: 0; display: flex; align-items: center; justify-content: space-between; cursor: default; }
 .box h3 .chev { display: grid; place-items: center; }
 .box h3 .chev svg { width: 8px; height: 8px; transition: transform .15s; }
@@ -78,6 +79,7 @@ table.det td .nm { overflow: hidden; text-overflow: ellipsis; }
 .ic { flex: none; }
 img.ic:not([src]), img.big:not([src]) { visibility: hidden; }
 .big { flex: none; width: var(--big); height: var(--big); }
+.item.hid .ic, .item.hid .big, .item.hid .nm, .item.hid .pic { opacity: .5; }
 
 /* Icons, Tiles, List and Thumbnails */
 .files[data-view="icons"] { --big: calc(var(--icon-icons) * 1px); }
