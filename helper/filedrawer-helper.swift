@@ -129,7 +129,10 @@ func volume(_ path: String) -> [String: Any] {
     let keys: Set<URLResourceKey> = [.volumeNameKey, .volumeLocalizedNameKey, .volumeAvailableCapacityForImportantUsageKey,
                                      .volumeAvailableCapacityKey, .volumeTotalCapacityKey]
     let v = try? url.resourceValues(forKeys: keys)
-    let free = v?.volumeAvailableCapacityForImportantUsage.map { Int($0) } ?? v?.volumeAvailableCapacity ?? 0
+    // The important usage figure counts purgeable space like Finder, but it's
+    // 0 on disks that aren't APFS, such as HFS+ disk images.
+    let important = v?.volumeAvailableCapacityForImportantUsage.map { Int($0) } ?? 0
+    let free = max(important, v?.volumeAvailableCapacity ?? 0)
     return ["name": v?.volumeLocalizedName ?? v?.volumeName ?? "", "free": free, "total": v?.volumeTotalCapacity ?? 0]
 }
 
