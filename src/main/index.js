@@ -1,6 +1,7 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
 const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme } = require('electron');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -136,6 +137,15 @@ function send(command, arg) {
   if (win && windows.has(win)) win.webContents.send('command', { command, arg });
 }
 
+// Opens a folder in the terminal app from the settings, or in Terminal if
+// that app isn't there.
+function openTerminal(dir) {
+  const want = settings.get().terminal || 'Terminal';
+  execFile('open', ['-a', want, dir], (err) => {
+    if (err && want !== 'Terminal') execFile('open', ['-a', 'Terminal', dir], () => {});
+  });
+}
+
 function buildMenu() {
   const s = { ...settings.get() };
   const front = BrowserWindow.getFocusedWindow();
@@ -170,6 +180,7 @@ function buildMenu() {
           }
         },
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
+        cmd('Open Terminal Here', 'terminal', 'CmdOrCtrl+Alt+T'),
         { type: 'separator' },
         { role: 'close', label: 'Close Window' }
       ]
@@ -214,6 +225,21 @@ function buildMenu() {
         { role: 'togglefullscreen' }
       ]
     },
+    {
+      label: 'Pinned',
+      submenu: [
+        cmd(s.pins.includes(s.cwd) ? 'Unpin This Folder' : 'Pin This Folder', 'pinHere', 'Ctrl+Cmd+T'),
+        { type: 'separator' },
+        ...(s.pins.length ? s.pins.map((p) => ({
+          label: path.basename(p) || p,
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && windows.has(win)) send('navigate', p);
+            else openWindow(p);
+          }
+        })) : [{ label: 'No Pinned Folders', enabled: false }])
+      ]
+    },
     { role: 'windowMenu' },
     {
       role: 'help',
@@ -236,12 +262,13 @@ ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipcMain.handle('settings:update', (_e, patch) => {
   const s = settings.update(patch);
-  if (patch && (patch.view || patch.sort || patch.pane)) buildMenu();
+  if (patch && (patch.view || patch.sort || patch.pane || patch.pins)) buildMenu();
   return s;
 });
 ipcMain.on('open', (_e, p) => shell.openPath(p));
+ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
-// Each window has its own view and left pane, so the View menu checks the front one's.
+// Each window has its own view, left pane and folder, so the menus show the front one's.
 const viewOf = new WeakMap();
 ipcMain.on('window:view', (e, look) => {
   const win = BrowserWindow.fromWebContents(e.sender);

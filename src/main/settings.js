@@ -11,6 +11,8 @@ const DEFAULTS = Object.freeze({
   accent: 'auto', // auto | blue | purple | pink | red | orange | yellow | green | graphite
   view: 'details', // the view a new window opens in, the one picked last
   pane: 'tasks', // tasks | folders: the left pane a new window opens with, the one picked last
+  pins: [], // pinned folders, as paths, in the order shown
+  terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   sort: {
     key: 'name', // name | size | kind | modified
     dir: 'asc' // asc | desc

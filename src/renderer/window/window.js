@@ -216,7 +216,7 @@ function renderDetails() {
   const head = cols.map((c) => computer ? `<th class="${c.cls || ''}">${c.label}</th>` :
     `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
   const rows = items.map((it, i) =>
-    `<tr class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}">` +
+    `<tr ${itemAttrs(it, i)}>` +
     cols.map((c) => `<td class="${c.cls || ''}">${cellFor(c, it)}</td>`).join('') + '</tr>').join('');
   return `<table class="det"><colgroup>${cols.map((c) => `<col style="width:${c.width}">`).join('')}</colgroup>` +
     `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -228,7 +228,7 @@ const NOTES = {
   other: 'This folder couldn\'t be opened.'
 };
 
-const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}"`;
+const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
 const nameHtml = (it) => `<span class="nm">${esc(it.display)}</span>`;
 
 function renderIcons() {
@@ -289,7 +289,7 @@ function render() {
 function setView(v) {
   if (!RENDER[v] || v === view) return;
   view = v;
-  api.setView({ view, pane });
+  api.setView({ view, pane, cwd });
   api.updateSettings({ view: v });
   const keep = $('files').scrollTop;
   render();
@@ -355,6 +355,7 @@ function updateChrome() {
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
   $('title-icon').innerHTML = icon;
+  api.setView({ view, pane, cwd });
   updateTitle();
   renderTree();
 }
@@ -572,7 +573,7 @@ window.addEventListener('focus', () => document.body.classList.remove('idle'));
 function fillMenu(m, entries) {
   m.innerHTML = entries.map((en, i) => en === 'sep' ? '<div class="sep"></div>' :
     `<div class="mi${en.disabled ? ' disabled' : ''}${en.checked ? ' chk' : ''}${en.sub ? ' sub' : ''}" data-i="${i}">` +
-    (en.icon ? `<svg class="mic"><use href="#${en.icon}"/></svg>` : '') +
+    `<svg class="mic">${en.icon ? `<use href="#${en.icon}"/>` : ''}</svg>` +
     (en.bold ? `<b>${esc(en.label)}</b>` : esc(en.label)) + '</div>').join('');
   m.onclick = (e) => {
     const el = e.target.closest('.mi');
@@ -641,10 +642,15 @@ $('files').addEventListener('contextmenu', (e) => {
   if (!el) {
     sel.clear();
     showSelection();
+    const here = cwd === COMPUTER ? [] : ['sep',
+      { label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(cwd) },
+      isPinned(cwd) ? { label: 'Unpin This Folder', icon: 'p-pin', click: () => unpin(cwd) }
+        : { label: 'Pin This Folder', icon: 'p-pin', click: () => pin(cwd) }];
     openMenu([
       { label: 'View', sub: viewEntries() },
       { label: 'Arrange Icons By', sub: sortEntries() },
-      { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) }
+      { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) },
+      ...here
     ], e.clientX, e.clientY);
     return;
   }
@@ -657,6 +663,14 @@ $('files').addEventListener('contextmenu', (e) => {
   const picked = items.filter((x) => sel.has(x.path));
   const entries = [{ label: 'Open', bold: true, click: () => openSelected() }];
   if (picked.every(isFolder)) entries.push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+  if (picked.length === 1 && isFolder(it)) {
+    entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(it.path) });
+    if (!it.volume) {
+      entries.push('sep');
+      entries.push(isPinned(it.path) ? { label: 'Unpin', icon: 'p-pin', click: () => unpin(it.path) }
+        : { label: 'Pin to Pinned', icon: 'p-pin', click: () => pin(it.path) });
+    }
+  }
   openMenu(entries, e.clientX, e.clientY);
 });
 
@@ -704,7 +718,9 @@ $('b-places').addEventListener('mousedown', (e) => {
   for (let p = cwd; p; p = parentOf(p)) list.push(p);
   const r = $('b-places').closest('.addr').getBoundingClientRect();
   $('b-places').classList.add('down');
-  openMenu(list.map((p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', checked: p === cwd, click: () => navigate(p) })), r.left, r.bottom + 2);
+  const entry = (p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', checked: p === cwd, click: () => navigate(p) });
+  const pinned = pins().filter((p) => !list.includes(p));
+  openMenu([...list.map(entry), ...(pinned.length ? ['sep', ...pinned.map(entry)] : [])], r.left, r.bottom + 2);
 });
 
 // ---------- address bar ----------
@@ -845,6 +861,9 @@ api.onCommand(({ command, arg }) => {
     case 'up': up(); break;
     case 'home': navigate(app.home); break;
     case 'computer': navigate(COMPUTER); break;
+    case 'navigate': navigate(arg); break;
+    case 'terminal': openTerminal(cwd === COMPUTER ? null : cwd); break;
+    case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
     case 'address': path.focus(); break;
     default:
@@ -860,6 +879,9 @@ function applyState(state) {
   if (old && JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort)) {
     items = sortItems(items);
     render();
+  } else if (old && JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins)) {
+    renderPane();
+    renderTree();
   }
 }
 
@@ -872,6 +894,36 @@ api.getState().then((state) => {
   navigate(cwd, { push: false });
   $('files').focus();
 });
+
+// ---------- pinned folders and the terminal ----------
+
+const pins = () => (app ? app.settings.pins : []);
+const isPinned = (p) => pins().includes(p);
+
+function pin(p) {
+  if (!p || p === COMPUTER || isPinned(p)) return;
+  api.updateSettings({ pins: [...pins(), p] });
+}
+
+function unpin(p) {
+  api.updateSettings({ pins: pins().filter((x) => x !== p) });
+}
+
+// The folder a task works on: the selected folder, or the open one.
+function targetFolder() {
+  const picked = selectedItems();
+  if (picked.length === 1 && isFolder(picked[0]) && !picked[0].volume) return picked[0].path;
+  if (picked.length === 1 && picked[0].volume) return picked[0].path;
+  return cwd === COMPUTER ? null : cwd;
+}
+
+function openTerminal(p = targetFolder()) {
+  if (p) api.openTerminal(p);
+}
+
+// The toolbar button and the File menu open the folder that's open, the
+// task and the right click open the folder they're about.
+$('b-term').addEventListener('click', () => openTerminal(cwd === COMPUTER ? null : cwd));
 
 // ---------- the left pane: Tasks ----------
 
@@ -898,16 +950,25 @@ function selectedItems() {
 function tasksBox() {
   const picked = selectedItems();
   const one = picked.length === 1 ? picked[0] : null;
+  const pinRow = (p) => isPinned(p) ? taskRow('unpin', 'p-pin', 'Unpin this folder') : taskRow('pin', 'p-pin', 'Pin this folder');
   if (!picked.length) {
     if (cwd === COMPUTER) return '';
-    return box('tasks', 'Folder Tasks', taskRow('newWindowHere', 'p-open', 'Open this folder in a new window'), true);
+    return box('tasks', 'Folder Tasks', taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
+      taskRow('newWindowHere', 'p-open', 'Open this folder in a new window'), true);
   }
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
-      taskRow('openNew', 'p-open', 'Open in a new window'), true);
+      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(one.path), true);
   }
   if (one) return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file'), true);
   return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items'), true);
+}
+
+function pinnedBox() {
+  const rows = pins().map((p, i) =>
+    `<div class="row" draggable="true" data-pin="${i}" data-place="${esc(p)}"><svg><use href="#${specialIcon(p) || 'i-folder'}"/></svg>` +
+    `<span class="lb">${esc(placeLabel(p))}</span><span class="x" data-unpin="${i}" title="Unpin">&times;</span></div>`).join('');
+  return box('pinned', 'Pinned', rows + '<div class="hint">Drop a folder here to pin it.</div>');
 }
 
 function placesBox() {
@@ -955,7 +1016,7 @@ async function loadCount() {
 
 function renderPane() {
   if (pane !== 'tasks' || !app) return;
-  $('pane').innerHTML = tasksBox() + placesBox() + detailsBox();
+  $('pane').innerHTML = tasksBox() + pinnedBox() + placesBox() + detailsBox();
   loadCount();
 }
 
@@ -966,6 +1027,11 @@ $('pane').addEventListener('click', (e) => {
     if (collapsed.has(b.dataset.box)) collapsed.delete(b.dataset.box);
     else collapsed.add(b.dataset.box);
     b.classList.toggle('shut');
+    return;
+  }
+  const x = e.target.closest('[data-unpin]');
+  if (x) {
+    unpin(pins()[x.dataset.unpin]);
     return;
   }
   const place = e.target.closest('[data-place]');
@@ -980,6 +1046,90 @@ $('pane').addEventListener('click', (e) => {
   if (act === 'open') openSelected();
   else if (act === 'openNew') openSelected({ newWindow: true });
   else if (act === 'newWindowHere') api.openWindow(cwd);
+  else if (act === 'terminal') openTerminal();
+  else if (act === 'pin') pin(targetFolder());
+  else if (act === 'unpin') unpin(targetFolder());
+});
+
+// Pinning by dropping a folder on the Pinned box, from this window or from
+// Finder, and putting the pins in order by dragging them.
+const DRAG_TYPE = 'application/x-filedrawer-paths';
+let dragPin = null; // the pin being moved
+
+$('files').addEventListener('dragstart', (e) => {
+  const el = e.target.closest('.item');
+  if (!el) return;
+  const it = items[el.dataset.i];
+  if (!sel.has(it.path)) {
+    sel = new Set([it.path]);
+    anchor = cursor = it.path;
+    showSelection();
+  }
+  const folders = items.filter((x) => sel.has(x.path) && isFolder(x) && !x.volume).map((x) => x.path);
+  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(folders));
+  e.dataTransfer.effectAllowed = 'link';
+});
+
+$('pane').addEventListener('dragstart', (e) => {
+  const row = e.target.closest('[data-pin]');
+  if (!row) return;
+  dragPin = Number(row.dataset.pin);
+  e.dataTransfer.setData(DRAG_TYPE, '[]');
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('pane').addEventListener('dragend', () => {
+  dragPin = null;
+  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+});
+
+function pinnedTarget(e) {
+  const b = e.target.closest('[data-box="pinned"]');
+  if (!b) return null;
+  const row = e.target.closest('[data-pin]');
+  return { box: b, row };
+}
+
+$('pane').addEventListener('dragover', (e) => {
+  const t = pinnedTarget(e);
+  if (!t) return;
+  const types = [...e.dataTransfer.types];
+  if (!types.includes(DRAG_TYPE) && !types.includes('Files')) return;
+  e.preventDefault();
+  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+  if (dragPin !== null && t.row) t.row.classList.add('drop-before');
+  else t.box.classList.add('drop-on');
+});
+
+$('pane').addEventListener('drop', async (e) => {
+  const t = pinnedTarget(e);
+  if (!t) return;
+  e.preventDefault();
+  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+  if (dragPin !== null) {
+    const list = pins().slice();
+    const [moved] = list.splice(dragPin, 1);
+    let at = t.row ? Number(t.row.dataset.pin) : list.length;
+    if (t.row && Number(t.row.dataset.pin) > dragPin) at -= 1;
+    list.splice(at, 0, moved);
+    dragPin = null;
+    api.updateSettings({ pins: list });
+    return;
+  }
+  let paths = [];
+  try {
+    paths = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]');
+  } catch {
+    paths = [];
+  }
+  for (const f of e.dataTransfer.files) {
+    const p = api.pathForFile(f);
+    if (p) {
+      const res = await api.resolve(p, cwd);
+      if (res.type === 'dir') paths.push(res.path);
+    }
+  }
+  const fresh = paths.filter((p) => !isPinned(p));
+  if (fresh.length) api.updateSettings({ pins: [...pins(), ...fresh] });
 });
 
 // ---------- the left pane: the Folders tree ----------
@@ -989,7 +1139,9 @@ const treeOpen = new Set(); // paths shown open
 let treeShownFor = null; // the folder the tree last opened its way down to
 
 function treeRoots() {
+  const pinned = pins().map((p) => ({ path: p, label: placeLabel(p), icon: specialIcon(p) || 'i-folder', leaf: true }));
   return [
+    ...(pinned.length ? [{ group: 'Pinned' }, ...pinned, { group: '' }] : []),
     { path: app.home, label: app.user, icon: 'p-home' },
     { path: COMPUTER, label: 'Computer', icon: 'p-computer' },
     { path: '/Applications', label: 'Applications', icon: 'p-apps' },
@@ -1022,12 +1174,13 @@ function chainTo(p) {
 }
 
 function nodeHtml(n, depth) {
+  if (n.group !== undefined) return `<li class="grp">${esc(n.group)}</li>`;
   const kids = treeKids.get(n.path);
   const open = treeOpen.has(n.path);
   const tw = n.leaf || (kids && !kids.length) ? '<span class="tw none"></span>' : `<span class="tw">${open ? '&minus;' : '+'}</span>`;
   let html = `<li><div class="n${n.path === cwd ? ' sel' : ''}" data-path="${esc(n.path)}" style="padding-left:${4 + depth * 16}px">` +
     `${tw}<svg><use href="#${n.icon}"/></svg><span class="lb">${esc(n.label)}</span></div>`;
-  if (open && kids && kids.length) html += '<ul>' + kids.map((k) => nodeHtml(k, depth + 1)).join('') + '</ul>';
+  if (!n.leaf && open && kids && kids.length) html += '<ul>' + kids.map((k) => nodeHtml(k, depth + 1)).join('') + '</ul>';
   return html + '</li>';
 }
 
@@ -1081,7 +1234,7 @@ function setPane(p, { save = true } = {}) {
   pane = p === 'folders' ? 'folders' : 'tasks';
   document.body.dataset.pane = pane;
   $('b-folders').classList.toggle('down', pane === 'folders');
-  api.setView({ view, pane });
+  api.setView({ view, pane, cwd });
   if (save) api.updateSettings({ pane });
   treeShownFor = null;
   renderPane();

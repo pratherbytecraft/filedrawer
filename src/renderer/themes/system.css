@@ -1,5 +1,6 @@
 /* System theme: the Mac's light or dark look and accent color. */
 :root {
+  color-scheme: light;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --fs: 13px;
   --tb-icon: 18px;
@@ -10,6 +11,7 @@
   --hover: rgba(0,0,0,.06); --zebra: #f5f5f7; --field: rgba(0,0,0,.05); --idle-sel: #dcdce0; --side: #ececef;
 }
 [data-appearance="dark"] {
+  color-scheme: dark;
   --bg: #1e1e1e; --chrome: #2a2a2c; --line: rgba(255,255,255,.1); --text: #f2f2f7; --dim: #98989d;
   --hover: rgba(255,255,255,.08); --zebra: #242426; --field: rgba(255,255,255,.07); --idle-sel: #3a3a3c; --side: #252527;
 }
@@ -54,6 +56,12 @@ body { background: var(--bg); color: var(--text); }
 .box .bd { padding: 2px 0; }
 .box .row { color: var(--text); padding: 4px 8px; border-radius: 6px; gap: 8px; }
 .box .row:hover { background: var(--hover); }
+.box .row .x { color: var(--dim); border-radius: 4px; }
+.box .row .x:hover { color: var(--text); }
+.box .hint { color: var(--dim); padding: 3px 8px; font-size: 12px; }
+.box.drop-on .bd { border-radius: 6px; }
+.tree .grp { color: var(--dim); font-size: 11px; font-weight: 600; padding: 8px 14px 2px; }
+.tree .grp:empty { padding: 4px 0 0; }
 .box .det { color: var(--text); padding: 2px 8px; font-size: 12px; line-height: 1.5; }
 .box .det .d { color: var(--dim); }
 .tree .head { color: var(--dim); font-size: 11px; font-weight: 600; padding: 10px 8px 4px 14px; }
@@ -115,6 +123,7 @@ body.idle .g-thumbs .item.sel .frame { box-shadow: 0 0 0 3px var(--idle-sel); }
 .menu .mi { border-radius: 4px; height: 23px; padding: 0 20px 0 8px; }
 .menu .mi:hover, .menu .mi.on { background: var(--accent); color: var(--accent-text); }
 .menu .mi b { font-weight: 600; }
+.menu .mi .mic { display: none; }
 .menu .mi.chk { padding-left: 20px; }
 .menu .mi.chk::before { content: "\2713"; position: absolute; left: 5px; font-size: 11px; }
 .menu .sep { height: 1px; background: var(--line); margin: 4px 8px; }

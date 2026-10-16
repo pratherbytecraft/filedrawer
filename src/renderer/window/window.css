@@ -59,6 +59,13 @@ body[data-pane="tasks"] .tree, body[data-pane="folders"] .pane { display: none; 
 .box .row { display: flex; align-items: center; gap: 6px; cursor: default; }
 .box .row svg { width: 16px; height: 16px; flex: none; }
 .box .det b { display: block; margin-bottom: 2px; word-break: break-word; }
+.box .row .lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box .row .x { display: none; padding: 0 3px; }
+.box .row:hover .x { display: block; }
+.box .hint { font-style: italic; }
+.box.drop-on .bd { outline: 2px solid var(--accent); outline-offset: -2px; }
+.box .row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.tree .grp { cursor: default; }
 .files { flex: 1; overflow: auto; position: relative; outline: none; }
 
 /* Details */
