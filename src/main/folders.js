@@ -109,7 +109,8 @@ async function volumes() {
 }
 
 // { path, items, modified } or { path, error } where error is missing, denied or other.
-async function list(dir, { hidden = false } = {}) {
+// hidden keeps hidden items in, extensions shows every name whole.
+async function list(dir, { hidden = false, extensions = false } = {}) {
   if (dir === COMPUTER) return { path: dir, items: await volumes() };
   let names;
   try {
@@ -133,6 +134,7 @@ async function list(dir, { hidden = false } = {}) {
     });
   }
   if (!hidden) items = items.filter((it) => !it.hidden);
+  if (extensions) items.forEach((it) => { it.display = it.name; });
   const self = await fs.promises.stat(dir).catch(() => null);
   return { path: dir, items, modified: self ? self.mtimeMs : null };
 }

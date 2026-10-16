@@ -58,5 +58,17 @@ contextBridge.exposeInMainWorld('filedrawer', {
   open: (p) => ipcRenderer.send('open', p),
   openWindow: (dir) => ipcRenderer.send('window:open', dir),
   setTitle: (name, dir) => ipcRenderer.send('window:title', { name, dir }),
-  openPrivacy: () => ipcRenderer.send('privacy:open')
+  openPrivacy: () => ipcRenderer.send('privacy:open'),
+  // The settings window.
+  openSettings: (page) => ipcRenderer.send('settings:open', page),
+  onSettingsPage: on('settings:page'),
+  terminals: () => ipcRenderer.invoke('settings:terminals'),
+  setLoginItem: (on) => ipcRenderer.send('settings:login', on),
+  checkUpdates: () => ipcRenderer.send('updates:check'),
+  exportSettings: () => ipcRenderer.send('settings:export'),
+  importSettings: () => ipcRenderer.send('settings:import'),
+  resetSettings: () => ipcRenderer.send('settings:reset'),
+  chooseStartFolder: () => ipcRenderer.send('settings:startFolder'),
+  chooseTerminal: () => ipcRenderer.send('settings:terminal'),
+  openLink: (name) => ipcRenderer.send('link', name)
 });

@@ -178,7 +178,7 @@ function sortItems(list) {
   return list.slice().sort((a, b) => {
     const fa = isFolder(a);
     const fb = isFolder(b);
-    if (fa !== fb) return fa ? -1 : 1; // folders first, like the old windows
+    if (fa !== fb && app.settings.foldersFirst) return fa ? -1 : 1; // folders first, like the old windows
     let c = 0;
     if (key === 'size') c = (a.size ?? -1) - (b.size ?? -1);
     else if (key === 'kind') c = a.kind.localeCompare(b.kind);
@@ -292,7 +292,9 @@ function setView(v) {
   if (!RENDER[v] || v === view) return;
   view = v;
   api.setView({ view, pane, cwd });
-  api.updateSettings({ view: v });
+  const patch = { view: v };
+  if (app.settings.perFolderView && cwd !== COMPUTER) patch.folderViews = { ...app.settings.folderViews, [cwd]: v };
+  api.updateSettings(patch);
   const keep = $('files').scrollTop;
   render();
   if (cursor) scrollToItem(cursor);
@@ -341,7 +343,8 @@ async function loadVolume() {
 // ---------- going places ----------
 
 function updateTitle() {
-  const name = cwd === COMPUTER || cwd === '/' ? placeLabel(cwd) : basename(cwd);
+  const short = cwd === COMPUTER || cwd === '/' ? placeLabel(cwd) : basename(cwd);
+  const name = app.settings.fullPathTitle && cwd !== COMPUTER ? cwd : short;
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
@@ -366,7 +369,7 @@ function updateChrome() {
 // holds on to the selection (a refresh).
 async function navigate(dir, { push = true, select = null, selectMany = null, keep = false, changed = false } = {}) {
   const token = ++listToken;
-  const res = await api.list(dir, { hidden: app.settings.showHidden });
+  const res = await api.list(dir, { hidden: app.settings.showHidden, extensions: app.settings.showExtensions });
   if (token !== listToken) return;
   // The open folder was deleted or moved away: go to the nearest folder above it that's still there.
   if (changed && res.error === 'missing') {
@@ -388,6 +391,15 @@ async function navigate(dir, { push = true, select = null, selectMany = null, ke
   }
   const same = dir === cwd;
   cwd = dir;
+  // A folder with a view of its own opens in it, the rest in the view picked last.
+  if (!same && app.settings.perFolderView) {
+    const own = app.settings.folderViews[dir];
+    const want = RENDER[own] ? own : app.settings.view;
+    if (want !== view) {
+      view = want;
+      api.setView({ view, pane, cwd });
+    }
+  }
   listError = res.error || null;
   folderModified = res.modified || null;
   items = res.error ? [] : sortItems(res.items);
@@ -423,7 +435,8 @@ function up() {
   if (parent) navigate(parent, { select: cwd });
 }
 
-function openItem(it, { newWindow = false } = {}) {
+// Folders open here or in a new window, per Folder Options.
+function openItem(it, { newWindow = app.settings.openFolders === 'new' } = {}) {
   if (it.alias && it.aliasDir) {
     if (newWindow) api.openWindow(it.alias);
     else navigate(it.alias);
@@ -437,7 +450,7 @@ function openItem(it, { newWindow = false } = {}) {
 
 // Return opens the selection. One folder opens here, more than one each
 // open in their own window.
-function openSelected({ newWindow = false } = {}) {
+function openSelected({ newWindow = app.settings.openFolders === 'new' } = {}) {
   const picked = items.filter((it) => sel.has(it.path));
   if (!picked.length) return;
   const many = picked.filter(isFolder).length > 1;
@@ -495,9 +508,22 @@ $('files').addEventListener('mousedown', (e) => {
   showSelection();
 });
 
+// Command double click always opens a folder in a new window.
 $('files').addEventListener('dblclick', (e) => {
   const el = e.target.closest('.item');
-  if (el) openItem(items[el.dataset.i]);
+  if (!el || app.settings.clickToOpen === 'single') return;
+  openItem(items[el.dataset.i], e.metaKey ? { newWindow: true } : undefined);
+});
+
+// With single click, a plain click on an item opens it once the button comes
+// up where it went down, so a drag still moves it.
+$('files').addEventListener('click', (e) => {
+  if (app.settings.clickToOpen !== 'single' || e.shiftKey || e.altKey || e.button !== 0) return;
+  if (e.metaKey && !e.target.closest('.item')) return;
+  const el = e.target.closest('.item');
+  if (!el || e.target.closest('input')) return;
+  if (e.metaKey) return; // Command click adds to the selection
+  openItem(items[el.dataset.i]);
 });
 
 // How far the arrow keys move in the current view: Up and Down go a whole
@@ -929,10 +955,28 @@ api.onCommand(({ command, arg }) => {
 
 // ---------- start ----------
 
+// Settings that only change how things are drawn.
+const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane', 'terminalButton'];
+
+function applyChrome() {
+  const s = app.settings;
+  document.body.classList.toggle('no-pane', !s.showPane);
+  $('b-term').hidden = !s.terminalButton;
+  $('b-term').previousElementSibling.hidden = !s.terminalButton;
+}
+
 function applyState(state) {
   const old = app;
   app = state;
   window.applyTheme(state);
+  applyChrome();
+  if (old && LOOK_KEYS.some((k) => old.settings[k] !== state.settings[k])) {
+    treeKids.clear();
+    treeShownFor = null;
+    navigate(cwd, { push: false, keep: true });
+    updateTitle();
+    return;
+  }
   if (old && (old.settings.showHidden !== state.settings.showHidden)) {
     treeShownFor = null;
     navigate(cwd, { push: false, keep: true });
@@ -962,7 +1006,8 @@ api.onFolderChanged((dir) => {
 });
 api.getState().then((state) => {
   applyState(state);
-  view = state.settings.view;
+  const s = state.settings;
+  view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
   COMPUTER = state.computer;
   setPane(state.settings.pane, { save: false });
   navigate(cwd, { push: false });
@@ -1227,7 +1272,7 @@ async function loadKids(p) {
   if (treeKids.has(p)) return;
   treeKids.set(p, null); // asked for
   // Hidden folders are kept, so the way down to an open hidden folder can show.
-  const res = await api.list(p, { hidden: true });
+  const res = await api.list(p, { hidden: true, extensions: app.settings.showExtensions });
   const dirs = (res.items || []).filter(isFolder)
     .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' }))
     .map((it) => ({ path: it.path, label: it.display, hidden: it.hidden, icon: it.volume ? 'p-drive' : specialIcon(it.path) || 'i-folder' }));

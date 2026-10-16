@@ -103,7 +103,7 @@ $('files').addEventListener('mousedown', (e) => {
   slowClick = null;
   const el = e.target.closest('.item');
   const onName = e.target.closest('.nm');
-  if (!el || !onName || e.button !== 0 || e.metaKey || e.shiftKey) return;
+  if (!el || !onName || e.button !== 0 || e.metaKey || e.shiftKey || app.settings.clickToOpen === 'single') return;
   const p = items[el.dataset.i].path;
   if (sel.size === 1 && sel.has(p)) {
     const x = e.clientX;

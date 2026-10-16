@@ -1,0 +1,75 @@
+/* The small window at the top of the settings window, in each theme and scheme. */
+
+  .mini { position: absolute; left: 50%; top: 14px; width: 520px; transform: translateX(-50%); border-radius: 8px 8px 0 0; overflow: hidden; font-size: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .mini .tb { height: 22px; display: flex; align-items: center; gap: 5px; padding: 0 8px; }
+  .mini .tb .l { display: flex; gap: 4px; }
+  .mini .tb .l i { width: 8px; height: 8px; border-radius: 50%; background: #ff5f57; } .mini .tb .l i:nth-child(2) { background: #febc2e; } .mini .tb .l i:nth-child(3) { background: #28c840; }
+  .mini .tb .t { flex: 1; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 36px; }
+  .mini .tools { height: 22px; display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+  .mini .tools span { opacity: .8; }
+  .mini .addr { height: 20px; display: flex; align-items: center; padding: 0 8px 4px; }
+  .mini .addr div { flex: 1; height: 15px; border-radius: 4px; padding: 0 6px; display: flex; align-items: center; }
+  .mini .body { display: flex; height: 140px; }
+  .mini .pane { width: 120px; padding: 6px; }
+  .mini .pane b { display: block; font-size: 9px; margin: 2px 0 4px; }
+  .mini .pane span { display: block; padding: 2px 0; }
+  .mini .list { flex: 1; padding: 4px 0; }
+  .mini .list div { display: flex; gap: 6px; align-items: center; padding: 2px 8px; }
+  .mini .list div i { width: 10px; height: 9px; border-radius: 1px; background: #8fc7f7; flex: none; }
+  .mini .list div i.f { background: #e9e9e9; border: 1px solid #aaa; width: 8px; height: 10px; }
+  .mini .list div.sel span { padding: 0 2px; }
+  .mini .list div.hid { opacity: .45; }
+  .no-pane .mini .pane { display: none; }
+
+  /* System */
+  .mini.system { background: #fff; color: #1d1d1f; }
+  .mini.system .tb, .mini.system .tools, .mini.system .addr { background: #f3f3f5; }
+  .mini.system .addr div { background: rgba(0,0,0,.06); }
+  .mini.system .pane { background: #ececef; }
+  .mini.system .pane b { color: #86868b; }
+  .mini.system .list div.sel { background: var(--accent); color: #fff; }
+  .mini.system.dark { background: #1e1e1e; color: #f2f2f7; }
+  .mini.system.dark .tb, .mini.system.dark .tools, .mini.system.dark .addr { background: #2a2a2c; }
+  .mini.system.dark .addr div { background: rgba(255,255,255,.08); }
+  .mini.system.dark .pane { background: #252527; }
+
+  /* Classic 2001 */
+  .mini.classic-2001 { background: #fff; color: #000; font-family: Tahoma, Geneva, sans-serif; border: 3px solid var(--c1); border-top: 0; }
+  .mini.classic-2001 .tb { margin: 0 -3px; color: #fff; font-family: "Trebuchet MS", Tahoma, sans-serif; background: linear-gradient(var(--c0), var(--c1)); text-shadow: 1px 1px rgba(0,0,0,.4); }
+  .mini.classic-2001 .tb .t { text-align: left; }
+  .mini.classic-2001 .tools, .mini.classic-2001 .addr { background: #ece9d8; }
+  .mini.classic-2001 .addr div { background: #fff; border: 1px solid #7f9db9; border-radius: 0; }
+  .mini.classic-2001 .pane { background: linear-gradient(var(--p0), var(--p1)); }
+  .mini.classic-2001 .pane b { background: linear-gradient(to right, #fff, var(--p2)); color: var(--p3); padding: 2px 4px; border-radius: 3px 3px 0 0; margin-bottom: 0; }
+  .mini.classic-2001 .pane span { background: var(--p4); color: var(--p3); padding: 2px 4px; }
+  .mini.classic-2001 .list i { background: #f1c447 !important; }
+  .mini.classic-2001 .list div.sel span { background: #316ac5; color: #fff; }
+  .mini.classic-2001.blue { --c0: #0997ff; --c1: #0053ee; --p0: #7ba2e7; --p1: #6375d6; --p2: #c6d3f7; --p3: #215dc6; --p4: #d6dff7; }
+  .mini.classic-2001.olive { --c0: #a9ba80; --c1: #7f9152; --p0: #c5d1a0; --p1: #a1b273; --p2: #e2e9c8; --p3: #4f5e2c; --p4: #eef2df; }
+  .mini.classic-2001.silver { --c0: #f2f2f6; --c1: #a9afc4; --p0: #c6cad9; --p1: #9ea4bb; --p2: #e4e7f0; --p3: #3b3f52; --p4: #eef0f5; }
+  .mini.classic-2001.silver .tb { color: #1b1b1b; text-shadow: none; }
+
+  /* Classic 1995 */
+  .mini.classic-1995 { background: var(--face); color: #000; font-family: Tahoma, Geneva, sans-serif; border-radius: 0; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff, 0 8px 24px rgba(0,0,0,.35); padding: 3px; }
+  .mini.classic-1995 .tb { color: #fff; font-weight: bold; background: linear-gradient(90deg, var(--t1), var(--t2)); }
+  .mini.classic-1995 .tb .t { text-align: left; }
+  .mini.classic-1995 .addr div { background: #fff; border-radius: 0; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; }
+  .mini.classic-1995 .body { background: #fff; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; }
+  .mini.classic-1995 .pane { background: var(--face); border-right: 1px solid #808080; }
+  .mini.classic-1995 .list i { background: #f1c447 !important; }
+  .mini.classic-1995 .list div.sel span { background: var(--t1); color: #fff; }
+  .mini.classic-1995.standard { --face: #c0c0c0; --t1: #000080; --t2: #1084d0; }
+  .mini.classic-1995.brick { --face: #c2bfa5; --t1: #800000; --t2: #c08060; }
+  .mini.classic-1995.teal { --face: #a8c8c0; --t1: #006060; --t2: #40a0a0; }
+  .mini.classic-1995.slate { --face: #98a8b8; --t1: #304860; --t2: #7090b0; }
+
+  /* Classic 2009 */
+  .mini.classic-2009 { background: #fff; color: #000; font-family: "Segoe UI", -apple-system, sans-serif; border-radius: 8px 8px 0 0; }
+  .mini.classic-2009 .tb, .mini.classic-2009 .tools, .mini.classic-2009 .addr { background: linear-gradient(color-mix(in srgb, var(--g) 55%, #fff), color-mix(in srgb, var(--g) 80%, #fff)); }
+  .mini.classic-2009 .tb .t { text-align: left; font-weight: normal; }
+  .mini.classic-2009 .addr div { background: rgba(255,255,255,.8); border: 1px solid rgba(0,0,0,.25); border-radius: 2px; }
+  .mini.classic-2009 .pane { background: linear-gradient(#f4f8fc, #e6eef7); border-right: 1px solid #d5dfe8; }
+  .mini.classic-2009 .pane b { color: #1e395b; }
+  .mini.classic-2009 .list div.sel { background: linear-gradient(#e8f3fd, #c4e0fc); outline: 1px solid #84acdd; outline-offset: -1px; }
+  .mini.classic-2009.sky { --g: #4a9ff5; } .mini.classic-2009.dusk { --g: #2c4f8a; } .mini.classic-2009.leaf { --g: #4ca54d; } .mini.classic-2009.ruby { --g: #c8343b; }
+  .mini.classic-2009.dusk .tb, .mini.classic-2009.dusk .tools { color: #fff; }

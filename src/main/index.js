@@ -13,6 +13,8 @@ const ops = require('./ops');
 const undo = require('./undo');
 const copier = require('./copier');
 const props = require('./props');
+const prefs = require('./prefs');
+const updates = require('./updates');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -37,12 +39,19 @@ function state() {
     home: folders.HOME,
     cut: cut ? cut.paths : [],
     computer: folders.COMPUTER,
-    user: os.userInfo().username
+    user: os.userInfo().username,
+    version: VERSION,
+    loginItem: prefs.loginItem(),
+    update: updates.get(),
+    themes: THEME_LIST
   };
 }
 
+// Every window that shows settings: the folder windows and the settings window.
 function broadcast(channel, payload) {
   for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload);
+  const pw = prefs.window;
+  if (pw && !pw.isDestroyed()) pw.webContents.send(channel, payload);
 }
 
 function pushState() {
@@ -167,12 +176,12 @@ function argvFolders(argv) {
 app.on('second-instance', (_e, argv) => {
   const list = argvFolders(argv);
   if (list.length) list.forEach(openPath);
-  else openWindow(folders.HOME);
+  else openWindow(prefs.startFolder());
 });
 
 // The Dock icon clicked with no windows open.
 app.on('activate', () => {
-  if (ready && windows.size === 0) openWindow(folders.HOME);
+  if (ready && windows.size === 0) openWindow(prefs.startFolder());
 });
 
 // Like other Mac apps, Filedrawer stays open with no windows.
@@ -191,6 +200,12 @@ function send(command, arg) {
 
 // Opens a folder in the terminal app from the settings, or in Terminal if
 // that app isn't there.
+// The themes and their color schemes, for the settings window.
+const THEME_LIST = [
+  { id: 'system', name: 'System', schemes: [] },
+  { id: 'classic-2001', name: 'Classic 2001', schemes: [['blue', 'Blue']] }
+];
+
 function openTerminal(dir) {
   const want = settings.get().terminal || 'Terminal';
   execFile('open', ['-a', want, dir], (err) => {
@@ -209,7 +224,10 @@ function buildMenu() {
     {
       label: 'Filedrawer',
       submenu: [
-        { role: 'about', label: 'About Filedrawer' },
+        { label: 'About Filedrawer', click: () => prefs.show('about') },
+        { type: 'separator' },
+        { label: 'Settings...', accelerator: 'CmdOrCtrl+,', click: () => prefs.show() },
+        { label: 'Check for Updates...', click: () => updates.check(VERSION).then(() => prefs.show('general')) },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -229,7 +247,7 @@ function buildMenu() {
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             if (win && windows.has(win)) send('newWindow');
-            else openWindow(folders.HOME);
+            else openWindow(prefs.startFolder());
           }
         },
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
@@ -569,6 +587,18 @@ ipcMain.handle('send:copy', async (e, paths, dest) => {
 ipcMain.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
 
 ipcMain.handle('op:trash', async (e, paths) => {
+  if (settings.get().confirmTrash) {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `these ${paths.length} items`;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      message: `Move ${what} to the Trash?`,
+      buttons: ['Move to Trash', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1
+    });
+    if (response !== 0) return { items: [] };
+  }
   const res = await answer(e, await ops.trash(paths));
   if (res.items.length) {
     let items = res.items;
@@ -613,6 +643,15 @@ app.whenReady().then(() => {
   settings.init();
   helper.start();
   props.init({ rename: renameWithUndo });
+  prefs.init({ version: VERSION, onChange: pushState });
+  updates.onChange(pushState);
+  updates.schedule(VERSION, () => settings.get().updates.auto);
+  ipcMain.on('updates:check', () => updates.check(VERSION));
+  ipcMain.on('settings:open', (_e, page) => prefs.show(page));
+  ipcMain.on('link', (_e, name) => {
+    const links = { kofi: 'https://ko-fi.com/prathercc', issues: PKG.bugs.url, github: PKG.homepage };
+    if (links[name]) shell.openExternal(links[name]);
+  });
   app.setAboutPanelOptions({
     applicationName: 'Filedrawer',
     applicationVersion: VERSION,
@@ -629,5 +668,5 @@ app.whenReady().then(() => {
   ready = true;
   const start = queued.splice(0).concat(argvFolders(process.argv));
   if (start.length) start.forEach(openPath);
-  else openWindow(folders.HOME);
+  else openWindow(prefs.startFolder());
 });

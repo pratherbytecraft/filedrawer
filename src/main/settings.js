@@ -6,10 +6,32 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULTS = Object.freeze({
-  theme: 'system', // system | classic-2001
+  theme: 'system', // system | classic-2009 | classic-2001 | classic-1995
+  // Each classic theme's color scheme, kept apart so switching themes back keeps it.
+  schemes: {
+    'classic-2009': 'sky',
+    'classic-2001': 'blue',
+    'classic-1995': 'standard'
+  },
   appearance: 'auto', // auto | light | dark
   accent: 'auto', // auto | blue | purple | pink | red | orange | yellow | green | graphite
-  view: 'details', // the view a new window opens in, the one picked last
+  view: 'details', // the view picked last
+  newWindowView: 'last', // last (the view picked last) | thumbs | tiles | icons | list | details
+  startFolder: 'home', // home | documents | desktop | computer | custom (startPath)
+  startPath: '',
+  openFolders: 'same', // same | new: opening a folder replaces this window's, or opens a new window
+  clickToOpen: 'double', // double | single
+  showPane: true, // the left pane; off, the Folders button still shows the tree
+  perFolderView: false, // each folder keeps its own view (folderViews)
+  folderViews: {}, // folder path -> view, while perFolderView is on
+  showExtensions: false, // every extension, not only the ones the Mac shows
+  fullPathTitle: false, // the whole path in the title bar
+  foldersFirst: true, // folders above files whatever the sort
+  confirmTrash: false, // ask before moving items to the Trash
+  terminalButton: true, // Open Terminal Here on the toolbar
+  updates: {
+    auto: true // check npm for a newer version now and then, never installs
+  },
   pane: 'tasks', // tasks | folders: the left pane a new window opens with, the one picked last
   showHidden: false, // files the Mac keeps out of sight, shown dimmed
   pins: [], // pinned folders, as paths, in the order shown
@@ -49,7 +71,13 @@ function clean(saved, base) {
     const b = base[key];
     const v = saved[key];
     if (v === undefined) continue;
-    if (Array.isArray(b)) {
+    if (base === DEFAULTS && key === 'folderViews') {
+      // Any folder can be in here, so only the values are checked.
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.folderViews = {};
+        for (const [k, view] of Object.entries(v)) if (typeof view === 'string') out.folderViews[k] = view;
+      }
+    } else if (Array.isArray(b)) {
       if (Array.isArray(v)) out[key] = v.filter((x) => typeof x === 'string');
     } else if (b && typeof b === 'object') {
       out[key] = clean(v, b);
@@ -85,8 +113,21 @@ function save() {
 }
 
 function update(patch) {
-  current = merge(current, clean(patch, DEFAULTS));
+  const next = clean(patch, DEFAULTS);
+  current = merge(current, next);
+  // A folder's view is replaced, not merged, so one can be taken out.
+  if (next.folderViews) current = { ...current, folderViews: next.folderViews };
   return save();
+}
+
+// Everything from saved, the rest from the defaults, for an import or a reset.
+function replace(saved) {
+  current = merge(DEFAULTS, clean(saved, DEFAULTS));
+  return save();
+}
+
+function reset() {
+  return replace({});
 }
 
 function onChange(fn) {
@@ -94,4 +135,4 @@ function onChange(fn) {
   return () => listeners.delete(fn);
 }
 
-module.exports = { DEFAULTS, init, get, update, onChange };
+module.exports = { DEFAULTS, init, get, update, replace, reset, onChange };
