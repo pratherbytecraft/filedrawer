@@ -17,6 +17,11 @@
 //     -> {"id":3,"png":"<base64>"}
 //   {"id":4,"cmd":"volume","path":"/Users/you"}
 //     -> {"id":4,"name":"Macintosh HD","free":195000000000,"total":494000000000}
+//   {"id":5,"cmd":"trash","paths":["/Users/you/a.txt"]}
+//     -> {"id":5,"items":[{"from":"/Users/you/a.txt","to":"/Users/you/.Trash/a.txt"}]}
+//     (an item that couldn't go to the Trash has "error" instead of "to")
+//   {"id":6,"cmd":"move","from":"/Users/you/.Trash/a.txt","to":"/Users/you/a.txt"}
+//     -> {"id":6,"ok":true}
 // A request that fails gets {"id":n,"error":"..."}.
 import AppKit
 import Foundation
@@ -106,6 +111,31 @@ func handle(_ req: [String: Any]) {
             return
         }
         reply(["id": id, "png": data])
+    case "trash":
+        let paths = req["paths"] as? [String] ?? []
+        let items: [[String: Any]] = paths.map { p in
+            var landed: NSURL?
+            do {
+                try FileManager.default.trashItem(at: URL(fileURLWithPath: p), resultingItemURL: &landed)
+                return ["from": p, "to": landed?.path ?? ""]
+            } catch {
+                return ["from": p, "error": (error as NSError).localizedDescription]
+            }
+        }
+        reply(["id": id, "items": items])
+    case "move":
+        // Out of the Trash, for Undo. The helper does it so the move counts as
+        // Filedrawer's own, the same as the trashing did.
+        guard let from = req["from"] as? String, let to = req["to"] as? String else {
+            reply(["id": id, "error": "bad move"])
+            return
+        }
+        do {
+            try FileManager.default.moveItem(at: URL(fileURLWithPath: from), to: URL(fileURLWithPath: to))
+            reply(["id": id, "ok": true])
+        } catch {
+            reply(["id": id, "error": (error as NSError).localizedDescription])
+        }
     case "volume":
         reply(["id": id].merging(volume(req["path"] as? String ?? "/")) { a, _ in a })
     default:

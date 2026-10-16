@@ -680,17 +680,21 @@ $('files').addEventListener('contextmenu', (e) => {
     showSelection();
   }
   const picked = items.filter((x) => sel.has(x.path));
-  const entries = [{ label: 'Open', bold: true, click: () => openSelected() }];
-  if (picked.every(isFolder)) entries.push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
-  if (picked.length === 1 && !it.volume && cwd !== COMPUTER) entries.push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
+  // In groups like the old windows: opening, pinning, then changing.
+  const groups = [[{ label: 'Open', bold: true, click: () => openSelected() }], [], []];
+  if (picked.every(isFolder)) groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
   if (picked.length === 1 && isFolder(it)) {
-    entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(it.path) });
+    groups[0].push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(it.path) });
     if (!it.volume) {
-      entries.push('sep');
-      entries.push(isPinned(it.path) ? { label: 'Unpin', icon: 'p-pin', click: () => unpin(it.path) }
+      groups[1].push(isPinned(it.path) ? { label: 'Unpin', icon: 'p-pin', click: () => unpin(it.path) }
         : { label: 'Pin to Pinned', icon: 'p-pin', click: () => pin(it.path) });
     }
   }
+  if (cwd !== COMPUTER && !it.volume) {
+    if (picked.length === 1) groups[2].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
+    groups[2].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
+  }
+  const entries = groups.filter((g) => g.length).flatMap((g, i) => (i ? ['sep', ...g] : g));
   openMenu(entries, e.clientX, e.clientY);
 });
 
@@ -885,6 +889,14 @@ api.onCommand(({ command, arg }) => {
     case 'newFolder': makeNew('folder'); break;
     case 'newText': makeNew('text'); break;
     case 'rename': if (!typing) renameSelected(); break;
+    case 'trash': {
+      const field = document.activeElement;
+      if (field && field.matches('input')) deleteToStart(field);
+      else trashSelected();
+      break;
+    }
+    case 'undo':
+    case 'redo': undoOrRedo(command); break;
     case 'terminal': openTerminal(cwd === COMPUTER ? null : cwd); break;
     case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
@@ -999,10 +1011,15 @@ function tasksBox() {
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
       (one.volume ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
-      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(one.path), true);
+      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(one.path) +
+      (one.volume ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
   }
-  if (one) return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') + taskRow('rename', 'p-rename', 'Rename this file'), true);
-  return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items'), true);
+  if (one) {
+    return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') + taskRow('rename', 'p-rename', 'Rename this file') +
+      taskRow('trash', 'p-trash', 'Move this file to the Trash'), true);
+  }
+  return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items') +
+    (cwd === COMPUTER ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
 }
 
 function pinnedBox() {
@@ -1093,6 +1110,7 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'hidden') api.updateSettings({ showHidden: !app.settings.showHidden });
   else if (act === 'newFolder') makeNew('folder');
   else if (act === 'rename') renameSelected();
+  else if (act === 'trash') trashSelected();
 });
 
 // Pinning by dropping a folder on the Pinned box, from this window or from

@@ -1,8 +1,9 @@
-// Changing things on disk: renaming, and making new folders and text files.
-// Each call answers { path } on success or { error } with a message for the
-// user, which the caller shows.
+// Changing things on disk: renaming, making new folders and text files, and
+// moving to the Trash and back. Each call answers { path } (or { items }) on
+// success or { error } with a message for the user, which the caller shows.
 const fs = require('fs');
 const path = require('path');
+const helper = require('./helper');
 
 function message(err, what) {
   if (err.code === 'EACCES' || err.code === 'EPERM') return `Filedrawer doesn't have permission to ${what} here.`;
@@ -70,4 +71,30 @@ async function newTextFile(dir) {
   }
 }
 
-module.exports = { rename, newFolder, newTextFile, freeName, exists };
+// { items: [{ from, to }] } for what reached the Trash, with an error for
+// anything that didn't.
+async function trash(paths) {
+  const res = await helper.request('trash', { paths });
+  if (!res) return { error: 'The items couldn\'t be moved to the Trash.', items: [] };
+  const moved = res.items.filter((it) => it.to);
+  const failed = res.items.filter((it) => !it.to);
+  if (!failed.length) return { items: moved };
+  const name = path.basename(failed[0].from);
+  const error = failed.length === 1 ? `"${name}" couldn't be moved to the Trash. ${failed[0].error}`
+    : `${failed.length} items couldn't be moved to the Trash. ${failed[0].error}`;
+  return { error, items: moved };
+}
+
+// Puts trashed items back where they were, for Undo.
+async function untrash(items) {
+  for (const it of items) {
+    if (await exists(it.from)) return { error: `There's already an item named "${path.basename(it.from)}" where it came from.` };
+  }
+  for (const it of items) {
+    const res = await helper.request('move', { from: it.to, to: it.from });
+    if (!res) return { error: `"${path.basename(it.from)}" couldn't be put back. It may have been taken out of the Trash.` };
+  }
+  return {};
+}
+
+module.exports = { rename, newFolder, newTextFile, trash, untrash, freeName, exists };

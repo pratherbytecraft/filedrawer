@@ -125,6 +125,39 @@ $('files').addEventListener('dblclick', () => {
   slowClick = null;
 }, true);
 
+// ---------- the Trash and Undo ----------
+
+function trashSelected() {
+  if (cwd === COMPUTER) return;
+  const picked = selectedItems().filter((it) => !it.volume);
+  if (!picked.length) return;
+  sel.clear();
+  api.trash(picked.map((it) => it.path));
+}
+
+// Undo and Redo undo typing while a name or the address bar is being
+// edited, and what was done to files otherwise.
+function undoOrRedo(which) {
+  const field = document.activeElement;
+  if (field && field.matches('input')) document.execCommand(which);
+  else api.undo(which);
+}
+
+// The menu's Command Delete reaches a field being typed in as the Mac's
+// delete-to-the-start, since the menu catches the key first.
+function deleteToStart(input) {
+  const end = input.selectionEnd;
+  const start = input.selectionStart === end ? 0 : input.selectionStart;
+  input.setRangeText('', start, end, 'start');
+  input.dispatchEvent(new Event('input'));
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea') || e.key !== 'Delete') return;
+  e.preventDefault();
+  trashSelected();
+});
+
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {

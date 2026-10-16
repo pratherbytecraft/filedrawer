@@ -10,6 +10,7 @@ const system = require('./system');
 const helper = require('./helper');
 const folders = require('./folders');
 const ops = require('./ops');
+const undo = require('./undo');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -198,6 +199,7 @@ function buildMenu() {
   const front = BrowserWindow.getFocusedWindow();
   if (front && viewOf.has(front)) Object.assign(s, viewOf.get(front));
   const hasWindow = !!BrowserWindow.getFocusedWindow();
+  const labels = undo.labels();
   const cmd = (label, command, accelerator, extra = {}) => ({ label, accelerator, enabled: hasWindow, click: () => send(command), ...extra });
   const template = [
     {
@@ -232,6 +234,7 @@ function buildMenu() {
         cmd('New Folder', 'newFolder', 'CmdOrCtrl+Shift+N'),
         cmd('New Text Document', 'newText', null),
         cmd('Rename', 'rename', 'F2'),
+        cmd('Move to Trash', 'trash', 'CmdOrCtrl+Backspace'),
         { type: 'separator' },
         { role: 'close', label: 'Close Window' }
       ]
@@ -239,8 +242,8 @@ function buildMenu() {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        { label: labels.undo || 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => undoOrType('undo') },
+        { label: labels.redo || 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: () => undoOrType('redo') },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },
@@ -335,9 +338,76 @@ async function answer(e, res) {
   }
   return res;
 }
-ipcMain.handle('op:rename', async (e, from, name) => answer(e, await ops.rename(from, name)));
-ipcMain.handle('op:newFolder', async (e, dir) => answer(e, await ops.newFolder(dir)));
-ipcMain.handle('op:newText', async (e, dir) => answer(e, await ops.newTextFile(dir)));
+// Undo and Redo go to the window first, which undoes typing in a name or
+// the address bar itself, and asks for the file undo otherwise.
+function undoOrType(which) {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win && windows.has(win)) win.webContents.send('command', { command: which });
+  else runUndo(which);
+}
+
+async function runUndo(which, e) {
+  const res = which === 'redo' ? await undo.redo() : await undo.undo();
+  if (res && res.error) {
+    if (e) await answer(e, res);
+    else await dialog.showMessageBox({ type: 'warning', message: res.error, buttons: ['OK'] });
+  }
+}
+ipcMain.handle('op:undo', (e, which) => runUndo(which, e));
+
+ipcMain.handle('op:rename', async (e, from, name) => {
+  const res = await answer(e, await ops.rename(from, name));
+  if (res.path && res.path !== from) {
+    const to = res.path;
+    undo.push({
+      label: 'Rename',
+      undo: () => ops.rename(to, path.basename(from)),
+      redo: () => ops.rename(from, path.basename(to))
+    });
+  }
+  return res;
+});
+
+// A new item's undo moves it to the Trash, and its redo takes it out again.
+function newItemStep(label, p) {
+  let trashed = null;
+  return {
+    label,
+    undo: async () => {
+      const res = await ops.trash([p]);
+      trashed = res.items;
+      return res;
+    },
+    redo: () => ops.untrash(trashed || [])
+  };
+}
+ipcMain.handle('op:newFolder', async (e, dir) => {
+  const res = await answer(e, await ops.newFolder(dir));
+  if (res.path) undo.push(newItemStep('New Folder', res.path));
+  return res;
+});
+ipcMain.handle('op:newText', async (e, dir) => {
+  const res = await answer(e, await ops.newTextFile(dir));
+  if (res.path) undo.push(newItemStep('New Text Document', res.path));
+  return res;
+});
+
+ipcMain.handle('op:trash', async (e, paths) => {
+  const res = await answer(e, await ops.trash(paths));
+  if (res.items.length) {
+    let items = res.items;
+    undo.push({
+      label: 'Move to Trash',
+      undo: () => ops.untrash(items),
+      redo: async () => {
+        const again = await ops.trash(items.map((it) => it.from));
+        items = again.items;
+        return again;
+      }
+    });
+  }
+  return res;
+});
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
 ipcMain.on('folder:watch', (e, dir) => {
@@ -376,6 +446,7 @@ app.whenReady().then(() => {
     pushState();
     buildMenu();
   });
+  undo.onChange(buildMenu);
   system.watch(pushState);
   buildMenu();
   ready = true;
