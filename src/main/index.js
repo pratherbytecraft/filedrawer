@@ -1,6 +1,6 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
-const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, dialog } = require('electron');
+const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -375,6 +375,37 @@ ipcMain.handle('clip:paste', async (e, dest) => {
     pushState();
   }
   return { paths: res.done.map((d) => d.to) };
+});
+
+// Dragging items out of a window, as the Mac's own drag with the first
+// item's icon under the pointer.
+ipcMain.on('drag:start', async (e, paths) => {
+  let icon;
+  try {
+    icon = await app.getFileIcon(paths[0], { size: 'normal' });
+  } catch {
+    icon = null;
+  }
+  if (!icon || icon.isEmpty()) icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'Filedrawer.icns'));
+  e.sender.startDrag({ file: paths[0], files: paths, icon });
+});
+
+// A drop moves items that are on the same disk as the folder and copies
+// the rest, or copies everything with Option held.
+ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
+  const destDev = (await fs.promises.stat(dest)).dev;
+  const moves = [];
+  const copies = [];
+  for (const p of paths) {
+    const st = await fs.promises.lstat(p).catch(() => null);
+    if (!st) continue;
+    if (!copy && st.dev === destDev) moves.push(p);
+    else copies.push(p);
+  }
+  const done = [];
+  if (moves.length) done.push(...(await moveOrCopy(e, 'move', moves, dest)).done);
+  if (copies.length) done.push(...(await moveOrCopy(e, 'copy', copies, dest)).done);
+  return { paths: done.map((d) => d.to) };
 });
 
 // Runs a copy or move job, shows its error and puts it on the Undo list.

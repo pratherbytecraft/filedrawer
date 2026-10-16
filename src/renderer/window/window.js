@@ -229,7 +229,7 @@ const NOTES = {
   other: 'This folder couldn\'t be opened.'
 };
 
-const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}${it.hidden ? ' hid' : ''}${(app.cut || []).includes(it.path) ? ' cut' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
+const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}${it.hidden ? ' hid' : ''}${(app.cut || []).includes(it.path) ? ' cut' : ''}" data-i="${i}"${it.volume ? '' : ' draggable="true"'}`;
 const nameHtml = (it) => `<span class="nm">${esc(it.display)}</span>`;
 
 function renderIcons() {
@@ -1126,51 +1126,43 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'trash') trashSelected();
 });
 
-// Pinning by dropping a folder on the Pinned box, from this window or from
-// Finder, and putting the pins in order by dragging them.
-const DRAG_TYPE = 'application/x-filedrawer-paths';
+// Pinning by dropping a folder on the Pinned box (not on a pin, which moves
+// it into that folder, see edit.js), and putting the pins in order by
+// dragging them.
+const PIN_TYPE = 'application/x-filedrawer-pin';
 let dragPin = null; // the pin being moved
-
-$('files').addEventListener('dragstart', (e) => {
-  const el = e.target.closest('.item');
-  if (!el) return;
-  const it = items[el.dataset.i];
-  if (!sel.has(it.path)) {
-    sel = new Set([it.path]);
-    anchor = cursor = it.path;
-    showSelection();
-  }
-  const folders = items.filter((x) => sel.has(x.path) && isFolder(x) && !x.volume).map((x) => x.path);
-  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(folders));
-  e.dataTransfer.effectAllowed = 'link';
-});
 
 $('pane').addEventListener('dragstart', (e) => {
   const row = e.target.closest('[data-pin]');
   if (!row) return;
   dragPin = Number(row.dataset.pin);
-  e.dataTransfer.setData(DRAG_TYPE, '[]');
+  e.dataTransfer.setData(PIN_TYPE, String(dragPin));
   e.dataTransfer.effectAllowed = 'move';
 });
 $('pane').addEventListener('dragend', () => {
   dragPin = null;
-  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+  clearDropMarks();
 });
 
+function clearDropMarks() {
+  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+}
+
+// The Pinned box itself, for a pin being moved or a folder dropped off a pin.
 function pinnedTarget(e) {
   const b = e.target.closest('[data-box="pinned"]');
   if (!b) return null;
   const row = e.target.closest('[data-pin]');
+  if (dragPin === null && row) return null;
   return { box: b, row };
 }
 
 $('pane').addEventListener('dragover', (e) => {
   const t = pinnedTarget(e);
   if (!t) return;
-  const types = [...e.dataTransfer.types];
-  if (!types.includes(DRAG_TYPE) && !types.includes('Files')) return;
+  if (dragPin === null && ![...e.dataTransfer.types].includes('Files')) return;
   e.preventDefault();
-  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+  clearDropMarks();
   if (dragPin !== null && t.row) t.row.classList.add('drop-before');
   else t.box.classList.add('drop-on');
 });
@@ -1179,7 +1171,7 @@ $('pane').addEventListener('drop', async (e) => {
   const t = pinnedTarget(e);
   if (!t) return;
   e.preventDefault();
-  document.querySelectorAll('.drop-on, .drop-before').forEach((el) => el.classList.remove('drop-on', 'drop-before'));
+  clearDropMarks();
   if (dragPin !== null) {
     const list = pins().slice();
     const [moved] = list.splice(dragPin, 1);
@@ -1190,18 +1182,12 @@ $('pane').addEventListener('drop', async (e) => {
     api.updateSettings({ pins: list });
     return;
   }
-  let paths = [];
-  try {
-    paths = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]');
-  } catch {
-    paths = [];
-  }
-  for (const f of e.dataTransfer.files) {
-    const p = api.pathForFile(f);
-    if (p) {
-      const res = await api.resolve(p, cwd);
-      if (res.type === 'dir') paths.push(res.path);
-    }
+  // The dropped files' paths, read now: the list is empty once the event is over.
+  const dropped = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
+  const paths = [];
+  for (const p of dropped) {
+    const res = await api.resolve(p, cwd);
+    if (res.type === 'dir') paths.push(res.path);
   }
   const fresh = paths.filter((p) => !isPinned(p));
   if (fresh.length) api.updateSettings({ pins: [...pins(), ...fresh] });

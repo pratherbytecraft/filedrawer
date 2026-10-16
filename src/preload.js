@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('filedrawer', {
   copyFiles: (paths) => ipcRenderer.invoke('clip:copy', paths),
   cutFiles: (paths) => ipcRenderer.invoke('clip:cut', paths),
   paste: (dest) => ipcRenderer.invoke('clip:paste', dest),
+  startDrag: (paths) => ipcRenderer.send('drag:start', paths),
+  // copy forces a copy, otherwise items move on the same disk and copy to another.
+  drop: (paths, dest, copy) => ipcRenderer.invoke('op:drop', paths, dest, copy),
   // The progress window of a copy or move.
   onJob: on('job:update'),
   answerJob: (id, choice, all) => ipcRenderer.send('job:answer', id, choice, all),

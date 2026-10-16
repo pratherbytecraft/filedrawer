@@ -189,6 +189,81 @@ function showCut() {
   for (const el of rows()) el.classList.toggle('cut', cutSet.has(items[el.dataset.i].path));
 }
 
+// ---------- drag and drop ----------
+
+// Items leave with the Mac's own drag, so Finder, other apps and other
+// Filedrawer windows all take them the same way.
+$('files').addEventListener('dragstart', (e) => {
+  const el = e.target.closest('.item');
+  if (!el) return;
+  e.preventDefault();
+  if (renaming) return;
+  const it = items[el.dataset.i];
+  if (!sel.has(it.path)) {
+    sel = new Set([it.path]);
+    anchor = cursor = it.path;
+    showSelection();
+  }
+  const paths = selectedItems().filter((x) => !x.volume).map((x) => x.path);
+  if (paths.length) api.startDrag(paths);
+});
+
+// Where a drop lands: a folder in the list, the tree or the pane, the
+// Trash in Other Places, or the open folder.
+function dropTarget(e) {
+  const item = e.target.closest('#files .item');
+  if (item) {
+    const it = items[item.dataset.i];
+    if (isFolder(it)) return { dir: it.path, el: item };
+  }
+  if (e.target.closest('#files')) return cwd === COMPUTER || listError ? null : { dir: cwd, el: null };
+  const node = e.target.closest('#tree-list .n');
+  if (node) {
+    const p = node.dataset.path;
+    if (p === COMPUTER) return null;
+    return p === 'trash' ? { trash: true, el: node } : { dir: p, el: node };
+  }
+  const place = e.target.closest('#pane [data-place]');
+  if (place) {
+    const p = place.dataset.place;
+    if (p === COMPUTER) return null;
+    return p === 'trash' ? { trash: true, el: place } : { dir: p, el: place };
+  }
+  return null;
+}
+
+document.addEventListener('dragover', (e) => {
+  if (e.defaultPrevented || ![...e.dataTransfer.types].includes('Files')) return;
+  const t = dropTarget(e);
+  clearDropMarks();
+  if (!t) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
+  if (t.el) t.el.classList.add('drop-on');
+});
+
+document.addEventListener('dragleave', (e) => {
+  if (!e.relatedTarget) clearDropMarks();
+});
+
+document.addEventListener('drop', async (e) => {
+  if (e.defaultPrevented) return;
+  const t = dropTarget(e);
+  clearDropMarks();
+  if (!t) return;
+  e.preventDefault();
+  const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
+  if (!paths.length) return;
+  if (t.trash) {
+    api.trash(paths);
+    return;
+  }
+  // A folder dropped on itself stays where it is.
+  if (paths.includes(t.dir)) return;
+  const res = await api.drop(paths, t.dir, e.altKey);
+  if (t.dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
+});
+
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {
