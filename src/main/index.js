@@ -1,6 +1,6 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
-const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog } = require('electron');
+const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog, clipboard } = require('electron');
 
 // Electron reads .asar files as folders. Filedrawer doesn't use any, and
 // the ones inside other apps are plain files to list, measure and copy.
@@ -458,6 +458,8 @@ function buildMenu() {
         cmd('New Folder', 'newFolder', 'CmdOrCtrl+Shift+N'),
         cmd('New Text Document', 'newText', null),
         cmd('Rename', 'rename', 'F2'),
+        cmd('Duplicate', 'duplicate', 'CmdOrCtrl+D'),
+        cmd('Make Alias', 'alias', 'Ctrl+Cmd+A'),
         cmd('Move to Trash', 'trash', 'CmdOrCtrl+Backspace'),
         cmd('Properties', 'props', 'CmdOrCtrl+I'),
         { type: 'separator' },
@@ -473,6 +475,7 @@ function buildMenu() {
         { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => editOrFiles('cut') },
         { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => editOrFiles('copy') },
         { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => editOrFiles('paste') },
+        cmd('Copy Path', 'copyPath', 'Alt+CmdOrCtrl+C'),
         cmd('Select All', 'selectAll', 'CmdOrCtrl+A')
       ]
     },
@@ -631,21 +634,21 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
 });
 
 // Runs a copy or move job, shows its error and puts it on the Undo list.
-async function moveOrCopy(e, mode, sources, dest) {
+async function moveOrCopy(e, mode, sources, dest, label) {
   const near = BrowserWindow.fromWebContents(e.sender);
   const res = await copier.start({ mode, pairs: sources.map((src) => ({ src, target: null })), dest, near });
   if (res.error) await answer(e, { error: res.error });
-  if (res.done.length) undo.push(mode === 'copy' ? copyStep(res) : moveStep(res));
+  if (res.done.length) undo.push(mode === 'copy' ? copyStep(res, label) : moveStep(res));
   return res;
 }
 
 // Undoing a copy puts the copies in the Trash and brings back anything they replaced.
-function copyStep(res) {
+function copyStep(res, label = 'Copy') {
   const copies = res.done.map((d) => d.to);
   let trashed = [];
   let replaced = res.replaced;
   return {
-    label: 'Copy',
+    label,
     undo: async () => {
       const t = await ops.trash(copies);
       trashed = t.items;
@@ -774,6 +777,37 @@ ipcMain.handle('send:copy', async (e, paths, dest) => {
   return { paths: res.done.map((d) => d.to) };
 });
 ipcMain.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
+
+// Duplicate copies each item next to itself, named like a paste into the
+// same folder ("Copy of X"). Search results can come from several folders.
+ipcMain.handle('op:duplicate', async (e, paths) => {
+  const byDir = new Map();
+  for (const p of paths) byDir.set(path.dirname(p), [...(byDir.get(path.dirname(p)) || []), p]);
+  const done = [];
+  for (const [dir, list] of byDir) done.push(...(await moveOrCopy(e, 'copy', list, dir, 'Duplicate')).done);
+  return { paths: done.map((d) => d.to) };
+});
+
+// Make Alias puts "X alias" next to each item.
+ipcMain.handle('op:alias', async (e, paths) => {
+  const made = [];
+  for (const p of paths) {
+    const res = await answer(e, await ops.alias(p, path.dirname(p)));
+    if (res.error) break;
+    undo.push(newItemStep('Make Alias', res.path));
+    made.push(res.path);
+  }
+  return { paths: made };
+});
+
+// Copy Path puts the paths on the clipboard as text, one per line.
+ipcMain.on('clip:path', (_e, paths) => {
+  clipboard.writeText(paths.join('\n'));
+  if (cut) {
+    cut = null;
+    pushState();
+  }
+});
 
 ipcMain.handle('op:trash', async (e, paths) => {
   if (settings.get().confirmTrash) {

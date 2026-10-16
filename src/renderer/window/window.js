@@ -749,8 +749,11 @@ $('files').addEventListener('contextmenu', async (e) => {
     groups.splice(2, 0, [
       { label: 'Cut', click: () => clipCommand('cut') },
       { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
-      ...(picked.length === 1 && isFolder(it) ? [{ label: 'Paste', click: () => pasteInto(it.path) }] : [])
+      ...(picked.length === 1 && isFolder(it) ? [{ label: 'Paste', click: () => pasteInto(it.path) }] : []),
+      { label: 'Copy Path', click: () => copyPaths() },
+      { label: 'Duplicate', click: () => duplicateSelected() }
     ]);
+    groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
     if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
     groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
   }
@@ -955,6 +958,12 @@ api.onCommand(({ command, arg }) => {
     case 'newFolder': makeNew('folder'); break;
     case 'newText': makeNew('text'); break;
     case 'rename': if (!typing) renameSelected(); break;
+    case 'duplicate': if (!typing) duplicateSelected(); break;
+    case 'alias': if (!typing) aliasSelected(); break;
+    case 'copyPath':
+      if (field) api.editText('copy');
+      else copyPaths();
+      break;
     case 'trash': {
       const field = document.activeElement;
       if (field && field.matches('input')) deleteToStart(field);

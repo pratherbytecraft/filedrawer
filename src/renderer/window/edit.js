@@ -172,6 +172,32 @@ document.addEventListener('keydown', (e) => {
   trashSelected();
 });
 
+// ---------- Duplicate, Make Alias and Copy Path ----------
+
+// The selected items that are files or folders, not disks.
+const workItems = () => (cwd === COMPUTER ? [] : selectedItems().filter((it) => !it.volume));
+
+async function duplicateSelected() {
+  const picked = workItems();
+  if (!picked.length) return;
+  const res = await api.duplicate(picked.map((it) => it.path));
+  if (!searchOn() && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
+}
+
+async function aliasSelected() {
+  const picked = workItems();
+  if (!picked.length) return;
+  const res = await api.makeAlias(picked.map((it) => it.path));
+  if (!searchOn() && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
+}
+
+// The selection's paths, or the open folder's when nothing is selected.
+function copyPaths() {
+  const picked = selectedItems().map((it) => it.path);
+  if (picked.length) api.copyPath(picked);
+  else if (cwd !== COMPUTER) api.copyPath([cwd]);
+}
+
 // ---------- Cut, Copy and Paste ----------
 
 // Text being typed gets the text commands; otherwise they work on files.
