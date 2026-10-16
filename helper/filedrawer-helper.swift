@@ -72,6 +72,9 @@
 //   can read it, which takes Full Disk Access).
 // and reads one command per line:
 //   {"cmd":"pass"}            the next Finder window in the next 3 seconds stays Finder's
+// Other apps can ask the same by posting the distributed notification
+// com.pratherbytecraft.filedrawer.passFinder (Startbar does, when its Start
+// menu folders are set to open in Finder).
 //   {"cmd":"askAutomation"}   asks the user for Control Finder (macOS shows its prompt once)
 //   {"cmd":"askAccessibility"} puts Filedrawer in the Accessibility list and shows macOS's note
 import AppKit
@@ -400,6 +403,10 @@ final class FinderWatcher {
                 self.attach()
             }
             if self.finderPid == 0 || NSRunningApplication(processIdentifier: self.finderPid) == nil { self.attach() }
+        }
+        // Another app opening a folder in Finder on purpose.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.pratherbytecraft.filedrawer.passFinder"), object: nil, queue: .main) { [weak self] _ in
+            self?.passUntil = Date().addingTimeInterval(3)
         }
         readCommands()
     }
