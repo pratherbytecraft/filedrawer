@@ -10,10 +10,12 @@
 // symlinks, which is why it is a copy and not a link. If ~/Applications can't
 // be used, the bundle is built inside the package instead.
 //
-// The bundle holds no Filedrawer code and no version number.
+// The bundle holds no Filedrawer code and no version number, only a stamp of
+// what it was built from (see bundleStamp).
 // Contents/Resources/app is a two file stub that loads src/main from the
 // installed package, so an update to the package is picked up as is.
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -49,21 +51,37 @@ function plistValue(bundle, key) {
   return res.status === 0 ? res.stdout.trim() : null;
 }
 
-// The package a built bundle points at, or null when it isn't one of ours.
-function bundleTarget(bundle) {
+// What goes into the bundle besides the stub: the icon, this script and
+// Electron. When one of them changes the bundle is built again, which a
+// Homebrew upgrade would otherwise skip (the bundle's path stays the same).
+function bundleStamp() {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(path.join(root, 'assets', 'Filedrawer.icns')));
+  hash.update(fs.readFileSync(__filename));
+  try {
+    hash.update(require('electron/package.json').version);
+  } catch {
+    // no Electron yet, the build fixes that first
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+// The stub a built bundle carries, or null when it isn't one of ours.
+function bundleStub(bundle) {
   try {
     if (plistValue(bundle, 'CFBundleIdentifier') !== BUNDLE_ID) return null;
-    const stub = JSON.parse(fs.readFileSync(path.join(bundle, 'Contents', 'Resources', 'app', 'package.json'), 'utf8'));
-    return stub.filedrawerPackage || null;
+    return JSON.parse(fs.readFileSync(path.join(bundle, 'Contents', 'Resources', 'app', 'package.json'), 'utf8'));
   } catch {
     return null;
   }
 }
 
-// The Filedrawer.app built for this package, or null when there isn't one.
+// The Filedrawer.app built for this package, or null when there isn't one or
+// it was built from an older icon, script or Electron.
 function appPath() {
   for (const bundle of [userBundle, localBundle]) {
-    if (bundleTarget(bundle) === root) return bundle;
+    const stub = bundleStub(bundle);
+    if (stub && stub.filedrawerPackage === root && stub.bundleStamp === bundleStamp()) return bundle;
   }
   return null;
 }
@@ -93,7 +111,8 @@ function writeStub(dest) {
     productName: 'Filedrawer',
     private: true,
     main: 'index.js',
-    filedrawerPackage: root
+    filedrawerPackage: root,
+    bundleStamp: bundleStamp()
   };
   fs.writeFileSync(path.join(stubDir, 'package.json'), JSON.stringify(stubPkg, null, 2) + '\n');
   fs.writeFileSync(
