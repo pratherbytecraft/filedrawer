@@ -37,6 +37,12 @@
       <rect x="1.5" y="1.5" width="21" height="21" rx="3" style="fill:var(--round-bg);stroke:var(--round-ring)"/>
       <path d="M7 12h10M13 7.5l4.5 4.5-4.5 4.5" style="stroke:var(--round-ink)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
+    <symbol id="t-views" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="8" height="8" rx="1" fill="#5b8fe0" stroke="#2a5aa8"/>
+      <rect x="13" y="3" width="8" height="8" rx="1" fill="#e8b84a" stroke="#b9821b"/>
+      <rect x="3" y="13" width="8" height="8" rx="1" fill="#6cc04a" stroke="#2f8a1c"/>
+      <rect x="13" y="13" width="8" height="8" rx="1" fill="#d9534f" stroke="#a52a26"/>
+    </symbol>
     <symbol id="t-drop" viewBox="0 0 8 8"><path d="M0 2h8L4 6.5z" fill="currentColor"/></symbol>
   </defs>
 </svg>
@@ -50,6 +56,8 @@
   <div class="tb off" id="b-back" title="Back"><svg class="ic"><use href="#t-back"/></svg><span class="lb">Back</span><span class="tb-drop" data-drop="back"><svg class="drop"><use href="#t-drop"/></svg></span></div>
   <div class="tb off" id="b-forward" title="Forward"><svg class="ic"><use href="#t-forward"/></svg><span class="tb-drop" data-drop="forward"><svg class="drop"><use href="#t-drop"/></svg></span></div>
   <div class="tb" id="b-up" title="Up"><svg class="ic"><use href="#t-up"/></svg></div>
+  <div class="tbsep"></div>
+  <div class="tb" id="b-views" title="Views"><svg class="ic"><use href="#t-views"/></svg><span class="tb-drop"><svg class="drop"><use href="#t-drop"/></svg></span></div>
 </div>
 
 <div class="addrrow">
@@ -75,6 +83,7 @@
 </div>
 
 <div class="menu" id="menu"></div>
+<div class="menu" id="submenu"></div>
 
 <script src="../shared/theme.js"></script>
 <script src="window.js"></script>

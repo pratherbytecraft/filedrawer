@@ -14,8 +14,8 @@ let anchor = null; // where a Shift click or Shift arrow starts from
 let cursor = null; // the item the arrow keys move from
 let listToken = 0;
 let volumeName = '';
-const iconPx = 36; // Details shows icons at 18 points, drawn at twice that for Retina screens
-const iconUrls = new Map();
+let view = 'details'; // thumbs | tiles | icons | list | details, this window's own
+const iconUrls = new Map(); // by icon key and pixel size
 
 const isFolder = (it) => it.dir && !it.package;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -55,32 +55,88 @@ function fmtDate(ms) {
 
 // ---------- icons ----------
 
+// Each view's icon size in points comes from the theme (--icon-<view>).
+// Icons are drawn at twice that for Retina screens.
+function iconPx() {
+  const pt = parseInt(getComputedStyle(document.documentElement).getPropertyValue(`--icon-${view}`), 10) || 18;
+  return pt * 2;
+}
+
 function iconKey(it) {
   return it.package || !it.ext ? it.path : '.' + it.ext;
 }
 
-function iconHtml(it) {
-  if (isFolder(it)) return '<svg class="ic"><use href="#i-folder"/></svg>';
-  const url = iconUrls.get(iconKey(it));
-  return `<img class="ic" alt="" data-key="${esc(iconKey(it))}"${url ? ` src="${url}"` : ''}>`;
+function iconHtml(it, cls = 'ic') {
+  if (isFolder(it)) return `<svg class="${cls}"><use href="#i-folder"/></svg>`;
+  const url = iconUrls.get(`${iconKey(it)}@${iconPx()}`);
+  return `<img class="${cls}" alt="" data-key="${esc(iconKey(it))}"${url ? ` src="${url}"` : ''}>`;
 }
 
 // Asks for the icons the list is missing, then fills them in.
 async function loadIcons() {
+  const px = iconPx();
   const want = new Map();
   for (const it of items) {
     if (isFolder(it)) continue;
     const key = iconKey(it);
-    if (!iconUrls.has(key) && !want.has(key)) want.set(key, { key, path: it.path, ext: it.ext, package: it.package });
+    if (!iconUrls.has(`${key}@${px}`) && !want.has(key)) want.set(key, { key, path: it.path, ext: it.ext, package: it.package });
   }
   if (!want.size) return;
   const token = listToken;
-  const got = await api.icons([...want.values()], iconPx);
-  for (const [key, url] of Object.entries(got)) if (url) iconUrls.set(key, url);
-  if (token !== listToken) return;
-  for (const img of document.querySelectorAll('img.ic[data-key]')) {
-    const url = iconUrls.get(img.dataset.key);
+  const got = await api.icons([...want.values()], px);
+  for (const [key, url] of Object.entries(got)) if (url) iconUrls.set(`${key}@${px}`, url);
+  if (token !== listToken || px !== iconPx()) return;
+  for (const img of document.querySelectorAll('img[data-key]')) {
+    const url = iconUrls.get(`${img.dataset.key}@${px}`);
     if (url && !img.src) img.src = url;
+  }
+}
+
+// Thumbnails: Quick Look pictures of the files in sight, asked for as they
+// scroll into view. A file Quick Look can't draw keeps its icon.
+const THUMB_PX = 192;
+const thumbUrls = new Map(); // by path, null when there's no picture
+let thumbWant = new Set();
+let thumbTimer = null;
+const thumbSeen = new IntersectionObserver((entries) => {
+  for (const en of entries) {
+    if (!en.isIntersecting) continue;
+    thumbSeen.unobserve(en.target);
+    const it = items[en.target.closest('.item').dataset.i];
+    if (it && !thumbUrls.has(it.path)) thumbWant.add(it.path);
+  }
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(loadThumbs, 40);
+}, { root: document.getElementById('files'), rootMargin: '200px' });
+
+async function loadThumbs() {
+  const paths = [...thumbWant];
+  thumbWant = new Set();
+  if (!paths.length) return;
+  const got = await api.thumbs(paths, THUMB_PX);
+  for (const [p, url] of Object.entries(got)) thumbUrls.set(p, url);
+  if (view !== 'thumbs') return;
+  for (const el of rows()) {
+    const it = items[el.dataset.i];
+    const url = it && thumbUrls.get(it.path);
+    if (url) showThumb(el, url);
+  }
+}
+
+function showThumb(el, url) {
+  const frame = el.querySelector('.frame');
+  if (frame && !frame.querySelector('.pic')) frame.innerHTML = `<img class="pic" alt="" src="${url}">`;
+}
+
+function watchThumbs() {
+  thumbSeen.disconnect();
+  if (view !== 'thumbs') return;
+  for (const el of rows()) {
+    const it = items[el.dataset.i];
+    if (isFolder(it)) continue;
+    const url = thumbUrls.get(it.path);
+    if (url) showThumb(el, url);
+    else if (url === undefined) thumbSeen.observe(el.querySelector('.frame'));
   }
 }
 
@@ -132,19 +188,74 @@ const NOTES = {
   other: 'This folder couldn\'t be opened.'
 };
 
+const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}" data-i="${i}"`;
+const nameHtml = (it) => `<span class="nm">${esc(it.display)}</span>`;
+
+function renderIcons() {
+  return '<div class="g-icons">' + items.map((it, i) => `<div ${itemAttrs(it, i)}>${iconHtml(it, 'big')}${nameHtml(it)}</div>`).join('') + '</div>';
+}
+
+function renderTiles() {
+  return '<div class="g-tiles">' + items.map((it, i) =>
+    `<div ${itemAttrs(it, i)}>${iconHtml(it, 'big')}<div class="meta">${nameHtml(it)}` +
+    `<div class="sub">${esc(it.kind)}</div>${it.size != null ? `<div class="sub">${fmtKB(it.size)}</div>` : ''}</div></div>`).join('') + '</div>';
+}
+
+function renderList() {
+  return '<div class="g-list">' + items.map((it, i) => `<div ${itemAttrs(it, i)}>${iconHtml(it, 'big')}${nameHtml(it)}</div>`).join('') + '</div>';
+}
+
+function renderThumbs() {
+  return '<div class="g-thumbs">' + items.map((it, i) => {
+    const url = thumbUrls.get(it.path);
+    const inside = url ? `<img class="pic" alt="" src="${url}">` : iconHtml(it, 'big');
+    return `<div ${itemAttrs(it, i)}><div class="frame">${inside}</div>${nameHtml(it)}</div>`;
+  }).join('') + '</div>';
+}
+
+const RENDER = { details: renderDetails, icons: renderIcons, tiles: renderTiles, list: renderList, thumbs: renderThumbs };
+
+// List fills columns top to bottom, as many rows as fit the window.
+function fitList() {
+  const grid = $('files').querySelector('.g-list');
+  if (!grid) return;
+  const row = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--list-row'), 10) || 20;
+  grid.style.setProperty('--rows', Math.max(1, Math.floor(($('files').clientHeight - 8) / row)));
+}
+
 function render() {
   const f = $('files');
+  f.dataset.view = view;
   if (listError) {
     f.innerHTML = `<div class="note">${NOTES[listError]}` +
       (listError === 'denied' ? '<br><button id="b-privacy">Open Privacy Settings</button>' : '') + '</div>';
     const b = $('b-privacy');
     if (b) b.addEventListener('click', () => api.openPrivacy());
   } else {
-    f.innerHTML = renderDetails();
+    f.innerHTML = RENDER[view]();
+    fitList();
   }
   renderStatus();
   loadIcons();
+  watchThumbs();
 }
+
+function setView(v) {
+  if (!RENDER[v] || v === view) return;
+  view = v;
+  api.setView(v);
+  api.updateSettings({ view: v });
+  const keep = $('files').scrollTop;
+  render();
+  if (cursor) scrollToItem(cursor);
+  else $('files').scrollTop = keep;
+}
+
+let fitTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(fitList, 50);
+});
 
 function rows() {
   return [...$('files').querySelectorAll('.item')];
@@ -278,10 +389,7 @@ $('files').addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   const th = e.target.closest('th[data-sort]');
   if (th) {
-    const key = th.dataset.sort;
-    const s = app.settings.sort;
-    const dir = s.key === key && s.dir === 'asc' ? 'desc' : 'asc';
-    api.updateSettings({ sort: { key, dir } });
+    sortBy(th.dataset.sort);
     return;
   }
   const el = e.target.closest('.item');
@@ -311,6 +419,19 @@ $('files').addEventListener('dblclick', (e) => {
   if (el) openItem(items[el.dataset.i]);
 });
 
+// How far the arrow keys move in the current view: Up and Down go a whole
+// row in the grids, Left and Right a whole column in List.
+function stepFor(key) {
+  const els = rows();
+  if (view === 'details') return { ArrowDown: 1, ArrowUp: -1 }[key] || 0;
+  if (view === 'list') {
+    const perCol = els.filter((el) => el.offsetLeft === (els[0] && els[0].offsetLeft)).length || 1;
+    return { ArrowDown: 1, ArrowUp: -1, ArrowRight: perCol, ArrowLeft: -perCol }[key] || 0;
+  }
+  const perRow = els.filter((el) => el.offsetTop === (els[0] && els[0].offsetTop)).length || 1;
+  return { ArrowRight: 1, ArrowLeft: -1, ArrowDown: perRow, ArrowUp: -perRow }[key] || 0;
+}
+
 function moveCursor(delta, extend) {
   if (!items.length) return;
   let i = items.findIndex((it) => it.path === cursor);
@@ -329,7 +450,9 @@ function moveCursor(delta, extend) {
 
 function pageRows() {
   const row = $('files').querySelector('.item');
-  return row ? Math.max(1, Math.floor($('files').clientHeight / row.offsetHeight) - 1) : 10;
+  if (!row) return 10;
+  const down = Math.max(1, stepFor('ArrowDown'));
+  return Math.max(1, Math.floor($('files').clientHeight / row.offsetHeight) - 1) * (view === 'list' ? 1 : down);
 }
 
 document.addEventListener('keydown', (e) => {
@@ -341,15 +464,16 @@ document.addEventListener('keydown', (e) => {
   const extend = e.shiftKey;
   switch (e.key) {
     case 'ArrowDown':
-      if (e.metaKey) return; // Open, from the menu
-      e.preventDefault();
-      moveCursor(1, extend);
-      break;
     case 'ArrowUp':
-      if (e.metaKey) return; // Up One Folder, from the menu
+    case 'ArrowLeft':
+    case 'ArrowRight': {
+      if (e.metaKey) return; // Open and Up One Folder, from the menu
+      const step = stepFor(e.key);
+      if (!step) return;
       e.preventDefault();
-      moveCursor(-1, extend);
+      moveCursor(step, extend);
       break;
+    }
     case 'PageDown':
       e.preventDefault();
       moveCursor(pageRows(), extend);
@@ -384,32 +508,70 @@ window.addEventListener('focus', () => document.body.classList.remove('idle'));
 
 // ---------- menus drawn in the window ----------
 
-// entries: { label, bold, icon (a symbol id), click, disabled, checked } or 'sep'
-function openMenu(entries, x, y) {
-  const m = $('menu');
+// entries: { label, bold, icon (a symbol id), click, disabled, checked, sub } or 'sep'.
+// sub is a list of entries opened beside the row on hover.
+function fillMenu(m, entries) {
   m.innerHTML = entries.map((en, i) => en === 'sep' ? '<div class="sep"></div>' :
-    `<div class="mi${en.disabled ? ' disabled' : ''}${en.checked ? ' chk' : ''}" data-i="${i}">` +
+    `<div class="mi${en.disabled ? ' disabled' : ''}${en.checked ? ' chk' : ''}${en.sub ? ' sub' : ''}" data-i="${i}">` +
     (en.icon ? `<svg class="mic"><use href="#${en.icon}"/></svg>` : '') +
     (en.bold ? `<b>${esc(en.label)}</b>` : esc(en.label)) + '</div>').join('');
   m.onclick = (e) => {
     const el = e.target.closest('.mi');
-    if (!el) return;
+    if (!el || entries[el.dataset.i].sub) return;
     closeMenu();
     entries[el.dataset.i].click();
   };
+  m.onmouseover = (e) => {
+    const el = e.target.closest('.mi');
+    if (!el || m.id !== 'menu') return;
+    const en = entries[el.dataset.i];
+    m.querySelectorAll('.mi.on').forEach((x) => x !== el && x.classList.remove('on'));
+    if (!en.sub) {
+      $('submenu').classList.remove('open');
+      return;
+    }
+    el.classList.add('on');
+    const r = el.getBoundingClientRect();
+    placeMenu($('submenu'), en.sub, r.right - 2, r.top - 5, r.left + 2);
+  };
+}
+
+// Opens m at x, y, kept inside the window. A submenu that doesn't fit on
+// the right opens to the left of its row, which ends at flipX.
+function placeMenu(m, entries, x, y, flipX) {
+  fillMenu(m, entries);
   m.classList.add('open');
   const r = m.getBoundingClientRect();
-  m.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+  const left = x + r.width > innerWidth - 4 && flipX !== undefined ? flipX - r.width : Math.min(x, innerWidth - r.width - 4);
+  m.style.left = Math.max(4, left) + 'px';
   m.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+}
+
+function openMenu(entries, x, y) {
+  $('submenu').classList.remove('open');
+  placeMenu($('menu'), entries, x, y);
 }
 
 function closeMenu() {
   $('menu').classList.remove('open');
+  $('submenu').classList.remove('open');
   document.querySelectorAll('.tb.down, .dd.down').forEach((el) => el.classList.remove('down'));
 }
 
+const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
+const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
+
+const viewEntries = () => VIEWS.map(([v, label]) => ({ label, checked: v === view, click: () => setView(v) }));
+const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === app.settings.sort.key, click: () => sortBy(k) }));
+
+// Sorting by the same thing again turns it around.
+function sortBy(key) {
+  const s = app.settings.sort;
+  api.updateSettings({ sort: { key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' } });
+}
+
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest('#menu') && !e.target.closest('[data-drop]') && !e.target.closest('#b-places')) closeMenu();
+  if (!e.target.closest('.menu') && !e.target.closest('[data-drop]') && !e.target.closest('#b-places') && !e.target.closest('#b-views')) closeMenu();
   if (!e.target.closest('.addrrow')) hideSuggest();
 }, true);
 window.addEventListener('blur', closeMenu);
@@ -420,7 +582,11 @@ $('files').addEventListener('contextmenu', (e) => {
   if (!el) {
     sel.clear();
     showSelection();
-    openMenu([{ label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) }], e.clientX, e.clientY);
+    openMenu([
+      { label: 'View', sub: viewEntries() },
+      { label: 'Arrange Icons By', sub: sortEntries() },
+      { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) }
+    ], e.clientX, e.clientY);
     return;
   }
   const it = items[el.dataset.i];
@@ -456,6 +622,17 @@ $('b-forward').addEventListener('click', (e) => {
   else forward();
 });
 $('b-up').addEventListener('click', up);
+
+$('b-views').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  if ($('menu').classList.contains('open') && $('b-views').classList.contains('down')) {
+    closeMenu();
+    return;
+  }
+  const r = $('b-views').getBoundingClientRect();
+  openMenu(viewEntries(), r.left, r.bottom + 2);
+  $('b-views').classList.add('down');
+});
 
 // The folders above this one, from the arrow at the end of the address bar.
 $('b-places').addEventListener('mousedown', (e) => {
@@ -588,7 +765,7 @@ async function go() {
 
 // ---------- commands from the menu bar ----------
 
-api.onCommand(({ command }) => {
+api.onCommand(({ command, arg }) => {
   const typing = document.activeElement === path;
   switch (command) {
     case 'newWindow': api.openWindow(cwd); break;
@@ -601,6 +778,8 @@ api.onCommand(({ command }) => {
       }
       break;
     case 'refresh': navigate(cwd, { push: false, keep: true }); break;
+    case 'view': setView(arg); break;
+    case 'sort': sortBy(arg); break;
     case 'back': back(); break;
     case 'forward': forward(); break;
     case 'up': up(); break;
@@ -625,6 +804,8 @@ function applyState(state) {
 api.onState(applyState);
 api.getState().then((state) => {
   applyState(state);
+  view = state.settings.view;
+  api.setView(view);
   navigate(cwd, { push: false });
   $('files').focus();
 });

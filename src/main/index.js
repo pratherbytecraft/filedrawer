@@ -125,13 +125,18 @@ app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => helper.stop());
 
+const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
+const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
+
 function send(command, arg) {
   const win = BrowserWindow.getFocusedWindow();
   if (win && windows.has(win)) win.webContents.send('command', { command, arg });
 }
 
 function buildMenu() {
-  const s = settings.get();
+  const s = { ...settings.get() };
+  const front = BrowserWindow.getFocusedWindow();
+  if (front && viewOf.has(front)) s.view = viewOf.get(front);
   const hasWindow = !!BrowserWindow.getFocusedWindow();
   const cmd = (label, command, accelerator, extra = {}) => ({ label, accelerator, enabled: hasWindow, click: () => send(command), ...extra });
   const template = [
@@ -181,7 +186,16 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
-        cmd('Details', 'view', null, { type: 'radio', checked: s.view === 'details', click: () => send('view', 'details') }),
+        ...VIEWS.map(([view, label], i) => cmd(label, 'view', `CmdOrCtrl+${i + 1}`, {
+          type: 'radio', checked: s.view === view, click: () => send('view', view)
+        })),
+        {
+          label: 'Arrange Icons By',
+          enabled: hasWindow,
+          submenu: SORTS.map(([key, label]) => ({
+            label, type: 'radio', checked: s.sort.key === key, click: () => send('sort', key)
+          }))
+        },
         { type: 'separator' },
         cmd('Refresh', 'refresh', 'CmdOrCtrl+R'),
         { type: 'separator' },
@@ -212,13 +226,22 @@ ipcMain.handle('folder:resolve', (_e, text, cwd) => folders.resolve(text, cwd));
 ipcMain.handle('folder:complete', (_e, text, cwd) => folders.complete(text, cwd));
 ipcMain.handle('folder:volume', (_e, dir) => folders.volume(dir));
 ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
+ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipcMain.handle('settings:update', (_e, patch) => {
   const s = settings.update(patch);
-  if (patch && patch.view) buildMenu();
+  if (patch && (patch.view || patch.sort)) buildMenu();
   return s;
 });
 ipcMain.on('open', (_e, p) => shell.openPath(p));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
+// Each window has its own view, so the View menu checks the front one's.
+const viewOf = new WeakMap();
+ipcMain.on('window:view', (e, view) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return;
+  viewOf.set(win, view);
+  buildMenu();
+});
 ipcMain.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;

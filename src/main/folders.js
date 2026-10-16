@@ -1,7 +1,7 @@
 // Reading folders: the items in a folder with their sizes, dates, kinds and
 // icons, what a typed address points at, the folder names that fill in the
 // address bar, and the free space on a folder's volume.
-const { app } = require('electron');
+const { app, nativeImage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -204,4 +204,42 @@ async function icons(reqs, px) {
   return out;
 }
 
-module.exports = { HOME, list, resolve, complete, volume, icons };
+// Pictures of files for the Thumbnails view, from Quick Look, as data URLs
+// by path. A file Quick Look can't draw gets null and keeps its icon. Kept
+// for the last few hundred files, by path, size and date.
+const thumbCache = new Map();
+const THUMB_KEEP = 400;
+
+async function thumb(p, px) {
+  let st;
+  try {
+    st = await fs.promises.stat(p);
+  } catch {
+    return null;
+  }
+  const key = `${p}@${px}:${st.size}:${st.mtimeMs}`;
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  let url = null;
+  try {
+    const img = await nativeImage.createThumbnailFromPath(p, { width: px, height: px });
+    if (!img.isEmpty()) url = img.toDataURL();
+  } catch {
+    url = null;
+  }
+  thumbCache.set(key, url);
+  if (thumbCache.size > THUMB_KEEP) thumbCache.delete(thumbCache.keys().next().value);
+  return url;
+}
+
+async function thumbs(paths, px) {
+  const out = {};
+  // A few at a time, so a folder of photos doesn't hold up everything else.
+  for (let i = 0; i < paths.length; i += 4) {
+    await Promise.all(paths.slice(i, i + 4).map(async (p) => {
+      out[p] = await thumb(p, px);
+    }));
+  }
+  return out;
+}
+
+module.exports = { HOME, list, resolve, complete, volume, icons, thumbs };

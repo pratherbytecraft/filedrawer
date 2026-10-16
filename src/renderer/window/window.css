@@ -47,7 +47,29 @@ table.det td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.det td .cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
 table.det td .nm { overflow: hidden; text-overflow: ellipsis; }
 .ic { flex: none; }
-img.ic:not([src]) { visibility: hidden; }
+img.ic:not([src]), img.big:not([src]) { visibility: hidden; }
+.big { flex: none; width: var(--big); height: var(--big); }
+
+/* Icons, Tiles, List and Thumbnails */
+.files[data-view="icons"] { --big: calc(var(--icon-icons) * 1px); }
+.files[data-view="tiles"] { --big: calc(var(--icon-tiles) * 1px); }
+.files[data-view="list"] { --big: calc(var(--icon-list) * 1px); }
+.files[data-view="thumbs"] { --big: calc(var(--icon-thumbs) * 1px); }
+.g-icons, .g-tiles, .g-thumbs { display: grid; align-content: start; }
+.g-icons .item { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.g-icons .nm { word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.g-icons .item.sel .nm { -webkit-line-clamp: unset; }
+.g-tiles .item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.g-tiles .meta { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.g-tiles .nm, .g-tiles .sub { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-list { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows, 12), var(--list-row)); align-content: start; justify-content: start; height: 100%; }
+.g-list .item { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.g-list .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-thumbs .item { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.g-thumbs .frame { display: grid; place-items: center; overflow: hidden; }
+.g-thumbs .pic { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.g-thumbs .nm { max-width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu .mi.sub::after { content: "\25B8"; position: absolute; right: 7px; }
 
 .note { padding: 40px 24px; text-align: center; line-height: 1.5; }
 .note button { margin-top: 10px; font: inherit; }

@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('filedrawer', {
   complete: (text, cwd) => ipcRenderer.invoke('folder:complete', text, cwd),
   volume: (dir) => ipcRenderer.invoke('folder:volume', dir),
   icons: (reqs, px) => ipcRenderer.invoke('folder:icons', reqs, px),
+  thumbs: (paths, px) => ipcRenderer.invoke('folder:thumbs', paths, px),
+  setView: (view) => ipcRenderer.send('window:view', view),
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
   open: (p) => ipcRenderer.send('open', p),
   openWindow: (dir) => ipcRenderer.send('window:open', dir),
