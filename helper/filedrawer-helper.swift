@@ -32,6 +32,8 @@
 //     -> {"id":10,"locked":false,"hidden":false}
 //   {"id":11,"cmd":"setFlags","path":"/Users/you/a.txt","locked":true,"hidden":false}
 //     -> {"id":11,"ok":true}
+//   {"id":12,"cmd":"alias","path":"/Users/you/a.txt","to":"/Users/you/Desktop/a.txt alias"}
+//     -> {"id":12,"ok":true}   (a Finder alias, which follows the item when it moves)
 // A request that fails gets {"id":n,"error":"..."}.
 import AppKit
 import Foundation
@@ -65,7 +67,7 @@ var kindByExt: [String: String] = [:]
 
 func info(_ path: String) -> [String: Any] {
     let url = URL(fileURLWithPath: path)
-    let keys: Set<URLResourceKey> = [.isHiddenKey, .isPackageKey, .isDirectoryKey, .isSymbolicLinkKey, .localizedTypeDescriptionKey, .localizedNameKey]
+    let keys: Set<URLResourceKey> = [.isHiddenKey, .isPackageKey, .isDirectoryKey, .isSymbolicLinkKey, .isAliasFileKey, .localizedTypeDescriptionKey, .localizedNameKey]
     let values = try? url.resourceValues(forKeys: keys)
     let isDir = values?.isDirectory ?? false
     // A link opens what it points at, so a link to an app is a package too,
@@ -87,7 +89,14 @@ func info(_ path: String) -> [String: Any] {
         kind = values?.localizedTypeDescription ?? ""
         if !isDir && !ext.isEmpty && !kind.isEmpty { kindByExt[ext] = kind }
     }
-    return ["name": values?.localizedName ?? url.lastPathComponent, "kind": kind, "hidden": values?.isHidden ?? false, "package": isPackage]
+    var out: [String: Any] = ["name": values?.localizedName ?? url.lastPathComponent, "kind": kind, "hidden": values?.isHidden ?? false, "package": isPackage]
+    // A Finder alias (not a link) says where it points, so a folder's alias can open that folder.
+    if values?.isAliasFile == true && values?.isSymbolicLink != true, let target = try? URL(resolvingAliasFileAt: url, options: [.withoutUI, .withoutMounting]) {
+        let t = try? target.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        out["alias"] = target.path
+        out["aliasDir"] = (t?.isDirectory ?? false) && !(t?.isPackage ?? false)
+    }
+    return out
 }
 
 func volume(_ path: String) -> [String: Any] {
@@ -177,6 +186,15 @@ func handle(_ req: [String: Any]) {
         if let hidden = req["hidden"] as? Bool { values.isHidden = hidden }
         do {
             try url.setResourceValues(values)
+            reply(["id": id, "ok": true])
+        } catch {
+            reply(["id": id, "error": (error as NSError).localizedDescription])
+        }
+    case "alias":
+        do {
+            let src = URL(fileURLWithPath: req["path"] as? String ?? "")
+            let data = try src.bookmarkData(options: .suitableForBookmarkFile, includingResourceValuesForKeys: nil, relativeTo: nil)
+            try URL.writeBookmarkData(data, to: URL(fileURLWithPath: req["to"] as? String ?? ""))
             reply(["id": id, "ok": true])
         } catch {
             reply(["id": id, "error": (error as NSError).localizedDescription])

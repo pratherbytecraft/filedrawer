@@ -71,6 +71,10 @@ async function addInfo(items) {
       const info = res && res.items && res.items[j];
       if (info) {
         it.display = info.name || it.name;
+        if (info.alias) {
+          it.alias = info.alias;
+          it.aliasDir = info.aliasDir;
+        }
         it.hidden = it.hidden || info.hidden;
         it.package = it.dir && info.package;
         if (it.package && !it.ext) it.ext = path.extname(it.name).slice(1).toLowerCase();

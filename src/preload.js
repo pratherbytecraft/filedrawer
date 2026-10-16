@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld('filedrawer', {
   startDrag: (paths) => ipcRenderer.send('drag:start', paths),
   // copy forces a copy, otherwise items move on the same disk and copy to another.
   drop: (paths, dest, copy) => ipcRenderer.invoke('op:drop', paths, dest, copy),
+  sendToZip: (paths) => ipcRenderer.invoke('send:zip', paths),
+  sendToDesktop: (paths) => ipcRenderer.invoke('send:desktop', paths),
+  sendToMail: (paths) => ipcRenderer.send('send:mail', paths),
+  sendToFolder: (paths, dest) => ipcRenderer.invoke('send:copy', paths, dest),
+  eject: (volume) => ipcRenderer.invoke('op:eject', volume),
   showProps: (paths) => ipcRenderer.send('props:open', paths),
   openWithApps: (p) => ipcRenderer.invoke('openWith:apps', p),
   openWith: (appPath, paths) => ipcRenderer.send('openWith:open', appPath, paths),

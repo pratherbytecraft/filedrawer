@@ -34,9 +34,20 @@ api.getProps().then((d) => {
   $('kind').textContent = d.kind;
   $('location').textContent = d.location;
   $('contains-label').hidden = $('contains').hidden = !d.folder;
+  if (d.volume) {
+    // A disk: how full it is, in place of the sizes and the switches.
+    document.querySelector('.grid').querySelectorAll('span').forEach((el, i) => {
+      if (i >= 4) el.hidden = true;
+    });
+    $('disk-grid').hidden = false;
+    if (d.volume.total) $('used').textContent = fmtBytes(d.volume.total - d.volume.free);
+    $('free').textContent = fmtBytes(d.volume.free);
+    if (d.volume.total) $('capacity').textContent = fmtBytes(d.volume.total);
+    $('name').disabled = true;
+  }
   for (const k of ['created', 'modified', 'accessed']) $(k).textContent = d[k] ? fmtDate(d[k]) : '';
   $('dates').hidden = $('dates-rule').hidden = !d.one;
-  $('flags').hidden = $('flags-rule').hidden = !d.one;
+  $('flags').hidden = $('flags-rule').hidden = !d.one || !!d.volume;
   $('locked').checked = !!d.locked;
   $('hidden').checked = !!d.hidden;
   $('ok').focus();

@@ -545,6 +545,29 @@ ipcMain.handle('op:newText', async (e, dir) => {
   return res;
 });
 
+// Send To: a zip next to the items, aliases on the Desktop, a new mail
+// with them attached, or copies in a pinned folder.
+ipcMain.handle('send:zip', async (e, paths) => {
+  const res = await answer(e, await ops.compress(paths));
+  if (res.path) undo.push(newItemStep('Compress', res.path));
+  return res;
+});
+ipcMain.handle('send:desktop', async (e, paths) => {
+  const desktop = path.join(folders.HOME, 'Desktop');
+  for (const p of paths) {
+    const res = await answer(e, await ops.alias(p, desktop));
+    if (res.error) return res;
+    undo.push(newItemStep('Make Alias', res.path));
+  }
+  return {};
+});
+ipcMain.on('send:mail', (_e, paths) => execFile('open', ['-a', 'Mail', ...paths], () => {}));
+ipcMain.handle('send:copy', async (e, paths, dest) => {
+  const res = await moveOrCopy(e, 'copy', paths, dest);
+  return { paths: res.done.map((d) => d.to) };
+});
+ipcMain.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
+
 ipcMain.handle('op:trash', async (e, paths) => {
   const res = await answer(e, await ops.trash(paths));
   if (res.items.length) {

@@ -3,6 +3,7 @@
 // success or { error } with a message for the user, which the caller shows.
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const helper = require('./helper');
 
 function message(err, what) {
@@ -101,4 +102,47 @@ async function untrash(items) {
   return {};
 }
 
-module.exports = { rename, newFolder, newTextFile, trash, untrash, freeName, exists };
+// A zip of the items next to them, named after the first one ("Report.zip").
+// One item goes through ditto, which keeps Mac extras the way Finder does;
+// more than one through zip.
+async function compress(paths) {
+  const dir = path.dirname(paths[0]);
+  const first = path.basename(paths[0]);
+  const stem = (await fs.promises.stat(paths[0])).isDirectory() ? first : path.basename(first, path.extname(first)) || first;
+  const out = path.join(dir, await freeName(dir, `${stem}.zip`));
+  const args = paths.length === 1 ? ['ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', paths[0], out]]
+    : ['zip', ['-r', '-y', '-q', out, ...paths.map((p) => path.basename(p))]];
+  return new Promise((resolve) => {
+    execFile(args[0], args[1], { cwd: dir }, (err) => {
+      if (err) {
+        fs.promises.rm(out, { force: true }).catch(() => {});
+        resolve({ error: 'The compressed folder couldn\'t be made.' });
+      } else {
+        resolve({ path: out });
+      }
+    });
+  });
+}
+
+// A Finder alias of an item in another folder, named "X alias".
+async function alias(src, destDir) {
+  const out = path.join(destDir, await freeName(destDir, `${path.basename(src)} alias`));
+  const res = await helper.request('alias', { path: src, to: out }, { withError: true });
+  if (!res || res.error) return { error: `The alias couldn't be made. ${res ? res.error : ''}`.trim() };
+  return { path: out };
+}
+
+// Through diskutil, which says which app is holding a disk that's in use.
+function eject(volume) {
+  return new Promise((resolve) => {
+    execFile('diskutil', ['eject', volume], (err, _out, stderr) => {
+      if (!err) return resolve({});
+      const why = /dissented by PID (\d+)(?: \(([^)]+)\))?/.exec(stderr || '');
+      const name = path.basename(volume);
+      if (why) resolve({ error: `"${name}" couldn't be ejected because ${why[2] ? path.basename(why[2]) : 'another app'} is using it.` });
+      else resolve({ error: `"${name}" couldn't be ejected. ${(stderr || '').trim()}`.trim() });
+    });
+  });
+}
+
+module.exports = { rename, newFolder, newTextFile, trash, untrash, compress, alias, eject, freeName, exists };

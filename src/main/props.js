@@ -40,11 +40,14 @@ async function describe(paths) {
   const first = items[0];
   const icons = await folders.icons([{ key: 'i', path: first.path, ext: '', package: true }], 64);
   const flags = paths.length === 1 ? await helper.request('flags', { path: first.path }) : null;
+  // A disk shows how full it is instead of having every file on it counted.
+  const volume = paths.length === 1 && (first.path === '/' || /^\/Volumes\/[^/]+$/.test(first.path)) ? await folders.volume(first.path) : null;
   const kinds = new Set(items.map((it) => it.kind));
   const places = new Set(paths.map((p) => path.dirname(p)));
   return {
     one: paths.length === 1,
-    name: paths.length === 1 ? first.name : `${paths.length} items`,
+    name: paths.length === 1 ? (volume && volume.name) || first.name : `${paths.length} items`,
+    volume: volume ? { free: volume.free, total: (await helper.request('volume', { path: first.path }) || {}).total || null } : null,
     fullName: path.basename(first.path),
     kind: kinds.size === 1 ? first.kind : 'Multiple kinds',
     location: places.size === 1 ? path.dirname(first.path) : 'More than one folder',
@@ -92,6 +95,7 @@ ipcMain.handle('props:get', async (e) => {
   const entry = open.get(e.sender.id);
   if (!entry) return null;
   const data = await describe(entry.paths);
+  if (data.volume) return data;
   // Sizes come afterwards, counted in the background.
   const total = { bytes: 0, disk: 0, files: 0, folders: 0 };
   let last = 0;

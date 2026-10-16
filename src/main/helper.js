@@ -13,12 +13,13 @@ let nextId = 1;
 let restartDelay = 500;
 const pending = new Map();
 
-function finish(id, value) {
+// A failed request answers null, or { error } when it was asked with withError.
+function finish(id, msg) {
   const p = pending.get(id);
   if (!p) return;
   pending.delete(id);
   clearTimeout(p.timer);
-  p.resolve(value);
+  p.resolve(msg && msg.error && !p.withError ? null : msg);
 }
 
 function start() {
@@ -38,7 +39,7 @@ function start() {
       } catch {
         continue;
       }
-      if (msg.id !== undefined) finish(msg.id, msg.error ? null : msg);
+      if (msg.id !== undefined) finish(msg.id, msg);
       restartDelay = 500;
     }
   });
@@ -52,12 +53,12 @@ function start() {
   child.stdin.on('error', () => {}); // the exit handler above covers it
 }
 
-function request(cmd, args = {}) {
+function request(cmd, args = {}, { withError = false } = {}) {
   if (!child) return Promise.resolve(null);
   const id = nextId++;
   return new Promise((resolve) => {
     const timer = setTimeout(() => finish(id, null), TIMEOUT);
-    pending.set(id, { resolve, timer });
+    pending.set(id, { resolve, timer, withError });
     child.stdin.write(JSON.stringify({ id, cmd, ...args }) + '\n');
   });
 }

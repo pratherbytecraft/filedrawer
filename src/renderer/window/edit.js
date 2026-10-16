@@ -291,6 +291,45 @@ async function openWithEntries(paths) {
   return [...rows, ...(rows.length ? ['sep'] : []), { label: 'Other...', click: () => api.openWithOther(paths) }];
 }
 
+// ---------- Send To and Eject ----------
+
+function sendToEntries(paths) {
+  const dir = cwd;
+  const pinned = pins().filter((p) => p !== dir && !paths.includes(p));
+  return [
+    { label: 'Compressed (zipped) Folder', icon: 'i-zip', click: async () => {
+      const res = await api.sendToZip(paths);
+      if (res.path && dir === cwd) await navigate(cwd, { push: false, select: res.path });
+    } },
+    { label: 'Desktop (create alias)', icon: 'p-desktop', click: () => api.sendToDesktop(paths) },
+    { label: 'Mail Recipient', icon: 'p-mail', click: () => api.sendToMail(paths) },
+    ...(pinned.length ? ['sep', ...pinned.map((p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', click: () => api.sendToFolder(paths, p) }))] : [])
+  ];
+}
+
+const ejectable = (p) => /^\/Volumes\/[^/]+$/.test(p);
+
+async function eject(volume) {
+  const res = await api.eject(volume);
+  if (!res.error && cwd === COMPUTER) navigate(cwd, { push: false, keep: true });
+}
+
+// The Folders tree's own right click menu.
+$('tree-list').addEventListener('contextmenu', (e) => {
+  const n = e.target.closest('.n');
+  if (!n) return;
+  e.preventDefault();
+  const p = n.dataset.path;
+  if (p === 'trash') return;
+  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
+  if (p !== COMPUTER) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
+  if (ejectable(p)) entries.push('sep', { label: 'Eject', icon: 'p-eject', click: () => eject(p) });
+  else if (p !== COMPUTER && !isVolumeRoot(p)) {
+    entries.push('sep', isPinned(p) ? { label: 'Unpin', icon: 'p-pin', click: () => unpin(p) } : { label: 'Pin to Pinned', icon: 'p-pin', click: () => pin(p) });
+  }
+  openMenu(entries, e.clientX, e.clientY);
+});
+
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {

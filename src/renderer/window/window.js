@@ -424,7 +424,10 @@ function up() {
 }
 
 function openItem(it, { newWindow = false } = {}) {
-  if (isFolder(it)) {
+  if (it.alias && it.aliasDir) {
+    if (newWindow) api.openWindow(it.alias);
+    else navigate(it.alias);
+  } else if (isFolder(it)) {
     if (newWindow) api.openWindow(it.path);
     else navigate(it.path);
   } else {
@@ -697,7 +700,9 @@ $('files').addEventListener('contextmenu', async (e) => {
         : { label: 'Pin to Pinned', icon: 'p-pin', click: () => pin(it.path) });
     }
   }
+  if (picked.length === 1 && it.volume && ejectable(it.path)) groups[1].push({ label: 'Eject', icon: 'p-eject', click: () => eject(it.path) });
   if (cwd !== COMPUTER && !it.volume) {
+    groups[1].push({ label: 'Send To', sub: sendToEntries(picked.map((x) => x.path)) });
     groups.splice(2, 0, [
       { label: 'Cut', click: () => clipCommand('cut') },
       { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
@@ -1029,8 +1034,9 @@ function tasksBox() {
   }
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
+      (one.volume && ejectable(one.path) ? taskRow('eject', 'p-eject', 'Eject this volume') : '') +
       (one.volume ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
-      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(one.path) +
+      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + (one.volume ? '' : pinRow(one.path)) +
       (one.volume ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
   }
   if (one) {
@@ -1130,6 +1136,7 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'newFolder') makeNew('folder');
   else if (act === 'rename') renameSelected();
   else if (act === 'trash') trashSelected();
+  else if (act === 'eject') eject(targetFolder());
 });
 
 // Pinning by dropping a folder on the Pinned box (not on a pin, which moves
