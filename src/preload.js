@@ -74,5 +74,7 @@ contextBridge.exposeInMainWorld('filedrawer', {
   resetSettings: () => ipcRenderer.send('settings:reset'),
   chooseStartFolder: () => ipcRenderer.send('settings:startFolder'),
   chooseTerminal: () => ipcRenderer.send('settings:terminal'),
-  openLink: (name) => ipcRenderer.send('link', name)
+  openLink: (name) => ipcRenderer.send('link', name),
+  getViewer: () => ipcRenderer.invoke('viewer:get'),
+  setViewer: (on) => ipcRenderer.invoke('viewer:set', on)
 });

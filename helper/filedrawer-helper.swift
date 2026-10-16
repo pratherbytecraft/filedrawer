@@ -34,6 +34,12 @@
 //     -> {"id":11,"ok":true}
 //   {"id":12,"cmd":"alias","path":"/Users/you/a.txt","to":"/Users/you/Desktop/a.txt alias"}
 //     -> {"id":12,"ok":true}   (a Finder alias, which follows the item when it moves)
+//   {"id":13,"cmd":"viewer"}
+//     -> {"id":13,"fileViewer":""}   (the app other apps use for Show in Finder, "" for Finder)
+//   {"id":14,"cmd":"setViewer","bundleId":"com.pratherbytecraft.filedrawer"}
+//     -> {"id":14,"ok":true}   ("" hands it back to Finder)
+// macOS doesn't let another app become the one that opens folders (Launch
+// Services answers -50 for public.folder), so only Show in Finder can move.
 // A request that fails gets {"id":n,"error":"..."}.
 import AppKit
 import Foundation
@@ -198,6 +204,19 @@ func handle(_ req: [String: Any]) {
             reply(["id": id, "ok": true])
         } catch {
             reply(["id": id, "error": (error as NSError).localizedDescription])
+        }
+    case "viewer":
+        let viewer = CFPreferencesCopyAppValue("NSFileViewer" as CFString, kCFPreferencesAnyApplication) as? String ?? ""
+        reply(["id": id, "fileViewer": viewer])
+    case "setViewer":
+        // Finder is what apps use when nothing is set, so going back takes the setting out.
+        let bundle = req["bundleId"] as? String ?? ""
+        let value: CFString? = bundle.isEmpty || bundle == "com.apple.finder" ? nil : bundle as CFString
+        CFPreferencesSetAppValue("NSFileViewer" as CFString, value, kCFPreferencesAnyApplication)
+        if CFPreferencesAppSynchronize(kCFPreferencesAnyApplication) {
+            reply(["id": id, "ok": true])
+        } else {
+            reply(["id": id, "error": "the setting couldn't be saved"])
         }
     case "volume":
         reply(["id": id].merging(volume(req["path"] as? String ?? "/")) { a, _ in a })

@@ -20,6 +20,7 @@ const updates = require('./updates');
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
 const PKG = require('../../package.json');
+const { BUNDLE_ID } = require('../../scripts/build-app');
 const VERSION = PKG.version;
 
 if (!app.requestSingleInstanceLock()) {
@@ -69,7 +70,8 @@ function placeFor() {
   return { width, height, x: x + 22, y: y + 22 };
 }
 
-function openWindow(dir) {
+// select, when given, is an item in dir to pick once it's listed.
+function openWindow(dir, select) {
   const win = new BrowserWindow({
     ...placeFor(),
     minWidth: 560,
@@ -87,7 +89,7 @@ function openWindow(dir) {
     }
   });
   windows.add(win);
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query: { path: dir } });
+  win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query: select ? { path: dir, select } : { path: dir } });
   win.once('ready-to-show', () => win.show());
   // The size of the last window moved or resized is the size of the next one.
   let sizeTimer = null;
@@ -152,16 +154,21 @@ function watch(win, dir) {
   watchers.set(win, entry);
 }
 
-// A file handed to Filedrawer opens its folder.
+// A file handed to Filedrawer, as other apps' Show in Finder does once
+// Filedrawer is the file viewer, opens its folder with it picked.
 function openPath(p) {
   let dir = p;
+  let select = null;
   try {
-    if (!fs.statSync(p).isDirectory()) dir = path.dirname(p);
+    if (!fs.statSync(p).isDirectory() || folders.isPackage(p)) {
+      dir = path.dirname(p);
+      select = p;
+    }
   } catch {
     return;
   }
-  if (ready) openWindow(dir);
-  else queued.push(dir);
+  if (ready) openWindow(dir, select);
+  else queued.push([dir, select]);
 }
 
 app.on('open-file', (e, p) => {
@@ -623,6 +630,16 @@ ipcMain.handle('op:trash', async (e, paths) => {
   return res;
 });
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
+// Show in Finder from other apps: Filedrawer or Finder.
+async function viewerState() {
+  const res = await helper.request('viewer');
+  return { on: !!res && res.fileViewer === BUNDLE_ID, known: !!res };
+}
+ipcMain.handle('viewer:get', () => viewerState());
+ipcMain.handle('viewer:set', async (_e, on) => {
+  await helper.request('setViewer', { bundleId: on ? BUNDLE_ID : '' });
+  return viewerState();
+});
 ipcMain.on('search:start', (e, id, q) => search.start(e.sender, id, q));
 ipcMain.on('search:stop', (e) => search.stop(e.sender));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
@@ -676,7 +693,9 @@ app.whenReady().then(() => {
   system.watch(pushState);
   buildMenu();
   ready = true;
-  const start = queued.splice(0).concat(argvFolders(process.argv));
+  const early = queued.splice(0);
+  early.forEach(([dir, select]) => openWindow(dir, select));
+  const start = argvFolders(process.argv);
   if (start.length) start.forEach(openPath);
-  else openWindow(prefs.startFolder());
+  else if (!early.length) openWindow(prefs.startFolder());
 });

@@ -1031,7 +1031,7 @@ window.addEventListener('DOMContentLoaded', () => {
     view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
     COMPUTER = state.computer;
     setPane(state.settings.pane, { save: false });
-    navigate(cwd, { push: false });
+    navigate(cwd, { push: false, select: new URLSearchParams(location.search).get('select') });
     $('files').focus();
   });
 });

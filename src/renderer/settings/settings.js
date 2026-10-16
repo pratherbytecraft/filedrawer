@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id);
 let app = null; // state from the main process
 let page = new URLSearchParams(location.search).get('page') || 'appearance';
 let terminals = [];
+let viewer = null; // { on, known }: Filedrawer is the app for Show in Finder
 
 const TITLES = { appearance: 'Appearance', folders: 'Folder Options', terminal: 'Terminal', viewer: 'Default Viewer', general: 'General', about: 'About' };
 const PREVIEW_ON = new Set(['appearance', 'folders']);
@@ -68,6 +69,20 @@ function draw() {
   $('about-version').textContent = `Version ${app.version}`;
   drawTerminals();
   drawPreview();
+}
+
+function drawViewer() {
+  if (!viewer) return;
+  const on = viewer.on;
+  $('viewer-status').innerHTML = on ? '<i></i>Filedrawer' : '<i class="warn"></i>Finder';
+  $('viewer-btn').textContent = on ? 'Use Finder' : 'Use Filedrawer';
+  $('viewer-btn').classList.toggle('primary', !on);
+  $('viewer-note').textContent = on ? 'Show in Finder from other apps opens Filedrawer.' : 'Show in Finder from other apps opens Finder.';
+}
+
+async function loadViewer() {
+  viewer = await api.getViewer();
+  drawViewer();
 }
 
 function drawVersion() {
@@ -194,6 +209,11 @@ $('start').addEventListener('change', (e) => {
   }
 });
 $('login').addEventListener('click', () => api.setLoginItem(!app.loginItem.on));
+$('viewer-btn').addEventListener('click', async () => {
+  viewer = await api.setViewer(!(viewer && viewer.on));
+  drawViewer();
+});
+window.addEventListener('focus', loadViewer);
 $('check').addEventListener('click', () => api.checkUpdates());
 $('export').addEventListener('click', () => api.exportSettings());
 $('import').addEventListener('click', () => api.importSettings());
@@ -224,4 +244,5 @@ api.getState().then((state) => {
   draw();
   showPage(page);
   loadTerminals();
+  loadViewer();
 });

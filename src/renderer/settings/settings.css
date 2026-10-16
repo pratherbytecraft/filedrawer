@@ -98,3 +98,4 @@
   .btn:active { filter: brightness(.9); }
   .apps { flex-wrap: wrap; }
   [hidden] { display: none !important; }
+  .foot-note code { font: 11px ui-monospace, Menlo, monospace; }

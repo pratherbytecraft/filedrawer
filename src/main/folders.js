@@ -290,4 +290,6 @@ async function thumbs(paths, px) {
   return out;
 }
 
-module.exports = { HOME, COMPUTER, list, count, resolve, complete, volume, icons, thumbs, readItem, addInfo };
+const isPackage = (p) => PACKAGE_EXTS.has(path.extname(p).slice(1).toLowerCase());
+
+module.exports = { HOME, COMPUTER, isPackage, list, count, resolve, complete, volume, icons, thumbs, readItem, addInfo };
