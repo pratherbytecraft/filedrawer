@@ -1,6 +1,6 @@
 # Filedrawer
 
-A file manager for macOS, laid out like the classic file windows: a toolbar with Back, Forward and Up, a text address bar you can type a path into, a task pane on the left, and Thumbnails, Tiles, Icons, List and Details views. Free to use.
+A file manager for macOS, laid out like the classic file windows: a toolbar with Back, Forward and Up, a text address bar you can type a path into, a task pane on the left, and Thumbnails, Tiles, Icons, List and Details views. It opens in place of Finder's folder windows. Free to use.
 
 ![Filedrawer in the System theme](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/window-system.png)
 
@@ -55,11 +55,17 @@ Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder 
 
 ![Filedrawer Settings](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/settings.png)
 
-## Show in Finder
+## In place of Finder
 
-The Default Viewer page in Settings can make Filedrawer the app other apps use for Show in Finder, so the item opens picked in a Filedrawer window. The same button hands it back to Finder.
+When a folder opens in Finder, from the Dock, the Desktop, Finder itself or `open` in Terminal, Filedrawer opens a window in the same spot and Finder's window closes. Show in Finder from other apps opens Filedrawer too, with the item picked.
 
-macOS keeps the Desktop, the Dock's folders, Finder's own windows and folders opened with `open` in Terminal for Finder, so those still open in Finder.
+On its first launch Filedrawer asks for the two permissions this needs. Accessibility lets it see when Finder opens a window, and Control Finder lets it ask which folder that window shows.
+
+Finder keeps the Desktop, Get Info windows, Recents, AirDrop, Network, the Trash and the top of iCloud Drive. Hold Option while opening a folder to open it in Finder instead.
+
+The Default File Manager page in Settings turns this off and shows any permission that's still missing. Filedrawer has to be running for it to work, so it opens when you log in while this is on. If you use an app that quits other apps after their last window closes, add Filedrawer to that app's exceptions.
+
+![The Default File Manager page](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/default-file-manager.png)
 
 ## Folder access
 
