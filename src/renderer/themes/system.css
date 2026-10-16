@@ -110,6 +110,9 @@ body.idle .g-thumbs .item.sel .frame { box-shadow: 0 0 0 3px var(--idle-sel); }
 .g-thumbs .pic { border-radius: 4px; }
 .g-thumbs .nm { font-size: 12px; max-width: 120px; }
 
+.band { background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); border-radius: 2px; }
+input.ren { color: var(--text); background: var(--bg); border: 0; border-radius: 4px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); padding: 0 3px; }
+
 .note { color: var(--dim); }
 
 .status { background: var(--chrome); border-top: 1px solid var(--line); height: 26px; padding: 0 12px; }

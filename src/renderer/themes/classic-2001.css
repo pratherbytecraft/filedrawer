@@ -101,6 +101,8 @@ body.idle .g-thumbs .item.sel .frame { border-color: var(--idle-sel); }
 .g-thumbs .item.sel .pic { filter: none; }
 .g-thumbs .nm { max-width: 110px; }
 
+.band { background: rgba(49, 106, 197, .2); border: 1px solid #316ac5; }
+
 .note { color: var(--dim); }
 
 .status { height: 22px; background: var(--face); border-top: 1px solid #fff; padding: 2px 2px 1px; gap: 2px; }

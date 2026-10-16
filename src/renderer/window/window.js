@@ -270,6 +270,7 @@ function fitList() {
 }
 
 function render() {
+  if (renaming) endRename(true);
   const f = $('files');
   f.dataset.view = view;
   if (listError) {
@@ -530,7 +531,7 @@ function pageRows() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.target === $('path')) return;
+  if (e.target.closest('input, textarea')) return;
   if ($('menu').classList.contains('open')) {
     if (e.key === 'Escape') closeMenu();
     return;
@@ -664,7 +665,11 @@ $('files').addEventListener('contextmenu', (e) => {
       { label: 'View', sub: viewEntries() },
       { label: 'Arrange Icons By', sub: sortEntries() },
       { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) },
-      ...here
+      ...here,
+      ...(cwd === COMPUTER || listError ? [] : ['sep', { label: 'New', sub: [
+        { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
+        { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
+      ] }])
     ], e.clientX, e.clientY);
     return;
   }
@@ -677,6 +682,7 @@ $('files').addEventListener('contextmenu', (e) => {
   const picked = items.filter((x) => sel.has(x.path));
   const entries = [{ label: 'Open', bold: true, click: () => openSelected() }];
   if (picked.every(isFolder)) entries.push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
+  if (picked.length === 1 && !it.volume && cwd !== COMPUTER) entries.push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
   if (picked.length === 1 && isFolder(it)) {
     entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(it.path) });
     if (!it.volume) {
@@ -876,6 +882,9 @@ api.onCommand(({ command, arg }) => {
     case 'home': navigate(app.home); break;
     case 'computer': navigate(COMPUTER); break;
     case 'navigate': navigate(arg); break;
+    case 'newFolder': makeNew('folder'); break;
+    case 'newText': makeNew('text'); break;
+    case 'rename': if (!typing) renameSelected(); break;
     case 'terminal': openTerminal(cwd === COMPUTER ? null : cwd); break;
     case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
@@ -908,6 +917,10 @@ function applyState(state) {
 api.onState(applyState);
 api.onFolderChanged((dir) => {
   if (dir !== cwd) return;
+  if (renaming) {
+    changedWhileRenaming = true; // redrawing now would throw away the name being typed
+    return;
+  }
   treeKids.delete(cwd);
   navigate(cwd, { push: false, keep: true, changed: true });
 });
@@ -978,15 +991,17 @@ function tasksBox() {
   const pinRow = (p) => isPinned(p) ? taskRow('unpin', 'p-pin', 'Unpin this folder') : taskRow('pin', 'p-pin', 'Pin this folder');
   if (!picked.length) {
     if (cwd === COMPUTER) return '';
-    return box('tasks', 'Folder Tasks', taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
+    return box('tasks', 'Folder Tasks', taskRow('newFolder', 'p-newfolder', 'Make a new folder') +
+      taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
       taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
       taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files'), true);
   }
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
+      (one.volume ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
       taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(one.path), true);
   }
-  if (one) return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file'), true);
+  if (one) return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') + taskRow('rename', 'p-rename', 'Rename this file'), true);
   return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items'), true);
 }
 
@@ -1076,6 +1091,8 @@ $('pane').addEventListener('click', (e) => {
   else if (act === 'pin') pin(targetFolder());
   else if (act === 'unpin') unpin(targetFolder());
   else if (act === 'hidden') api.updateSettings({ showHidden: !app.settings.showHidden });
+  else if (act === 'newFolder') makeNew('folder');
+  else if (act === 'rename') renameSelected();
 });
 
 // Pinning by dropping a folder on the Pinned box, from this window or from

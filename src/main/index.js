@@ -1,6 +1,6 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
-const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme } = require('electron');
+const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, dialog } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +9,7 @@ const settings = require('./settings');
 const system = require('./system');
 const helper = require('./helper');
 const folders = require('./folders');
+const ops = require('./ops');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -228,6 +229,10 @@ function buildMenu() {
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
         cmd('Open Terminal Here', 'terminal', 'CmdOrCtrl+Alt+T'),
         { type: 'separator' },
+        cmd('New Folder', 'newFolder', 'CmdOrCtrl+Shift+N'),
+        cmd('New Text Document', 'newText', null),
+        cmd('Rename', 'rename', 'F2'),
+        { type: 'separator' },
         { role: 'close', label: 'Close Window' }
       ]
     },
@@ -318,6 +323,21 @@ ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipcMain.handle('settings:update', (_e, patch) => settings.update(patch));
 ipcMain.on('open', (_e, p) => shell.openPath(p));
+
+// A file operation's answer. A failure is shown on the window that asked,
+// as a sheet, before the answer goes back.
+async function answer(e, res) {
+  if (res && res.error) {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const opts = { type: 'warning', message: res.error, buttons: ['OK'] };
+    if (win) await dialog.showMessageBox(win, opts);
+    else await dialog.showMessageBox(opts);
+  }
+  return res;
+}
+ipcMain.handle('op:rename', async (e, from, name) => answer(e, await ops.rename(from, name)));
+ipcMain.handle('op:newFolder', async (e, dir) => answer(e, await ops.newFolder(dir)));
+ipcMain.handle('op:newText', async (e, dir) => answer(e, await ops.newTextFile(dir)));
 ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
 ipcMain.on('folder:watch', (e, dir) => {

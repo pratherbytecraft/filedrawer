@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('filedrawer', {
   count: (dir, cwd) => ipcRenderer.invoke('folder:count', dir, cwd),
   openTrash: () => ipcRenderer.send('trash:open'),
   openTerminal: (dir) => ipcRenderer.send('terminal:open', dir),
+  rename: (from, name) => ipcRenderer.invoke('op:rename', from, name),
+  newFolder: (dir) => ipcRenderer.invoke('op:newFolder', dir),
+  newText: (dir) => ipcRenderer.invoke('op:newText', dir),
   // The path of a file dropped from Finder or another app.
   pathForFile: (file) => webUtils.getPathForFile(file),
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
