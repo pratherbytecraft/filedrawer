@@ -110,14 +110,14 @@ table.det td .ic { width: 16px; height: 16px; }
 table.det tr.item.sel td { background: linear-gradient(#dcebfc, #c1dcfc); box-shadow: inset 0 1px #7da2ce, inset 0 -1px #7da2ce; }
 table.det tr.item.sel td:first-child { box-shadow: inset 1px 1px #7da2ce, inset 0 -1px #7da2ce; }
 table.det tr.item.sel td:last-child { box-shadow: inset -1px 1px #7da2ce, inset 0 -1px #7da2ce; }
-body.idle table.det tr.item.sel td { background: var(--idle-sel); box-shadow: none; }
+body.idle table.det tr.item.sel td, .files.other table.det tr.item.sel td { background: var(--idle-sel); box-shadow: none; }
 
 /* Selected: a soft blue box around the whole item. */
 .item .nm { padding: 0 2px; }
 .g-icons .item, .g-tiles .item, .g-list .item, .g-thumbs .item { border: 1px solid transparent; border-radius: 3px; padding: 2px; }
 .g-icons .item:hover, .g-tiles .item:hover, .g-list .item:hover, .g-thumbs .item:hover { border-color: #b8d6fb; background: linear-gradient(#fafbfd, #ebf3fd); }
 .g-icons .item.sel, .g-tiles .item.sel, .g-list .item.sel, .g-thumbs .item.sel { border-color: #7da2ce; background: linear-gradient(#dcebfc, #c1dcfc); }
-body.idle .g-icons .item.sel, body.idle .g-tiles .item.sel, body.idle .g-list .item.sel, body.idle .g-thumbs .item.sel { border-color: #d9d9d9; background: var(--idle-sel); }
+body.idle .g-icons .item.sel, body.idle .g-tiles .item.sel, body.idle .g-list .item.sel, body.idle .g-thumbs .item.sel, .files.other .g-icons .item.sel, .files.other .g-tiles .item.sel, .files.other .g-list .item.sel, .files.other .g-thumbs .item.sel { border-color: #d9d9d9; background: var(--idle-sel); }
 .g-icons { grid-template-columns: repeat(auto-fill, 88px); gap: 10px 6px; padding: 10px; }
 .g-icons .nm { line-height: 1.3; max-width: 82px; }
 .g-tiles { grid-template-columns: repeat(auto-fill, 240px); gap: 6px 12px; padding: 10px; }
@@ -144,3 +144,8 @@ input.ren { border: 1px solid #333; }
 .menu .mi .key { color: #6d6d6d; }
 .menu .mi.chk::before { content: "\25CF"; position: absolute; left: 10px; font-size: 7px; }
 .menu .sep { height: 1px; margin: 3px 2px 3px 28px; background: #e0e0e0; }
+
+/* Two panes: the side in use has a light blue folder bar. */
+.sidehead { background: linear-gradient(#fafbfd, #eef3fa); color: #555; border-bottom: 1px solid #d5dfe5; }
+.side.on .sidehead { background: linear-gradient(#e5f3fb, #c4e4f8); color: var(--ink); border-bottom-color: #8ec4ea; }
+.divider { background: #f0f0f0; border-left: 1px solid #d5d5d5; }

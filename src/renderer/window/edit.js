@@ -282,6 +282,7 @@ function dropTarget(e) {
     const it = items[item.dataset.i];
     if (isFolder(it)) return { dir: it.path, el: item };
   }
+  if (e.target.closest('#files-other')) return otherDropTarget(e);
   if (e.target.closest('#files')) {
     if (cwd === TRASH && !listError) return { trash: true, el: null };
     return isPlace(cwd) || listError ? null : { dir: cwd, el: null };
@@ -389,6 +390,7 @@ async function eject(volume) {
 function placeEntries(p) {
   const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
     { label: 'Open in New Tab', click: () => newTab(p) }];
+  if (split) entries.push({ label: 'Open in Other Side', click: () => openInOther(p) });
   if (!isPlace(p)) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
   if (p === TRASH) entries.push('sep', { label: 'Empty Trash...', icon: 'p-trash', click: () => api.emptyTrash() });
   if (isPinned(p)) entries.push('sep', { label: 'Unpin', icon: 'p-pin', click: () => unpin(p) });

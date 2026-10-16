@@ -11,7 +11,7 @@ let tabDrag = null; // the tab being dragged to a new spot
 const TAB_TYPE = 'application/x-filedrawer-tab';
 
 function tabNow() {
-  return { cwd, history: history.slice(), hIndex, view, sel: [...sel], scroll: $('files').scrollTop };
+  return { cwd, history: history.slice(), hIndex, view, sel: [...sel], scroll: $('files').scrollTop, split: splitNow() };
 }
 
 function startTabs() {
@@ -45,8 +45,11 @@ async function openTabState(t) {
   history = t.history.slice();
   hIndex = t.hIndex;
   if (t.view !== view && RENDER[t.view]) view = t.view;
+  // Two panes are this tab's own: the side in use comes back, then the other.
+  await restoreSplit(null);
   await navigate(t.cwd, { push: false, selectMany: t.sel });
   if (t.scroll) $('files').scrollTop = t.scroll;
+  if (t.split) await restoreSplit(t.split);
   drawTabs();
   $('files').focus();
 }

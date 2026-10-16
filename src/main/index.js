@@ -305,21 +305,29 @@ ipcMain.handle('window:waitFolder', (e) => {
 // disks show up and go away. A folder's own watch hears nothing when the
 // folder itself is deleted, moved or renamed, so every two seconds the window
 // also checks that its folder is still there.
-const watchers = new Map(); // window -> { dir, watcher, check, timer }
+const watchers = new Map(); // window -> slot -> { dir, watcher, check, timer }
 
-function unwatch(win) {
-  const w = watchers.get(win);
-  if (!w) return;
-  clearTimeout(w.timer);
-  clearInterval(w.check);
-  w.watcher.close();
-  watchers.delete(win);
+// A window watches its folder (slot main) and, with two panes open, the
+// other side's folder (slot other). Without a slot, both stop.
+function unwatch(win, slot) {
+  const mine = watchers.get(win);
+  if (!mine) return;
+  for (const s of slot ? [slot] : [...mine.keys()]) {
+    const w = mine.get(s);
+    if (!w) continue;
+    clearTimeout(w.timer);
+    clearInterval(w.check);
+    w.watcher.close();
+    mine.delete(s);
+  }
+  if (!mine.size) watchers.delete(win);
 }
 
-function watch(win, dir) {
-  const w = watchers.get(win);
+function watch(win, dir, slot = 'main') {
+  const w = watchers.get(win) && watchers.get(win).get(slot);
   if (w && w.dir === dir) return;
-  unwatch(win);
+  unwatch(win, slot);
+  if (!dir) return;
   // Computer watches the disks, the Trash its folder in Home; Recents and
   // iCloud Drive's top aren't watched.
   if (dir === places.RECENTS || dir === places.ICLOUD) return;
@@ -338,13 +346,14 @@ function watch(win, dir) {
     }, 250);
   };
   watcher.on('change', changed);
-  watcher.on('error', () => unwatch(win));
+  watcher.on('error', () => unwatch(win, slot));
   entry.check = setInterval(() => {
     fs.access(target, (err) => {
       if (err && err.code === 'ENOENT') changed();
     });
   }, 2000);
-  watchers.set(win, entry);
+  if (!watchers.has(win)) watchers.set(win, new Map());
+  watchers.get(win).set(slot, entry);
 }
 
 // A file handed to Filedrawer, as other apps' Show in Finder does once
@@ -523,6 +532,7 @@ function buildMenu() {
         },
         { type: 'separator' },
         cmd('Folders', 'pane', 'CmdOrCtrl+Shift+F', { type: 'checkbox', checked: s.pane === 'folders' }),
+        cmd('Two Panes', 'split', 'Alt+CmdOrCtrl+P', { type: 'checkbox', checked: !!s.split }),
         {
           label: 'Show Hidden Files', accelerator: 'CmdOrCtrl+Shift+.', type: 'checkbox', checked: s.showHidden,
           click: () => settings.update({ showHidden: !settings.get().showHidden })
@@ -897,9 +907,14 @@ ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
 ipcMain.on('search:start', (e, id, q) => search.start(e.sender, id, q));
 ipcMain.on('search:stop', (e) => search.stop(e.sender));
 ipcMain.on('window:open', (_e, dir) => openWindow(dir));
-ipcMain.on('folder:watch', (e, dir) => {
+ipcMain.on('folder:watch', (e, dir, slot) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  if (win) watch(win, dir);
+  if (win) watch(win, dir, slot);
+});
+// Move to Other Side moves even to another disk.
+ipcMain.handle('op:moveTo', async (e, paths, dest) => {
+  const res = await moveOrCopy(e, 'move', paths, dest);
+  return { paths: res.done.map((d) => d.to) };
 });
 // Each window has its own view, left pane and folder, so the menus show the front one's.
 const viewOf = new WeakMap();

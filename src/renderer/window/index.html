@@ -44,6 +44,7 @@
       <rect x="3" y="13" width="8" height="8" rx="1" fill="#6cc04a" stroke="#2f8a1c"/>
       <rect x="13" y="13" width="8" height="8" rx="1" fill="#d9534f" stroke="#a52a26"/>
     </symbol>
+    <symbol id="t-split" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2" fill="#fff" stroke="#6b6b6b" stroke-width="1.2"/><rect x="3" y="5" width="18" height="3" fill="#3b7dd8"/><path d="M12 8v11.5" stroke="#6b6b6b" stroke-width="1.2"/><path d="M5 11h5M5 13.5h4M14 11h5M14 13.5h4" stroke="#9a9a9a" stroke-width="1"/></symbol>
     <symbol id="t-folders" viewBox="0 0 24 24">
       <path d="M2 4.5A1 1 0 0 1 3 3.5h5l1.5 1.5H15a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" style="fill:var(--fold-front);stroke:var(--fold-line);stroke-width:.5"/>
       <path d="M6 12v7h4M6 15.5h4" stroke="#7d7a6f" fill="none"/>
@@ -103,6 +104,7 @@
   <div class="tbsep"></div>
   <div class="tb" id="b-search" title="Search"><svg class="ic"><use href="#t-search"/></svg><span class="lb">Search</span></div>
   <div class="tb" id="b-folders" title="Folders"><svg class="ic"><use href="#t-folders"/></svg><span class="lb">Folders</span></div>
+  <div class="tb" id="b-split" title="Two Panes"><svg class="ic"><use href="#t-split"/></svg><span class="lb">Two Panes</span></div>
   <div class="tbsep"></div>
   <div class="tb" id="b-views" title="Views"><svg class="ic"><use href="#t-views"/></svg><span class="tb-drop"><svg class="drop"><use href="#t-drop"/></svg></span></div>
   <div class="tbsep"></div>
@@ -146,7 +148,11 @@
     <div class="head"><span>Folders</span><span class="x" id="tree-close" title="Close">&times;</span></div>
     <div class="tree-list" id="tree-list"></div>
   </div>
-  <div class="files" id="files" tabindex="0"></div>
+  <div class="sides" id="sides">
+    <div class="side" id="side-l"><div class="sidehead"></div><div class="files" id="files" tabindex="0"></div></div>
+    <div class="divider" id="divider" hidden></div>
+    <div class="side" id="side-r" hidden><div class="sidehead"></div><div class="files other" id="files-other"></div></div>
+  </div>
 </div>
 
 <div class="status">
@@ -163,5 +169,6 @@
 <script src="edit.js"></script>
 <script src="search.js"></script>
 <script src="tabs.js"></script>
+<script src="split.js"></script>
 </body>
 </html>

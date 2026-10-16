@@ -24,6 +24,7 @@ let ICLOUD = '::icloud';
 const isPlace = (p) => p === COMPUTER || p === TRASH || p === RECENTS || p === ICLOUD;
 let folderModified = null; // the open folder's own date, for the Details box
 let cwdWritable = true; // new items and pastes can go in the open folder
+let split = null; // { other } while this tab shows two panes, see split.js
 const iconUrls = new Map(); // by icon key and pixel size
 
 const isFolder = (it) => it.dir && !it.package;
@@ -343,7 +344,7 @@ function render() {
 function setView(v) {
   if (!RENDER[v] || v === view) return;
   view = v;
-  api.setView({ view, pane, cwd });
+  api.setView({ view, pane, cwd, split: !!split });
   const patch = { view: v };
   if (app.settings.perFolderView && cwd !== COMPUTER) patch.folderViews = { ...app.settings.folderViews, [cwd]: v };
   api.updateSettings(patch);
@@ -403,6 +404,7 @@ function updateTitle() {
   document.title = name;
   api.setTitle(name, cwd);
   drawTabs();
+  drawHeads();
 }
 
 const shownPath = (p) => (isPlace(p) ? placeLabel(p) : p);
@@ -416,7 +418,7 @@ function updateChrome() {
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
   $('title-icon').innerHTML = icon;
-  api.setView({ view, pane, cwd });
+  api.setView({ view, pane, cwd, split: !!split });
   updateTitle();
   renderTree();
 }
@@ -458,7 +460,7 @@ async function navigate(dir, { push = true, select = null, selectMany = null, ke
     const want = RENDER[own] ? own : app.settings.view;
     if (want !== view) {
       view = want;
-      api.setView({ view, pane, cwd });
+      api.setView({ view, pane, cwd, split: !!split });
     }
   }
   listError = res.error || null;
@@ -695,7 +697,7 @@ function fillMenu(m, entries) {
   m.innerHTML = entries.map((en, i) => en === 'sep' ? '<div class="sep"></div>' :
     `<div class="mi${en.disabled ? ' disabled' : ''}${en.checked ? ' chk' : ''}${en.sub ? ' sub' : ''}" data-i="${i}">` +
     `<svg class="mic">${en.icon ? `<use href="#${en.icon}"/>` : ''}</svg>` +
-    (en.bold ? `<b>${esc(en.label)}</b>` : esc(en.label)) + '</div>').join('');
+    (en.bold ? `<b>${esc(en.label)}</b>` : esc(en.label)) + (en.key ? `<span class="key">${esc(en.key)}</span>` : '') + '</div>').join('');
   m.onclick = (e) => {
     const el = e.target.closest('.mi');
     if (!el || entries[el.dataset.i].sub) return;
@@ -818,6 +820,7 @@ $('files').addEventListener('contextmenu', async (e) => {
   if (picked.every(isFolder)) {
     groups[0].push({ label: 'Open in New Window', click: () => openSelected({ newWindow: true }) });
     groups[0].push({ label: 'Open in New Tab', click: () => openSelected({ newWindow: false, inTab: true }) });
+    if (split && picked.length === 1) groups[0].push({ label: 'Open in Other Side', click: () => openInOther(it.alias && it.aliasDir ? it.alias : it.path) });
   }
   // Apps and other bundles open like files, and can be looked inside too.
   if (picked.length === 1 && it.package && !it.volume) groups[0].push({ label: 'Show Package Contents', click: () => navigate(it.path) });
@@ -844,6 +847,13 @@ $('files').addEventListener('contextmenu', async (e) => {
       { label: 'Copy Path', click: () => copyPaths() },
       ...(fixed ? [] : [{ label: 'Duplicate', click: () => duplicateSelected() }])
     ]);
+    // With two panes, straight to the folder on the other side.
+    if (split && !isPlace(split.other.cwd) && !split.other.listError) {
+      groups.splice(3, 0, [
+        { label: 'Copy to Other Side', key: 'F5', click: () => toOtherSide(false) },
+        ...(fixed ? [] : [{ label: 'Move to Other Side', key: 'F6', click: () => toOtherSide(true) }])
+      ]);
+    }
     if (!fixed) {
       groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
       if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
@@ -1025,6 +1035,7 @@ api.onCommand(({ command, arg }) => {
   switch (command) {
     case 'newWindow': api.openWindow(cwd); break;
     case 'newTab': newTab(); break;
+    case 'split': setSplit(!split); break;
     case 'closeTab': closeTab(); break;
     case 'nextTab': nextTab(1); break;
     case 'prevTab': nextTab(-1); break;
@@ -1098,6 +1109,9 @@ function applyState(state) {
   app = state;
   window.applyTheme(state);
   applyChrome();
+  // The other side lists again when what it shows changes.
+  if (split && old && (['showHidden', 'showExtensions', 'foldersFirst', 'theme'].some((k) => old.settings[k] !== state.settings[k]) ||
+    JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort))) refreshOther();
   if (old && LOOK_KEYS.some((k) => old.settings[k] !== state.settings[k])) {
     treeKids.clear();
     treeShownFor = null;
@@ -1130,6 +1144,7 @@ window.addEventListener('focus', () => {
   if (cwd === TRASH && listError === 'fda') navigate(cwd, { push: false });
 });
 api.onFolderChanged((dir) => {
+  if (split && dir === split.other.cwd) refreshOther();
   if (dir !== cwd || searchOn()) return;
   if (renaming) {
     changedWhileRenaming = true; // redrawing now would throw away the name being typed
@@ -1542,7 +1557,7 @@ function setPane(p, { save = true, quiet = false } = {}) {
   pane = p === 'folders' ? 'folders' : 'tasks';
   document.body.dataset.pane = pane;
   $('b-folders').classList.toggle('down', pane === 'folders');
-  api.setView({ view, pane, cwd });
+  api.setView({ view, pane, cwd, split: !!split });
   if (save) api.updateSettings({ pane });
   treeShownFor = null;
   renderPane();

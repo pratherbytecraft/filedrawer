@@ -29,6 +29,8 @@ Then move Filedrawer from the Applications folder in your home folder to the Tra
 
 Each window has tabs, in a strip under the title bar. Command T opens a new tab, Command W closes one, Control Tab moves between them, and a folder's right click or a middle click opens it in a new tab. Each tab keeps its own folder, history and view.
 
+Two Panes on the toolbar, or Option Command P, splits a tab into two sides, each with its own folder. Click a side or press Tab to work in it. Drag items from one side to the other, or use Copy to Other Side (F5) and Move to Other Side (F6).
+
 Type a path into the address bar and press Return, and it fills in folder names as you type. Back and Forward each keep a list of where you've been, and Up goes to the folder above. The arrow at the end of the address bar lists the folders above this one and your pinned folders.
 
 The left pane shows tasks for what's selected, your pinned folders, other places and the details of the selection. The Folders button swaps it for a folder tree. Drop a folder on Pinned to pin it, or right click a folder and pick Pin to Pinned.

@@ -95,12 +95,12 @@ table.det td .cell { gap: 6px; }
 table.det td .ic { width: 18px; height: 18px; }
 table.det tbody tr:nth-child(even) td { background: var(--zebra); }
 table.det tr.item.sel td { background: var(--accent); color: var(--accent-text); }
-body.idle table.det tr.item.sel td { background: var(--idle-sel); color: var(--text); }
+body.idle table.det tr.item.sel td, .files.other table.det tr.item.sel td { background: var(--idle-sel); color: var(--text); }
 
 /* Icons, Tiles, List and Thumbnails: the name turns accent colored when selected. */
 .item .nm { border-radius: 4px; padding: 0 3px; }
 .item.sel .nm { background: var(--accent); color: var(--accent-text); }
-body.idle .item.sel .nm { background: var(--idle-sel); color: var(--text); }
+body.idle .item.sel .nm, .files.other .item.sel .nm { background: var(--idle-sel); color: var(--text); }
 table.det tr.item.sel .nm, body.idle table.det tr.item.sel .nm { background: none; color: inherit; padding: 0; }
 .g-icons { grid-template-columns: repeat(auto-fill, 96px); gap: 18px 8px; padding: 16px; }
 .g-icons .big, .g-tiles .big { border-radius: 8px; padding: 2px; box-sizing: content-box; }
@@ -115,7 +115,7 @@ table.det tr.item.sel .nm, body.idle table.det tr.item.sel .nm { background: non
 .g-thumbs { grid-template-columns: repeat(auto-fill, 124px); gap: 16px 10px; padding: 14px; }
 .g-thumbs .frame { width: 112px; height: 112px; border-radius: 10px; background: var(--zebra); padding: 6px; }
 .g-thumbs .item.sel .frame { box-shadow: 0 0 0 3px var(--accent); }
-body.idle .g-thumbs .item.sel .frame { box-shadow: 0 0 0 3px var(--idle-sel); }
+body.idle .g-thumbs .item.sel .frame, .files.other .g-thumbs .item.sel .frame { box-shadow: 0 0 0 3px var(--idle-sel); }
 .g-thumbs .pic { border-radius: 4px; }
 .g-thumbs .nm { font-size: 12px; max-width: 120px; }
 
@@ -148,3 +148,8 @@ input.ren { color: var(--text); background: var(--bg); border: 0; border-radius:
 .spane button { padding: 3px 12px; border-radius: 6px; border: 0; background: var(--hover); color: var(--text); }
 .spane button.main { background: var(--accent); color: var(--accent-text); }
 .spane button:disabled { opacity: .45; }
+
+/* Two panes: the side in use has an accent line under its folder bar. */
+.sidehead { background: var(--chrome); color: var(--dim); border-bottom: 1px solid var(--line); height: 24px; font-size: 11px; }
+.side.on .sidehead { background: color-mix(in srgb, var(--accent) 14%, var(--chrome)); color: var(--text); box-shadow: inset 0 -2px var(--accent); }
+.divider { width: 1px; background: var(--line); }

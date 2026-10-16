@@ -91,7 +91,7 @@ table.det td .ic { width: 16px; height: 16px; }
 /* Selected: the name in blue, the icon tinted to match. */
 .item .nm { padding: 0 2px; }
 .item.sel .nm { background: var(--sel); color: var(--sel-text); }
-body.idle .item.sel .nm { background: var(--idle-sel); color: #000; }
+body.idle .item.sel .nm, .files.other .item.sel .nm { background: var(--idle-sel); color: #000; }
 .item.sel svg.big, .item.sel img.big, table.det tr.item.sel .ic { filter: brightness(.82) sepia(.3) hue-rotate(180deg) saturate(2); }
 .g-icons { grid-template-columns: repeat(auto-fill, 78px); gap: 14px 6px; padding: 10px; }
 .g-icons .item { gap: 3px; }
@@ -104,7 +104,7 @@ body.idle .item.sel .nm { background: var(--idle-sel); color: #000; }
 .g-thumbs { grid-template-columns: repeat(auto-fill, 116px); gap: 14px 10px; padding: 12px; }
 .g-thumbs .frame { width: 102px; height: 102px; border: 1px solid #d0d0bf; background: #fff; padding: 4px; }
 .g-thumbs .item.sel .frame { border: 2px solid var(--sel); padding: 3px; }
-body.idle .g-thumbs .item.sel .frame { border-color: var(--idle-sel); }
+body.idle .g-thumbs .item.sel .frame, .files.other .g-thumbs .item.sel .frame { border-color: var(--idle-sel); }
 .g-thumbs .item.sel .pic { filter: none; }
 .g-thumbs .nm { max-width: 110px; }
 
@@ -156,3 +156,8 @@ body.idle .g-thumbs .item.sel .frame { border-color: var(--idle-sel); }
 [data-scheme="silver"] .box.first .bd { background: #f8f8fa; }
 [data-scheme="silver"] .box .hint { color: #6b7190; }
 [data-scheme="silver"] { --sel: #8a90a8; --link: #3f3d3d; }
+
+/* Two panes: the side in use has the blue bar, the other a pale one. */
+.sidehead { background: #d6dff7; color: #3d4a6b; border-bottom: 1px solid #b7c6eb; font-size: 11px; }
+.side.on .sidehead { background: linear-gradient(#3a80f3, #2462d8); color: #fff; }
+.divider { background: var(--face); border-left: 1px solid #d0d0bf; border-right: 1px solid #fff; }
