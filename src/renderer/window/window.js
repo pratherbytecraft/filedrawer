@@ -188,9 +188,9 @@ function sortItems(list) {
 }
 
 const COLUMNS = [
-  { key: 'name', label: 'Name', width: '42%' },
-  { key: 'size', label: 'Size', width: '12%', cls: 'r' },
-  { key: 'kind', label: 'Kind', width: '22%' },
+  { key: 'name', label: 'Name', width: '40%' },
+  { key: 'size', label: 'Size', width: '15%', cls: 'r' },
+  { key: 'kind', label: 'Kind', width: '21%' },
   { key: 'modified', label: 'Date Modified', width: '24%' }
 ];
 
@@ -229,7 +229,7 @@ const NOTES = {
   other: 'This folder couldn\'t be opened.'
 };
 
-const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}${it.hidden ? ' hid' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
+const itemAttrs = (it, i) => `class="item${sel.has(it.path) ? ' sel' : ''}${it.hidden ? ' hid' : ''}${(app.cut || []).includes(it.path) ? ' cut' : ''}" data-i="${i}"${isFolder(it) && !it.volume ? ' draggable="true"' : ''}`;
 const nameHtml = (it) => `<span class="nm">${esc(it.display)}</span>`;
 
 function renderIcons() {
@@ -364,7 +364,7 @@ function updateChrome() {
 
 // Opens dir in this window. select picks an item once it's listed, keep
 // holds on to the selection (a refresh).
-async function navigate(dir, { push = true, select = null, keep = false, changed = false } = {}) {
+async function navigate(dir, { push = true, select = null, selectMany = null, keep = false, changed = false } = {}) {
   const token = ++listToken;
   const res = await api.list(dir, { hidden: app.settings.showHidden });
   if (token !== listToken) return;
@@ -392,7 +392,10 @@ async function navigate(dir, { push = true, select = null, keep = false, changed
   folderModified = res.modified || null;
   items = res.error ? [] : sortItems(res.items);
   const paths = new Set(items.map((it) => it.path));
-  if (keep && same) {
+  if (selectMany) {
+    sel = new Set(selectMany.filter((p) => paths.has(p)));
+    anchor = cursor = [...sel].pop() || null;
+  } else if (keep && same) {
     sel = new Set([...sel].filter((p) => paths.has(p)));
   } else {
     sel = new Set(select && paths.has(select) ? [select] : []);
@@ -401,7 +404,7 @@ async function navigate(dir, { push = true, select = null, keep = false, changed
   render();
   updateChrome();
   if (!same || !volumeName) loadVolume();
-  if (!keep && cursor) scrollToItem(cursor);
+  if ((!keep || selectMany) && cursor) scrollToItem(cursor);
   else if (!keep) $('files').scrollTop = 0;
 }
 
@@ -666,7 +669,7 @@ $('files').addEventListener('contextmenu', (e) => {
       { label: 'Arrange Icons By', sub: sortEntries() },
       { label: 'Refresh', click: () => navigate(cwd, { push: false, keep: true }) },
       ...here,
-      ...(cwd === COMPUTER || listError ? [] : ['sep', { label: 'New', sub: [
+      ...(cwd === COMPUTER || listError ? [] : ['sep', { label: 'Paste', click: () => pasteInto(cwd) }, 'sep', { label: 'New', sub: [
         { label: 'Folder', icon: 'p-newfolder', click: () => makeNew('folder') },
         { label: 'Text Document', icon: 'p-text', click: () => makeNew('text') }
       ] }])
@@ -691,8 +694,13 @@ $('files').addEventListener('contextmenu', (e) => {
     }
   }
   if (cwd !== COMPUTER && !it.volume) {
-    if (picked.length === 1) groups[2].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
-    groups[2].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
+    groups.splice(2, 0, [
+      { label: 'Cut', click: () => clipCommand('cut') },
+      { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
+      ...(picked.length === 1 && isFolder(it) ? [{ label: 'Paste', click: () => pasteInto(it.path) }] : [])
+    ]);
+    if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
+    groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
   }
   const entries = groups.filter((g) => g.length).flatMap((g, i) => (i ? ['sep', ...g] : g));
   openMenu(entries, e.clientX, e.clientY);
@@ -897,6 +905,9 @@ api.onCommand(({ command, arg }) => {
     }
     case 'undo':
     case 'redo': undoOrRedo(command); break;
+    case 'cut':
+    case 'copy':
+    case 'paste': clipCommand(command); break;
     case 'terminal': openTerminal(cwd === COMPUTER ? null : cwd); break;
     case 'pinHere': if (cwd !== COMPUTER) (isPinned(cwd) ? unpin(cwd) : pin(cwd)); break;
     case 'pane': setPane(pane === 'folders' ? 'tasks' : 'folders'); break;
@@ -920,6 +931,8 @@ function applyState(state) {
   } else if (old && JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort)) {
     items = sortItems(items);
     render();
+  } else if (old && JSON.stringify(old.cut) !== JSON.stringify(state.cut)) {
+    showCut();
   } else if (old && JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins)) {
     renderPane();
     renderTree();

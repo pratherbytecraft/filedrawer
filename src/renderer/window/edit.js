@@ -158,6 +158,37 @@ document.addEventListener('keydown', (e) => {
   trashSelected();
 });
 
+// ---------- Cut, Copy and Paste ----------
+
+// Text being typed gets the text commands; otherwise they work on files.
+function clipCommand(which) {
+  const field = document.activeElement;
+  if (field && field.matches('input')) {
+    api.editText(which);
+    return;
+  }
+  if (which === 'paste') {
+    pasteInto(cwd);
+    return;
+  }
+  const paths = selectedItems().filter((it) => !it.volume).map((it) => it.path);
+  if (!paths.length) return;
+  if (which === 'cut') api.cutFiles(paths);
+  else api.copyFiles(paths);
+}
+
+async function pasteInto(dir) {
+  if (dir === COMPUTER || (dir === cwd && listError)) return;
+  const res = await api.paste(dir);
+  if (dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
+}
+
+// Cut items look faded until they're pasted somewhere.
+function showCut() {
+  const cutSet = new Set(app.cut || []);
+  for (const el of rows()) el.classList.toggle('cut', cutSet.has(items[el.dataset.i].path));
+}
+
 // ---------- new folders and text documents ----------
 
 async function makeNew(kind) {

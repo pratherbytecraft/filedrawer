@@ -36,9 +36,10 @@
     root.dataset.appearance = appearance;
     root.style.setProperty('--accent', accent);
     root.style.setProperty('--accent-text', accentText);
+    // Small windows (a job's progress) carry their own styles for each theme.
     const link = document.getElementById('theme-css');
     const href = `../themes/${settings.theme}.css`;
-    if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+    if (link && link.getAttribute('href') !== href) link.setAttribute('href', href);
   }
 
   window.applyTheme = apply;

@@ -1,0 +1,36 @@
+/* The copy and move window, in the System theme or Classic 2001. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { user-select: none; cursor: default; overflow: hidden; }
+[hidden] { display: none !important; }
+.job, .ask { padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; height: 100%; }
+.title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line, .current, .left { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.3em; }
+.bar { height: 14px; margin: 6px 0 2px; overflow: hidden; }
+.fill { height: 100%; width: 0; transition: width .15s; }
+.buttons { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+.buttons .gap { flex: 1; }
+.q { line-height: 1.4; }
+.sub { margin-top: 2px; }
+.all { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+button { font: inherit; min-width: 72px; }
+
+/* System */
+[data-theme="system"] body { font: 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; background: #ececec; color: #1d1d1f; }
+[data-theme="system"][data-appearance="dark"] body { background: #2a2a2c; color: #f2f2f7; color-scheme: dark; }
+[data-theme="system"] .line, [data-theme="system"] .current, [data-theme="system"] .left, [data-theme="system"] .sub { color: #86868b; font-size: 12px; }
+[data-theme="system"] .bar { border-radius: 7px; background: rgba(0,0,0,.1); }
+[data-theme="system"][data-appearance="dark"] .bar { background: rgba(255,255,255,.12); }
+[data-theme="system"] .fill { background: var(--accent); border-radius: 7px; }
+[data-theme="system"] button { padding: 3px 12px; border-radius: 6px; border: 0; background: rgba(0,0,0,.08); color: inherit; }
+[data-theme="system"][data-appearance="dark"] button { background: rgba(255,255,255,.14); }
+[data-theme="system"] button.main { background: var(--accent); color: var(--accent-text); }
+
+/* Classic 2001 */
+[data-theme="classic-2001"] body { font: 11px Tahoma, Geneva, Verdana, sans-serif; background: #ece9d8; color: #000; color-scheme: light; }
+[data-theme="classic-2001"] .title { font-weight: bold; }
+[data-theme="classic-2001"] .bar { height: 16px; border: 1px solid #686868; border-radius: 3px; background: #fff; padding: 1px; }
+[data-theme="classic-2001"] .fill { border-radius: 1px; background: repeating-linear-gradient(90deg, #2fc22b 0 8px, transparent 8px 10px); }
+[data-theme="classic-2001"] button { padding: 3px 10px; border: 1px solid #003c74; border-radius: 3px; background: linear-gradient(#fff, #ece9d8 90%, #d6d0c5); color: #000; }
+[data-theme="classic-2001"] button:hover { box-shadow: inset 0 0 0 2px #f9b119; }
+[data-theme="classic-2001"] button.main { box-shadow: inset 0 0 0 1px #9bb8f1; }

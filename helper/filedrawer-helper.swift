@@ -22,6 +22,10 @@
 //     (an item that couldn't go to the Trash has "error" instead of "to")
 //   {"id":6,"cmd":"move","from":"/Users/you/.Trash/a.txt","to":"/Users/you/a.txt"}
 //     -> {"id":6,"ok":true}
+//   {"id":7,"cmd":"clipWrite","paths":["/Users/you/a.txt"]}
+//     -> {"id":7,"change":42}   (the clipboard's change count after writing)
+//   {"id":8,"cmd":"clipRead"}
+//     -> {"id":8,"paths":["/Users/you/a.txt"],"change":42}
 // A request that fails gets {"id":n,"error":"..."}.
 import AppKit
 import Foundation
@@ -136,6 +140,17 @@ func handle(_ req: [String: Any]) {
         } catch {
             reply(["id": id, "error": (error as NSError).localizedDescription])
         }
+    case "clipWrite":
+        // As file links, the way Finder copies files, so Finder can paste them.
+        let urls = (req["paths"] as? [String] ?? []).map { URL(fileURLWithPath: $0) as NSURL }
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.writeObjects(urls)
+        reply(["id": id, "change": board.changeCount])
+    case "clipRead":
+        let board = NSPasteboard.general
+        let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        reply(["id": id, "paths": urls.map { $0.path }, "change": board.changeCount])
     case "volume":
         reply(["id": id].merging(volume(req["path"] as? String ?? "/")) { a, _ in a })
     default:

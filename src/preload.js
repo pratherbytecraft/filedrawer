@@ -27,6 +27,14 @@ contextBridge.exposeInMainWorld('filedrawer', {
   newText: (dir) => ipcRenderer.invoke('op:newText', dir),
   trash: (paths) => ipcRenderer.invoke('op:trash', paths),
   undo: (which) => ipcRenderer.invoke('op:undo', which),
+  editText: (which) => ipcRenderer.send('edit:text', which),
+  copyFiles: (paths) => ipcRenderer.invoke('clip:copy', paths),
+  cutFiles: (paths) => ipcRenderer.invoke('clip:cut', paths),
+  paste: (dest) => ipcRenderer.invoke('clip:paste', dest),
+  // The progress window of a copy or move.
+  onJob: on('job:update'),
+  answerJob: (id, choice, all) => ipcRenderer.send('job:answer', id, choice, all),
+  cancelJob: (id) => ipcRenderer.send('job:cancel', id),
   // The path of a file dropped from Finder or another app.
   pathForFile: (file) => webUtils.getPathForFile(file),
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),

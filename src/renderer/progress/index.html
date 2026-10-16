@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Copying</title>
+<link rel="stylesheet" href="progress.css">
+</head>
+<body>
+<div class="job" id="job">
+  <div class="title" id="title"></div>
+  <div class="line" id="line"></div>
+  <div class="current" id="current"></div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="left" id="left"></div>
+  <div class="buttons"><button id="cancel">Cancel</button></div>
+</div>
+<div class="ask" id="ask" hidden>
+  <div class="q" id="q"></div>
+  <div class="sub">The item that's there now goes to the Trash if you replace it.</div>
+  <label class="all" id="all-row"><input type="checkbox" id="all"> <span id="all-text"></span></label>
+  <div class="buttons">
+    <button id="stop">Stop</button>
+    <span class="gap"></span>
+    <button id="skip">Skip</button>
+    <button id="keep">Keep Both</button>
+    <button id="replace" class="main">Replace</button>
+  </div>
+</div>
+<script src="../shared/theme.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

@@ -11,6 +11,7 @@ const helper = require('./helper');
 const folders = require('./folders');
 const ops = require('./ops');
 const undo = require('./undo');
+const copier = require('./copier');
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
@@ -24,6 +25,7 @@ if (!app.requestSingleInstanceLock()) {
 app.setName('Filedrawer');
 
 const windows = new Set();
+let cut = null; // { paths, change } after Cut, until a paste moves them or the clipboard changes
 let ready = false;
 const queued = []; // folders handed over before the app was ready
 
@@ -32,6 +34,7 @@ function state() {
     settings: settings.get(),
     system: system.snapshot(),
     home: folders.HOME,
+    cut: cut ? cut.paths : [],
     computer: folders.COMPUTER,
     user: os.userInfo().username
   };
@@ -245,9 +248,9 @@ function buildMenu() {
         { label: labels.undo || 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => undoOrType('undo') },
         { label: labels.redo || 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: () => undoOrType('redo') },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => editOrFiles('cut') },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => editOrFiles('copy') },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => editOrFiles('paste') },
         cmd('Select All', 'selectAll', 'CmdOrCtrl+A')
       ]
     },
@@ -338,6 +341,89 @@ async function answer(e, res) {
   }
   return res;
 }
+// Cut, Copy and Paste go to the window, which works on the text being typed
+// or on the selected files. Other windows (a job's) get the text commands.
+function editOrFiles(which) {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win && windows.has(win)) win.webContents.send('command', { command: which });
+  else if (win) win.webContents[which]();
+}
+ipcMain.on('edit:text', (e, which) => {
+  if (['cut', 'copy', 'paste'].includes(which)) e.sender[which]();
+});
+
+// Files go on the Mac's clipboard the way Finder puts them there, so either
+// app can paste them. Cut is remembered here: a paste moves the files as
+// long as the clipboard still holds what was cut.
+async function putOnClipboard(paths, isCut) {
+  const res = await helper.request('clipWrite', { paths });
+  cut = isCut && res ? { paths, change: res.change } : null;
+  pushState();
+}
+ipcMain.handle('clip:copy', (_e, paths) => putOnClipboard(paths, false));
+ipcMain.handle('clip:cut', (_e, paths) => putOnClipboard(paths, true));
+
+// { paths } of what was pasted, for the window to select.
+ipcMain.handle('clip:paste', async (e, dest) => {
+  const clip = await helper.request('clipRead');
+  if (!clip || !clip.paths.length) return { paths: [] };
+  const move = !!cut && clip.change === cut.change;
+  const res = await moveOrCopy(e, move ? 'move' : 'copy', clip.paths, dest);
+  if (move && res.done.length) {
+    cut = null;
+    await helper.request('clipWrite', { paths: [] }); // the cut files have gone, like the old windows
+    pushState();
+  }
+  return { paths: res.done.map((d) => d.to) };
+});
+
+// Runs a copy or move job, shows its error and puts it on the Undo list.
+async function moveOrCopy(e, mode, sources, dest) {
+  const near = BrowserWindow.fromWebContents(e.sender);
+  const res = await copier.start({ mode, pairs: sources.map((src) => ({ src, target: null })), dest, near });
+  if (res.error) await answer(e, { error: res.error });
+  if (res.done.length) undo.push(mode === 'copy' ? copyStep(res) : moveStep(res));
+  return res;
+}
+
+// Undoing a copy puts the copies in the Trash and brings back anything they replaced.
+function copyStep(res) {
+  const copies = res.done.map((d) => d.to);
+  let trashed = [];
+  let replaced = res.replaced;
+  return {
+    label: 'Copy',
+    undo: async () => {
+      const t = await ops.trash(copies);
+      trashed = t.items;
+      if (t.error) return t;
+      return replaced.length ? ops.untrash(replaced) : {};
+    },
+    redo: async () => {
+      if (replaced.length) replaced = (await ops.trash(replaced.map((r) => r.from))).items;
+      return ops.untrash(trashed);
+    }
+  };
+}
+
+// Undoing a move moves everything back, then brings back anything it replaced.
+function moveStep(res) {
+  const moved = res.done;
+  let replaced = res.replaced;
+  return {
+    label: 'Move',
+    undo: async () => {
+      const back = await copier.start({ mode: 'move', pairs: moved.map((m) => ({ src: m.to, target: m.from })) });
+      if (back.error) return back;
+      return replaced.length ? ops.untrash(replaced) : {};
+    },
+    redo: async () => {
+      if (replaced.length) replaced = (await ops.trash(replaced.map((r) => r.from))).items;
+      return copier.start({ mode: 'move', pairs: moved.map((m) => ({ src: m.from, target: m.to })) });
+    }
+  };
+}
+
 // Undo and Redo go to the window first, which undoes typing in a name or
 // the address bar itself, and asks for the file undo otherwise.
 function undoOrType(which) {
