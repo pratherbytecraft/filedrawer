@@ -511,6 +511,9 @@ function buildMenu() {
         cmd('Forward', 'forward', 'CmdOrCtrl+]'),
         cmd('Up One Folder', 'up', 'CmdOrCtrl+Up'),
         cmd('Home', 'home', 'CmdOrCtrl+Shift+H'),
+        ...[['Desktop', 'Shift+D'], ['Documents', 'Shift+O'], ['Downloads', 'Alt+L']].map(([name, keys]) =>
+          cmd(name, 'navigate', `CmdOrCtrl+${keys}`, { click: () => send('navigate', path.join(folders.HOME, name)) })),
+        cmd('Applications', 'navigate', 'CmdOrCtrl+Shift+A', { click: () => send('navigate', '/Applications') }),
         cmd('Computer', 'computer', 'CmdOrCtrl+Shift+C'),
         cmd('Go to Folder...', 'address', 'CmdOrCtrl+L'),
         { type: 'separator' },
@@ -865,10 +868,29 @@ ipcMain.on('window:view', (e, look) => {
   viewOf.set(win, look);
   buildMenu();
 });
-// Finder keeps the Trash to itself, so the Trash opens there.
+// Finder keeps the Trash to itself, so the Trash opens there, and Finder
+// empties it (Filedrawer can't see inside without Full Disk Access).
 ipcMain.on('trash:open', () => {
   finder.pass();
   shell.openPath(path.join(folders.HOME, '.Trash'));
+});
+ipcMain.on('trash:empty', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    message: 'Are you sure you want to permanently erase the items in the Trash?',
+    detail: 'You can\'t undo this action.',
+    buttons: ['Empty Trash', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1
+  });
+  if (response !== 0) return;
+  execFile('osascript', ['-e', 'tell application "Finder" to empty trash'], (err, _out, stderr) => {
+    if (!err) return;
+    const message = /-1743/.test(stderr || '') ? 'Filedrawer needs Control Finder to empty the Trash. You can allow it on the Default File Manager page in Settings.'
+      : `The Trash couldn't be emptied. ${(stderr || '').trim()}`.trim();
+    dialog.showMessageBox(win, { type: 'warning', message, buttons: ['OK'] });
+  });
 });
 ipcMain.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);

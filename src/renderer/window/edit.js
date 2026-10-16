@@ -371,13 +371,26 @@ async function eject(volume) {
   if (!res.error && cwd === COMPUTER) navigate(cwd, { push: false, keep: true });
 }
 
+// The Trash in Other Places and the tree: open it in Finder, or empty it.
+const trashEntries = () => [{ label: 'Open', bold: true, click: () => api.openTrash() }, 'sep', { label: 'Empty Trash', icon: 'p-trash', click: () => api.emptyTrash() }];
+
+$('pane').addEventListener('contextmenu', (e) => {
+  const place = e.target.closest('[data-place="trash"]');
+  if (!place) return;
+  e.preventDefault();
+  openMenu(trashEntries(), e.clientX, e.clientY);
+});
+
 // The Folders tree's own right click menu.
 $('tree-list').addEventListener('contextmenu', (e) => {
   const n = e.target.closest('.n');
   if (!n) return;
   e.preventDefault();
   const p = n.dataset.path;
-  if (p === 'trash') return;
+  if (p === 'trash') {
+    openMenu(trashEntries(), e.clientX, e.clientY);
+    return;
+  }
   const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) }];
   if (p !== COMPUTER) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
   if (ejectable(p)) entries.push('sep', { label: 'Eject', icon: 'p-eject', click: () => eject(p) });

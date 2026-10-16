@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('filedrawer', {
   setView: (look) => ipcRenderer.send('window:view', look),
   count: (dir, cwd) => ipcRenderer.invoke('folder:count', dir, cwd),
   openTrash: () => ipcRenderer.send('trash:open'),
+  emptyTrash: () => ipcRenderer.send('trash:empty'),
   openTerminal: (dir) => ipcRenderer.send('terminal:open', dir),
   startSearch: (id, q) => ipcRenderer.send('search:start', id, q),
   stopSearch: () => ipcRenderer.send('search:stop'),
