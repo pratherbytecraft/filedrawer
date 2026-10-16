@@ -16,6 +16,9 @@ function show(parent, { onContinue, onClose }) {
     useContentSize: true,
     show: false,
     resizable: false,
+    // The first click after macOS's Control Finder prompt lands on a button
+    // instead of only bringing the sheet back to the front.
+    acceptFirstMouse: true,
     webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   sheet.loadFile(path.join(__dirname, '..', 'renderer', 'welcome', 'index.html'));
