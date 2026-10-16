@@ -927,6 +927,8 @@ api.onCommand(({ command, arg }) => {
   const typing = !!field;
   switch (command) {
     case 'newWindow': api.openWindow(cwd); break;
+    // The Finder window's name, shown until its folder comes.
+    case 'waitTitle': $('title').textContent = arg; break;
     case 'open': if (!typing) openSelected(); break;
     case 'selectAll':
       if (field) field.select();
@@ -1033,6 +1035,10 @@ window.addEventListener('DOMContentLoaded', () => {
     setPane(state.settings.pane, { save: false });
     const params = new URLSearchParams(location.search);
     if (params.get('wait')) {
+      // Two frames after the theme's stylesheet is in, its colors are on screen.
+      const drawn = () => requestAnimationFrame(() => requestAnimationFrame(() => api.drawn()));
+      if ($('theme-css').sheet) drawn();
+      else $('theme-css').addEventListener('load', drawn, { once: true });
       // Opened in the spot of a Finder window, before its folder was known.
       api.waitFolder().then((dir) => {
         if (!dir) return;

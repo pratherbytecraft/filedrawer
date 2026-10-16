@@ -74,7 +74,8 @@ function placeFor() {
 // select, when given, is an item in dir to pick once it's listed.
 // A window with wait set opens before its folder is known, at the frame of
 // the Finder window it stands in for, and asks for the folder once loaded.
-function openWindow(dir, select, { wait = false, bounds = null, title = null } = {}) {
+// A spare one loads the same way but stays hidden until it's needed.
+function openWindow(dir, select, { wait = false, spare = false, bounds = null, title = null } = {}) {
   const win = new BrowserWindow({
     ...(bounds || placeFor()),
     minWidth: 560,
@@ -96,15 +97,14 @@ function openWindow(dir, select, { wait = false, bounds = null, title = null } =
   if (select) query.select = select;
   if (wait) query.wait = '1';
   win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query });
-  if (wait) {
-    app.focus({ steal: true });
-    win.show();
-  } else {
-    win.once('ready-to-show', () => win.show());
-  }
+  // A window standing in for Finder's shows once its page has drawn in the
+  // theme's colors (the page starts out light), the rest when ready.
+  if (wait && !spare) whenDrawn(win, () => showStandIn(win));
+  else if (!wait) win.once('ready-to-show', () => win.show());
   // The size of the last window moved or resized is the size of the next one.
   let sizeTimer = null;
   win.on('resize', () => {
+    if (Date.now() - (win.placedAt || 0) < 1000) return; // sized to a Finder window, not by the user
     clearTimeout(sizeTimer);
     sizeTimer = setTimeout(() => {
       if (win.isDestroyed() || win.isFullScreen() || win.isMaximized()) return;
@@ -129,6 +129,48 @@ function openWindow(dir, select, { wait = false, bounds = null, title = null } =
 const standIns = new Map(); // token -> window
 const waiting = new Map(); // window -> { path, resolve }
 
+// One window is kept loaded and hidden while the takeover is on, so it can
+// cover Finder's window within a few frames. A fresh one takes about a
+// second to draw.
+let spare = null;
+
+function makeSpare() {
+  if (spare && !spare.isDestroyed()) return;
+  spare = openWindow(folders.HOME, null, { wait: true, spare: true });
+}
+
+function dropSpare() {
+  if (spare && !spare.isDestroyed()) spare.destroy();
+  spare = null;
+}
+
+function whenDrawn(win, fn) {
+  if (win.drawn) fn();
+  else win.once('drawn', fn);
+}
+
+function showStandIn(win) {
+  if (win.isDestroyed()) return;
+  app.focus({ steal: true });
+  win.show();
+}
+
+function standIn(bounds, title) {
+  const win = spare && !spare.isDestroyed() ? spare : null;
+  spare = null;
+  if (!win) return openWindow(folders.HOME, null, { wait: true, bounds, title });
+  win.placedAt = Date.now();
+  win.setBounds(bounds);
+  win.setTitle(title);
+  win.webContents.send('command', { command: 'waitTitle', arg: title });
+  // Still loading when Finder opened the window: it shows once it's drawn.
+  whenDrawn(win, () => showStandIn(win));
+  // The next one starts loading now, so folders opened one after another
+  // each find one ready.
+  setTimeout(() => settings.get().takeOverFinder && makeSpare(), 100);
+  return win;
+}
+
 function folderFor(win, dir) {
   const w = waiting.get(win) || {};
   if (w.resolve) w.resolve(dir);
@@ -137,8 +179,7 @@ function folderFor(win, dir) {
 
 const finderEvents = {
   window({ token, frame: [x, y, width, height], title }) {
-    const win = openWindow(folders.HOME, null, { wait: true, bounds: { x, y, width, height }, title });
-    standIns.set(token, win);
+    standIns.set(token, standIn({ x, y, width, height }, title));
   },
   folder({ token, path: dir }) {
     const win = standIns.get(token);
@@ -157,9 +198,21 @@ const finderEvents = {
 };
 
 function watchFinder() {
-  if (settings.get().takeOverFinder) finder.start(finderEvents);
-  else finder.stop();
+  if (settings.get().takeOverFinder) {
+    finder.start(finderEvents);
+    makeSpare();
+  } else {
+    finder.stop();
+    dropSpare();
+  }
 }
+
+ipcMain.on('window:drawn', (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win || win.drawn) return;
+  win.drawn = true;
+  win.emit('drawn');
+});
 
 // A waiting window asks for its folder once its page is up. Null closes it.
 ipcMain.handle('window:waitFolder', (e) => {
@@ -248,7 +301,7 @@ app.on('second-instance', (_e, argv) => {
 
 // The Dock icon clicked with no windows open.
 app.on('activate', () => {
-  if (ready && windows.size === 0) openWindow(prefs.startFolder());
+  if (ready && ![...windows].some((w) => w.isVisible())) openWindow(prefs.startFolder());
 });
 
 // Like other Mac apps, Filedrawer stays open with no windows.

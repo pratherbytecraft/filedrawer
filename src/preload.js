@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld('filedrawer', {
   setTitle: (name, dir) => ipcRenderer.send('window:title', { name, dir }),
   // A window standing in for a Finder window waits here for its folder.
   waitFolder: () => ipcRenderer.invoke('window:waitFolder'),
+  // The page has drawn once in the theme's colors.
+  drawn: () => ipcRenderer.send('window:drawn'),
   openPrivacy: () => ipcRenderer.send('privacy:open'),
   // The settings window.
   openSettings: (page) => ipcRenderer.send('settings:open', page),
