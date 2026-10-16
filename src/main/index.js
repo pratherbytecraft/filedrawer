@@ -1,6 +1,10 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
 const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog } = require('electron');
+
+// Electron reads .asar files as folders. Filedrawer doesn't use any, and
+// the ones inside other apps are plain files to list, measure and copy.
+process.noAsar = true;
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
