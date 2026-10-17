@@ -80,7 +80,7 @@ Open Filedrawer Settings from the Filedrawer menu or with Command comma. Folder 
 
 When a folder opens in Finder, from the Dock, the Desktop, Finder itself or `open` in Terminal, Filedrawer opens a window in the same spot and Finder's window closes. Show in Finder from other apps opens Filedrawer too, with the item picked.
 
-Filedrawer opens at login so this works from the start, without opening a window. On its first launch Filedrawer asks for the two permissions this needs. Accessibility lets it see when Finder opens a window, and Control Finder lets it ask which folder that window shows.
+Filedrawer opens at login so this works from the start, without opening a window. Folder windows Finder reopens at login are closed, so nothing opens on its own. On its first launch Filedrawer asks for the two permissions this needs. Accessibility lets it see when Finder opens a window, and Control Finder lets it ask which folder that window shows.
 
 Finder keeps the Desktop, Get Info windows, AirDrop and Network. The Trash moves over too once Filedrawer has Full Disk Access. Hold Option while opening a folder to open it in Finder instead.
 

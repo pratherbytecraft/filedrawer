@@ -476,6 +476,10 @@ final class FinderWatcher {
     var token = 0
     var passUntil = Date.distantPast
     var attachedOnce = false
+    // The windows Finder brings back when it starts (a login or a restart)
+    // close instead of moving over, so nothing opens on its own.
+    var restored: [AXUIElement] = []
+    var restoringUntil = Date.distantPast
 
     // Places that aren't a folder on disk, by the title Finder gives them.
     static let skipTitles: Set<String> = ["AirDrop", "Network", "Computer"]
@@ -566,16 +570,33 @@ final class FinderWatcher {
         let windows = attr(element, kAXWindowsAttribute) as? [AXUIElement] ?? []
         // Finder's windows when Filedrawer starts are left alone, unless
         // Finder itself just started (a login or a restart brings its last
-        // windows back), and then they move over like new ones.
-        let fresh = attachedOnce || Date().timeIntervalSince(app.launchDate ?? .distantPast) < 30
+        // windows back), and then they close. Windows Finder brings back in
+        // its first seconds close too, later ones move over as usual.
+        let launched = started(app)
+        let restoring = Date().timeIntervalSince(launched) < 30
+        let fresh = attachedOnce || restoring
         attachedOnce = true
         known = fresh ? [] : windows
+        restored = restoring ? windows : []
+        restoringUntil = restoring ? launched.addingTimeInterval(20) : .distantPast
         if fresh {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 guard let self else { return }
                 for w in attr(element, kAXWindowsAttribute) as? [AXUIElement] ?? [] { self.created(w) }
             }
         }
+    }
+
+    // When the app started. Finder has no launchDate (launchd starts it,
+    // not Launch Services), so its start time comes from the kernel.
+    func started(_ app: NSRunningApplication) -> Date {
+        if let date = app.launchDate { return date }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, app.processIdentifier]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return .distantPast }
+        let tv = info.kp_proc.p_un.__p_starttime
+        return Date(timeIntervalSince1970: Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000)
     }
 
     func dropObserver() {
@@ -604,11 +625,31 @@ final class FinderWatcher {
         return kids.contains { attr($0, kAXRoleAttribute) as? String == kAXToolbarRole as String }
     }
 
+    // Closes a folder window Finder brought back. Finder says the window
+    // opened before its title and toolbar are there, and can miss a press
+    // while it sets the window up, so it looks again for a few seconds.
+    // Other windows, such as Get Info, stay.
+    func closeRestored(_ win: AXUIElement, tries: Int = 20) {
+        guard tries > 0, attr(win, kAXRoleAttribute) != nil else { return }
+        if isBrowser(win), let close = attr(win, kAXCloseButtonAttribute) {
+            AXUIElementPerformAction(close as! AXUIElement, kAXPressAction as CFString)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.closeRestored(win, tries: tries - 1)
+        }
+    }
+
     func created(_ win: AXUIElement) {
         guard !known.contains(where: { CFEqual($0, win) }) else { return }
         known.append(win)
         known = known.filter { attr($0, kAXRoleAttribute) != nil } // drops closed ones
-        guard automation == "allowed", isBrowser(win) else { return }
+        guard automation == "allowed" else { return }
+        if Date() < restoringUntil || restored.contains(where: { CFEqual($0, win) }) {
+            restored.removeAll { CFEqual($0, win) }
+            closeRestored(win)
+            return
+        }
+        guard isBrowser(win) else { return }
         if Date() < passUntil {
             passUntil = .distantPast
             return
