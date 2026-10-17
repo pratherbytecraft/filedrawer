@@ -36,7 +36,8 @@
     "start": "node bin/filedrawer.js --foreground",
     "postinstall": "node scripts/fix-electron.js && node scripts/build-helper.js && node scripts/build-app.js",
     "build-app": "node scripts/build-app.js",
-    "test": "node --test test/unit/*.test.js"
+    "test": "node --test test/unit/*.test.js",
+    "test:helper": "node scripts/build-helper.js && node --test test/helper/*.test.js"
   },
   "dependencies": {
     "electron": "^33.2.1"
