@@ -103,6 +103,10 @@ contextBridge.exposeInMainWorld('filedrawer', {
   // The Default File Manager page's permission buttons.
   finderAccessibility: () => ipcRenderer.send('finder:accessibility'),
   finderAutomation: () => ipcRenderer.send('finder:automation'),
+  // The Photos row on the General page: ask for the permission, and look
+  // again at its state (after a trip to Privacy Settings).
+  photosAsk: () => ipcRenderer.send('photos:ask'),
+  photosRefresh: () => ipcRenderer.send('photos:refresh'),
   // The first launch note.
   welcome: (what) => ipcRenderer.send('welcome', what)
 });

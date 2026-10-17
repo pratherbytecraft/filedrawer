@@ -64,6 +64,7 @@ function state() {
     updateCommand: UPDATE_COMMAND,
     themes: THEME_LIST,
     finder: finder.permission,
+    photos,
     startbar: startbarInstalled(),
     startFolder: prefs.startFolder()
   };
@@ -687,32 +688,80 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
   const names = await dragNames();
   const moves = [];
   const copies = [];
+  const exported = []; // pictures from Photos, written to a temp folder first
   for (const p of paths) {
     const st = await fs.promises.lstat(p).catch(() => null);
     if (!st) continue;
-    const pair = { src: p, target: null, name: names.get(p) };
+    const info = names.get(p) || {};
+    const out = info.asset && info.mediaType === 1 ? await photoExport(info) : null;
+    if (out) {
+      exported.push({ src: out, target: null, name: path.basename(out) });
+      continue;
+    }
+    const pair = { src: p, target: null, name: info.name };
     if (!copy && st.dev === destDev) moves.push(pair);
     else copies.push(pair);
   }
   const done = [];
   if (moves.length) done.push(...(await moveOrCopy(e, 'move', moves, dest)).done);
   if (copies.length) done.push(...(await moveOrCopy(e, 'copy', copies, dest)).done);
+  if (exported.length) {
+    done.push(...(await moveOrCopy(e, 'copy', exported, dest)).done);
+    for (const x of exported) fs.promises.rm(path.dirname(x.src), { recursive: true, force: true }).catch(() => {});
+  }
   return { paths: done.map((d) => d.to) };
 });
 
-// The names the dragging app suggests for its files, by path. Photos drags
-// its originals, named by id inside its library, and suggests the photo's
-// own name; the suggested name's extension is dropped for the file's real
-// one, since an edited photo's original may be another format.
+// What the dragging app says about its files, by path: the name it suggests
+// and, from Photos, the photo's id and whether it's a picture. Photos drags
+// its originals, named by id inside its library, so the suggested name is
+// the one to use; its extension is dropped for the file's real one, since
+// an edited photo's original may be another format.
 async function dragNames() {
   const names = new Map();
   const res = await helper.request('dragNames');
-  for (const { path: p, name } of res?.items || []) {
+  for (const { path: p, name, asset, mediaType } of res?.items || []) {
     const stem = path.basename(name, path.extname(name));
-    if (stem && stem !== '.') names.set(p, stem + path.extname(p));
+    if (!stem || stem === '.') continue;
+    names.set(p, { name: stem + path.extname(p), suggested: name, asset, mediaType });
   }
   return names;
 }
+
+// With the Photos permission, a picture dropped from Photos comes out as
+// its current version, edits and all, the way Finder gets it. The file is
+// written to a temp folder and the copy job takes it from there, or null
+// when Photos isn't allowed or the export fails (the original is copied).
+let photos = 'unknown';
+async function refreshPhotos() {
+  const res = await helper.request('photosStatus');
+  if (res?.status) photos = res.status;
+  return photos;
+}
+async function photoExport(info) {
+  if (photos !== 'allowed' && (await refreshPhotos()) !== 'allowed') return null;
+  const dir = await fs.promises.mkdtemp(path.join(app.getPath('temp'), 'filedrawer-photo-'));
+  const res = await helper.request('photoExport', { asset: info.asset, dest: dir, name: info.suggested }, { timeout: 120000 });
+  if (res?.path) return res.path;
+  fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+  return null;
+}
+
+// The Photos row on the General page: macOS's prompt, or Privacy Settings
+// once it was declined there.
+ipcMain.on('photos:ask', async () => {
+  if ((await refreshPhotos()) === 'denied') {
+    shell.openExternal(PRIVACY + 'Photos');
+    return;
+  }
+  const res = await helper.request('askPhotos', {}, { timeout: 10 * 60 * 1000 });
+  if (res?.status) photos = res.status;
+  pushState();
+});
+ipcMain.on('photos:refresh', async () => {
+  const was = photos;
+  if ((await refreshPhotos()) !== was) pushState();
+});
 
 // Runs a copy or move job, shows its error and puts it on the Undo list.
 // sources are paths, or pairs with a name for the copy to take.

@@ -128,6 +128,11 @@ test('drag names lists the drag pasteboard, empty outside a drag', async () => {
   for (const it of res.items) assert.ok(typeof it.path === 'string' && typeof it.name === 'string');
 });
 
+test('the Photos permission reads as allowed, denied or unknown', async () => {
+  const res = await helper.request('photosStatus');
+  assert.ok(['allowed', 'denied', 'unknown'].includes(res.status), res.status);
+});
+
 test('an item goes to the Trash and comes back out', async () => {
   const dir = folder();
   const file = path.join(dir, `filedrawer-test-${process.pid}.txt`);

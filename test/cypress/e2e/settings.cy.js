@@ -43,7 +43,9 @@ describe('settings window', () => {
     open('General');
     cy.get('#export').click();
     cy.get('#reset').click();
+    cy.get('#ph-btn').should('have.text', 'Allow').click();
     cy.calls('exportSettings').should('have.length', 1);
     cy.calls('resetSettings').should('have.length', 1);
+    cy.calls('photosAsk').should('have.length', 1);
   });
 });

@@ -81,6 +81,8 @@ import AppKit
 import ApplicationServices
 import CoreServices
 import Foundation
+import ImageIO
+import Photos
 import UniformTypeIdentifiers
 
 setvbuf(stdout, nil, _IOLBF, 0)
@@ -88,6 +90,53 @@ setvbuf(stdout, nil, _IOLBF, 0)
 // Replies can come from another thread (setDefault answers once macOS
 // does), so lines are written one at a time.
 let replyLock = NSLock()
+
+func photosStatus() -> String {
+    switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
+    case .authorized, .limited: return "allowed"
+    case .denied, .restricted: return "denied"
+    default: return "unknown"
+    }
+}
+
+func photoExport(_ id: String, dest: String, name: String, done: @escaping ([String: Any]) -> Void) {
+    guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        return done(["error": "The photo wasn't found in the Photos library."])
+    }
+    guard asset.mediaType == .image else { return done(["error": "Only pictures are exported."]) }
+    let options = PHImageRequestOptions()
+    options.version = .current
+    options.isNetworkAccessAllowed = true
+    options.deliveryMode = .highQualityFormat
+    PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, uti, _, info in
+        guard var data, let uti else {
+            let err = (info?[PHImageErrorKey] as? NSError)?.localizedDescription ?? "The photo couldn't be read."
+            return done(["error": err])
+        }
+        var type = UTType(uti) ?? .jpeg
+        if type.conforms(to: .heic) || type.conforms(to: .heif) {
+            if let source = CGImageSourceCreateWithData(data as CFData, nil) {
+                let out = NSMutableData()
+                if let sink = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) {
+                    CGImageDestinationAddImageFromSource(sink, source, 0, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+                    if CGImageDestinationFinalize(sink) {
+                        data = out as Data
+                        type = .jpeg
+                    }
+                }
+            }
+        }
+        let ext = type.preferredFilenameExtension ?? "jpeg"
+        let stem = (name as NSString).deletingPathExtension
+        let file = URL(fileURLWithPath: dest).appendingPathComponent((stem.isEmpty ? "Photo" : stem) + "." + ext)
+        do {
+            try data.write(to: file)
+            done(["path": file.path, "type": type.identifier])
+        } catch {
+            done(["error": error.localizedDescription])
+        }
+    }
+}
 
 func reply(_ obj: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: obj),
@@ -244,15 +293,37 @@ func handle(_ req: [String: Any]) {
     case "dragNames":
         // The files on the drag pasteboard with the names their app suggests
         // for them (Photos names its originals by id and suggests the real name).
+        // A drag from Photos also carries the photo's id in its library and
+        // whether it's a picture (1) or a video (2), for photoExport.
         let board = NSPasteboard(name: .drag)
-        var items: [[String: String]] = []
+        var items: [[String: Any]] = []
         for item in board.pasteboardItems ?? [] {
             guard let urlText = item.string(forType: .fileURL), let url = URL(string: urlText), url.isFileURL,
                   let name = item.string(forType: NSPasteboard.PasteboardType("com.apple.pasteboard.promised-suggested-file-name")),
                   !name.isEmpty else { continue }
-            items.append(["path": url.path, "name": name])
+            var entry: [String: Any] = ["path": url.path, "name": name]
+            if let data = item.data(forType: NSPasteboard.PasteboardType("com.apple.photos.object-reference.asset")),
+               let ref = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+               let asset = ref["localIdentifier"] as? String {
+                entry["asset"] = asset
+                entry["mediaType"] = ref["mediaType"] as? Int ?? 0
+            }
+            items.append(entry)
         }
         reply(["id": id, "items": items, "change": board.changeCount])
+    case "photosStatus":
+        reply(["id": id, "status": photosStatus()])
+    case "askPhotos":
+        // macOS's Photos prompt. The answer comes back when it's closed.
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in reply(["id": id, "status": photosStatus()]) }
+    case "photoExport":
+        // The current version of a photo in the Photos library, written into
+        // dest under name (with the extension of what comes out). HEIC comes
+        // out as JPEG, the way Photos exports it for Finder.
+        let asset = req["asset"] as? String ?? ""
+        let dest = req["dest"] as? String ?? ""
+        let name = req["name"] as? String ?? "Photo"
+        photoExport(asset, dest: dest, name: name) { result in reply(["id": id].merging(result) { a, _ in a }) }
     case "clipRead":
         let board = NSPasteboard.general
         let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
@@ -348,15 +419,22 @@ func handle(_ req: [String: Any]) {
     }
 }
 
+// Requests come in on a background thread and run on the main thread, with
+// its run loop going for the answers that come back later, such as Photos'.
 func serve() {
-    while let line = readLine(strippingNewline: true) {
-        guard let data = line.data(using: .utf8),
-              let req = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            reply(["error": "bad request"])
-            continue
+    Thread.detachNewThread {
+        while let line = readLine(strippingNewline: true) {
+            guard let data = line.data(using: .utf8),
+                  let req = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                reply(["error": "bad request"])
+                continue
+            }
+            DispatchQueue.main.async { autoreleasepool { handle(req) } }
         }
-        autoreleasepool { handle(req) }
+        // Filedrawer closed our stdin or quit.
+        DispatchQueue.main.async { exit(0) }
     }
+    RunLoop.main.run()
 }
 
 // ---------- watch: Finder's new windows open in Filedrawer ----------
