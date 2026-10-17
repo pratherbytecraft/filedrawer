@@ -116,7 +116,7 @@ ipcMain.handle('chooser:browse', async (e) => {
     buttonLabel: 'Choose',
     defaultPath: '/Applications',
     filters: [{ name: 'Applications', extensions: ['app'] }],
-    properties: ['openFile', 'treatPackageAsDirectory']
+    properties: ['openFile']
   });
   const p = !res.canceled && res.filePaths[0];
   if (!p) return null;
