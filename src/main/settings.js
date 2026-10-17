@@ -29,6 +29,7 @@ const DEFAULTS = Object.freeze({
   foldersFirst: true, // folders above files whatever the sort
   confirmTrash: false, // ask before moving items to the Trash
   terminalButton: true, // Open Terminal Here on the toolbar
+  hiddenButton: true, // Hidden Files on the toolbar
   takeOverFinder: true, // Finder's new folder windows open in Filedrawer, in the same spot
   welcomed: false, // the first launch note has been shown
   updates: {

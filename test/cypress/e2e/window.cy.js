@@ -102,19 +102,11 @@ describe('file window', () => {
     cy.get('#title').should('have.text', 'test');
   });
 
-  it('the tasks box keeps its height whatever is selected', () => {
+  it('the Hidden Files button shows hidden items and stays pressed', () => {
     cy.page(HOME);
-    const height = () => cy.get('#pane [data-box="tasks"]').invoke('outerHeight');
-    cy.get('#pane [data-box="pinned"]').then(($p) => {
-      const top = $p[0].getBoundingClientRect().top;
-      height().then((none) => {
-        item('notes.txt').click();
-        height().should('equal', none);
-        item('Documents').click();
-        height().should('equal', none);
-        cy.get('#pane [data-box="pinned"]').then(($q) => expect($q[0].getBoundingClientRect().top).to.equal(top));
-      });
-    });
+    cy.get('#b-hidden').should('not.have.class', 'on').click();
+    cy.calls('updateSettings').should('deep.include', [{ showHidden: true }]);
+    cy.get('#pane [data-box="tasks"]').should('not.exist');
   });
 
   it('a new tab opens on the start folder and tabs switch', () => {

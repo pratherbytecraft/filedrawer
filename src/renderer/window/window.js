@@ -1098,13 +1098,15 @@ api.onCommand(({ command, arg }) => {
 // ---------- start ----------
 
 // Settings that only change how things are drawn.
-const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane', 'terminalButton'];
+const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane', 'terminalButton', 'hiddenButton'];
 
 function applyChrome() {
   const s = app.settings;
   document.body.classList.toggle('no-pane', !s.showPane);
   $('b-term').hidden = !s.terminalButton;
-  $('b-term').previousElementSibling.hidden = !s.terminalButton;
+  $('b-hidden').hidden = !s.hiddenButton;
+  $('b-term').previousElementSibling.hidden = !s.terminalButton && !s.hiddenButton;
+  $('b-hidden').classList.toggle('on', !!s.showHidden);
 }
 
 function applyState(state) {
@@ -1218,8 +1220,9 @@ function openTerminal(p = targetFolder()) {
 // task and the right click open the folder they're about.
 // The selected folder, when one is, or the open one.
 $('b-term').addEventListener('click', () => openTerminal());
+$('b-hidden').addEventListener('click', () => api.updateSettings({ showHidden: !app.settings.showHidden }));
 
-// ---------- the left pane: Tasks ----------
+// ---------- the left pane: Pinned, Other Places and Details ----------
 
 const collapsed = new Set(); // boxes folded shut in this window
 
@@ -1238,46 +1241,8 @@ function box(id, title, body, first = false) {
     `<div class="bd">${body}</div></div>`;
 }
 
-const taskRow = (act, icon, label) => `<div class="row" data-act="${act}"><svg><use href="#${icon}"/></svg>${esc(label)}</div>`;
-
 function selectedItems() {
   return items.filter((it) => sel.has(it.path));
-}
-
-function tasksBox() {
-  const picked = selectedItems();
-  const one = picked.length === 1 ? picked[0] : null;
-  const pinRow = (p) => isPinned(p) ? taskRow('unpin', 'p-pin', 'Unpin this folder') : taskRow('pin', 'p-pin', 'Pin this folder');
-  if (cwd === TRASH) {
-    if (listError === 'fda') return box('tasks', 'Trash Tasks', taskRow('fda', 'p-props', 'Open Privacy Settings') + taskRow('finderTrash', 'p-open', 'Open the Trash in Finder'), true);
-    if (listError) return '';
-    if (!picked.length) return box('tasks', 'Trash Tasks', taskRow('emptyTrash', 'p-trash', 'Empty the Trash') + (items.length ? taskRow('putBackAll', 'p-putback', 'Put back all items') : ''), true);
-    return box('tasks', 'Trash Tasks', taskRow('putBack', 'p-putback', one ? 'Put back this item' : 'Put back the selected items') +
-      taskRow('deleteNow', 'p-trash', one ? 'Delete this item immediately' : 'Delete the selected items immediately'), true);
-  }
-  // Rows keep one order wherever they show (Open, Make a new folder,
-  // Rename, Open in a new window, Open Terminal Here, Pin, Eject, hidden
-  // files, Trash), so a task sits in the same row as often as it can.
-  if (!picked.length) {
-    const hidden = taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files');
-    if (isPlace(cwd)) return box('tasks', 'Folder Tasks', taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') + hidden, true);
-    return box('tasks', 'Folder Tasks', (cwdWritable ? taskRow('newFolder', 'p-newfolder', 'Make a new folder') : '') +
-      taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
-      taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) + hidden, true);
-  }
-  if (one && isFolder(one)) {
-    return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
-      (one.volume || one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
-      taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + (one.volume ? '' : pinRow(one.path)) +
-      (one.volume && ejectable(one.path) ? taskRow('eject', 'p-eject', 'Eject this volume') : '') +
-      (one.volume || one.fixed ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
-  }
-  if (one) {
-    return box('tasks', 'File Tasks', taskRow('open', 'p-open', 'Open this file') +
-      (one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this file') + taskRow('trash', 'p-trash', 'Move this file to the Trash')), true);
-  }
-  return box('tasks', 'File and Folder Tasks', taskRow('open', 'p-open', 'Open the selected items') +
-    ((cwd === COMPUTER || cwd === TRASH) || picked.some((it) => it.fixed) ? '' : taskRow('trash', 'p-trash', 'Move the selected items to the Trash')), true);
 }
 
 function pinnedBox() {
@@ -1329,49 +1294,14 @@ async function loadCount() {
   el.innerHTML = `${n} item${n === 1 ? '' : 's'}<br>`;
 }
 
-// Every list the tasks box can show, with its longest wording, so the box
-// can keep the room for the tallest one in this theme and pane width.
-const TASK_LISTS = [
-  ['newFolder', 'p-newfolder', 'Make a new folder', 'newWindowHere', 'p-open', 'Open this folder in a new window', 'terminal', 'p-term', 'Open Terminal Here',
-    'unpin', 'p-pin', 'Unpin this folder', 'hidden', 'p-hidden', 'Show hidden files'],
-  ['open', 'p-open', 'Open this volume', 'rename', 'p-rename', 'Rename this folder', 'openNew', 'p-open', 'Open in a new window', 'terminal', 'p-term', 'Open Terminal Here',
-    'unpin', 'p-pin', 'Unpin this folder', 'eject', 'p-eject', 'Eject this volume', 'trash', 'p-trash', 'Move this folder to the Trash'],
-  ['open', 'p-open', 'Open the selected items', 'trash', 'p-trash', 'Move the selected items to the Trash'],
-  ['putBack', 'p-putback', 'Put back the selected items', 'deleteNow', 'p-trash', 'Delete the selected items immediately']
-].map((flat) => {
-  let html = '';
-  for (let i = 0; i < flat.length; i += 3) html += taskRow(flat[i], flat[i + 1], flat[i + 2]);
-  return html;
-});
-
-// The tasks box changes its rows with every click. It always takes the
-// room for its tallest list, measured in the box itself (long rows wrap in
-// the narrow pane), so Pinned, Other Places and Details never move.
-function fitTasksBox() {
-  const bd = $('pane').querySelector('.box.first .bd');
-  if (!bd) return;
-  const probe = document.createElement('div');
-  probe.className = 'bd';
-  probe.style.cssText = 'position:absolute; left:0; right:0; visibility:hidden;';
-  bd.parentNode.style.position = 'relative';
-  bd.parentNode.appendChild(probe);
-  let tallest = 0;
-  for (const rows of TASK_LISTS) {
-    probe.innerHTML = rows;
-    tallest = Math.max(tallest, probe.offsetHeight);
-  }
-  probe.remove();
-  if (tallest) bd.style.minHeight = `${tallest}px`;
-}
-
-// Only a box whose markup changed is redrawn, so a click that changes the
-// tasks and Details doesn't make Pinned and Other Places blink.
+// Only a box whose markup changed is redrawn, so a click that changes
+// Details doesn't make Pinned and Other Places blink.
 const paneDrawn = {}; // box id -> the markup it was last drawn from
 function renderPane() {
   if (pane !== 'tasks' || !app) return;
   const el = $('pane');
   let after = null;
-  for (const [id, html] of [['tasks', tasksBox()], ['pinned', pinnedBox()], ['places', placesBox()], ['details', detailsBox()]]) {
+  for (const [id, html] of [['pinned', pinnedBox()], ['places', placesBox()], ['details', detailsBox()]]) {
     let node = el.querySelector(`[data-box="${id}"]`);
     if (!node || paneDrawn[id] !== html) {
       if (node) node.remove();
@@ -1386,7 +1316,6 @@ function renderPane() {
     }
     if (node) after = node;
   }
-  fitTasksBox();
   loadCount();
 }
 
@@ -1409,26 +1338,6 @@ $('pane').addEventListener('click', (e) => {
     navigate(place.dataset.place);
     return;
   }
-  const task = e.target.closest('[data-act]');
-  if (!task) return;
-  const act = task.dataset.act;
-  if (act === 'open') openSelected();
-  else if (act === 'openNew') openSelected({ newWindow: true });
-  else if (act === 'newWindowHere') api.openWindow(cwd);
-  else if (act === 'terminal') openTerminal();
-  else if (act === 'pin') pin(targetFolder());
-  else if (act === 'unpin') unpin(targetFolder());
-  else if (act === 'hidden') api.updateSettings({ showHidden: !app.settings.showHidden });
-  else if (act === 'newFolder') makeNew('folder');
-  else if (act === 'rename') renameSelected();
-  else if (act === 'trash') trashSelected();
-  else if (act === 'eject') eject(targetFolder());
-  else if (act === 'fda') api.openFullDiskAccess();
-  else if (act === 'finderTrash') api.openTrash();
-  else if (act === 'emptyTrash') api.emptyTrash();
-  else if (act === 'putBack') putBackSelected();
-  else if (act === 'putBackAll') putBackSelected(items.map((it) => it.path));
-  else if (act === 'deleteNow') api.deleteNow(selectedItems().map((it) => it.path));
 });
 
 // Pinning by dropping a folder on the Pinned box (not on a pin, which moves

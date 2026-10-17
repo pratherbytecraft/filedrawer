@@ -34,7 +34,7 @@ body { background: var(--bg); color: var(--text); }
 .tb:hover { background: var(--hover); }
 .tb .tb-drop { margin-right: -3px; border-radius: 4px; }
 .tb .tb-drop:hover { background: var(--hover); }
-.tb.down { background: var(--hover); color: var(--accent); }
+.tb.down, .tb.on { background: var(--hover); color: var(--accent); }
 .tb.off { opacity: .35; }
 .tbsep { background: var(--line); height: 18px; margin: 0 4px; }
 

@@ -47,7 +47,7 @@ body.idle .titlebar { background: linear-gradient(90deg, #808080, #b5b5b5); colo
 .toolbar { gap: 1px; padding: 2px 4px; min-height: 36px; background: var(--face); box-shadow: 0 1px #fff, inset 0 -1px #808080; margin-bottom: 1px; }
 .tb { gap: 4px; padding: 3px 6px; border: 0; }
 .tb:hover { box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; }
-.tb.down { box-shadow: var(--sunken); }
+.tb.down, .tb.on { box-shadow: var(--sunken); }
 .tb.off { opacity: .45; }
 .tbsep { height: 26px; margin: 0 3px; background: #808080; box-shadow: 1px 0 #fff; }
 

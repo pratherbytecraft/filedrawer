@@ -32,7 +32,7 @@ body.idle .titlebar { background: linear-gradient(#7697e7, #7e9ee3 10%, #94afe8 
 .tb { gap: 4px; padding: 2px 5px 2px 3px; border: 1px solid transparent; border-radius: 3px; }
 .tb:hover { border-color: #cecec3; background: linear-gradient(#fff, #f1efe6); box-shadow: 0 1px 1px rgba(0,0,0,.08); }
 .tb .tb-drop { margin-left: 1px; }
-.tb.down { background: #e3e0d0; border-color: #a6a291; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
+.tb.down, .tb.on { background: #e3e0d0; border-color: #a6a291; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
 .tb.off { opacity: .55; --round-bg: url(#g-grey); --round-ring: #8a8a8a; }
 .tbsep { height: 28px; margin: 0 3px; background: #c9c5b3; box-shadow: 1px 0 #fff; }
 

@@ -151,6 +151,7 @@ function drawPreview() {
   mini.style.setProperty('--g', SCHEME_2009[scheme] || SCHEME_2009.sky);
   $('preview').classList.toggle('no-pane', !s.showPane);
   $('mini-term').hidden = !s.terminalButton;
+  $('mini-hidden').hidden = !s.hiddenButton;
   $('mini-title').textContent = s.fullPathTitle ? '/Users/you/Documents' : 'Documents';
   $('mini-list').innerHTML = FILES.filter((f) => s.showHidden || f[1] !== 'h').map(([n, k, ext], i) =>
     `<div class="${i === 1 ? 'sel' : ''}${k === 'h' ? ' hid' : ''}"><i class="${k === 'f' ? 'f' : ''}"></i><span>${n}${s.showExtensions && ext ? ext : ''}</span></div>`).join('');
