@@ -302,13 +302,25 @@ function dropTarget(e) {
   return null;
 }
 
+// Whether a drop copies: with Option held, or when another app's drag only
+// offers a copy, the way Photos does (asking to move such a drag cancels
+// it). Filedrawer's own drags move, though the Mac reports them as copy only.
+let ownDrag = false;
+api.onDragOwn((own) => { ownDrag = own; });
+function dropCopies(e) {
+  if (e.altKey) return true;
+  if (ownDrag) return false;
+  const allowed = e.dataTransfer.effectAllowed;
+  return !(allowed === 'all' || allowed === 'uninitialized' || /move/i.test(allowed));
+}
+
 document.addEventListener('dragover', (e) => {
   if (e.defaultPrevented || ![...e.dataTransfer.types].includes('Files')) return;
   const t = dropTarget(e);
   clearDropMarks();
   if (!t) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
+  e.dataTransfer.dropEffect = dropCopies(e) ? 'copy' : 'move';
   if (t.el) t.el.classList.add('drop-on');
 });
 
@@ -330,7 +342,7 @@ document.addEventListener('drop', async (e) => {
   }
   // A folder dropped on itself stays where it is.
   if (paths.includes(t.dir)) return;
-  const res = await api.drop(paths, t.dir, e.altKey);
+  const res = await api.drop(paths, t.dir, dropCopies(e));
   if (t.dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
 });
 

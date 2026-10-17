@@ -241,6 +241,18 @@ func handle(_ req: [String: Any]) {
         board.clearContents()
         board.writeObjects(urls)
         reply(["id": id, "change": board.changeCount])
+    case "dragNames":
+        // The files on the drag pasteboard with the names their app suggests
+        // for them (Photos names its originals by id and suggests the real name).
+        let board = NSPasteboard(name: .drag)
+        var items: [[String: String]] = []
+        for item in board.pasteboardItems ?? [] {
+            guard let urlText = item.string(forType: .fileURL), let url = URL(string: urlText), url.isFileURL,
+                  let name = item.string(forType: NSPasteboard.PasteboardType("com.apple.pasteboard.promised-suggested-file-name")),
+                  !name.isEmpty else { continue }
+            items.append(["path": url.path, "name": name])
+        }
+        reply(["id": id, "items": items, "change": board.changeCount])
     case "clipRead":
         let board = NSPasteboard.general
         let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []

@@ -122,6 +122,12 @@ test('files go on the clipboard and come back off it', async (t) => {
   assert.equal(read.change, wrote.change);
 });
 
+test('drag names lists the drag pasteboard, empty outside a drag', async () => {
+  const res = await helper.request('dragNames');
+  assert.ok(Array.isArray(res.items));
+  for (const it of res.items) assert.ok(typeof it.path === 'string' && typeof it.name === 'string');
+});
+
 test('an item goes to the Trash and comes back out', async () => {
   const dir = folder();
   const file = path.join(dir, `filedrawer-test-${process.pid}.txt`);

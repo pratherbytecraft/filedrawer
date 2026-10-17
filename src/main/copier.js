@@ -51,6 +51,7 @@ function timeLeft(seconds) {
 class Job {
   // mode is copy or move. pairs are { src, target } with target null when
   // the job works the name out (into dest), or a fixed path (for Undo).
+  // A pair's name, when set, is the name it takes in dest instead of its own.
   constructor({ mode, pairs, dest, near }) {
     this.id = nextId++;
     this.mode = mode;
@@ -219,7 +220,7 @@ class Job {
     for (let i = 0; i < plan.length; i++) {
       if (this.cancelled) return;
       const { src, rename } = plan[i];
-      const name = path.basename(src);
+      const name = plan[i].name || path.basename(src);
       let target = plan[i].target;
       let replacedHere = null; // what this item pushed into the Trash
       if (!target) {

@@ -671,20 +671,28 @@ ipcMain.on('drag:start', async (e, paths) => {
     icon = null;
   }
   if (!icon || icon.isEmpty()) icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'Filedrawer.icns'));
+  // Every window hears that the drag is Filedrawer's own, so a drop moves
+  // it (the Mac reports this drag as copy only, like Photos' drags).
+  // startDrag returns when the drag ends.
+  const tell = (own) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('drag:own', own));
+  tell(true);
   e.sender.startDrag({ file: paths[0], files: paths, icon });
+  tell(false);
 });
 
 // A drop moves items that are on the same disk as the folder and copies
 // the rest, or copies everything with Option held.
 ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
   const destDev = (await fs.promises.stat(dest)).dev;
+  const names = await dragNames();
   const moves = [];
   const copies = [];
   for (const p of paths) {
     const st = await fs.promises.lstat(p).catch(() => null);
     if (!st) continue;
-    if (!copy && st.dev === destDev) moves.push(p);
-    else copies.push(p);
+    const pair = { src: p, target: null, name: names.get(p) };
+    if (!copy && st.dev === destDev) moves.push(pair);
+    else copies.push(pair);
   }
   const done = [];
   if (moves.length) done.push(...(await moveOrCopy(e, 'move', moves, dest)).done);
@@ -692,10 +700,26 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
   return { paths: done.map((d) => d.to) };
 });
 
+// The names the dragging app suggests for its files, by path. Photos drags
+// its originals, named by id inside its library, and suggests the photo's
+// own name; the suggested name's extension is dropped for the file's real
+// one, since an edited photo's original may be another format.
+async function dragNames() {
+  const names = new Map();
+  const res = await helper.request('dragNames');
+  for (const { path: p, name } of res?.items || []) {
+    const stem = path.basename(name, path.extname(name));
+    if (stem && stem !== '.') names.set(p, stem + path.extname(p));
+  }
+  return names;
+}
+
 // Runs a copy or move job, shows its error and puts it on the Undo list.
+// sources are paths, or pairs with a name for the copy to take.
 async function moveOrCopy(e, mode, sources, dest, label) {
   const near = BrowserWindow.fromWebContents(e.sender);
-  const res = await copier.start({ mode, pairs: sources.map((src) => ({ src, target: null })), dest, near });
+  const pairs = sources.map((s) => (typeof s === 'string' ? { src: s, target: null } : s));
+  const res = await copier.start({ mode, pairs, dest, near });
   if (res.error) await answer(e, { error: res.error });
   if (res.done.length) undo.push(mode === 'copy' ? copyStep(res, label) : moveStep(res));
   return res;

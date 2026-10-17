@@ -131,3 +131,16 @@ test('an Undo copy to a fixed spot that is taken stops with a message', async ()
   assert.equal(res.error, 'There\'s already an item named "a.txt" in "Other".');
   assert.deepEqual(names(dir), ['Other', 'a.txt']);
 });
+
+test('a pair with a name is copied under that name, and a taken name still asks', async () => {
+  const src = folder(['59A08A22.jpeg']);
+  const dest = folder(['photo.jpeg']);
+  const pairs = [{ src: path.join(src, '59A08A22.jpeg'), target: null, name: 'photo.jpeg' }];
+  const answers = answering([['keep', false]]);
+  const res = await copier.start({ mode: 'copy', pairs, dest });
+  answers.stop();
+  assert.equal(answers.asked.length, 1);
+  assert.deepEqual(names(dest), ['photo (2).jpeg', 'photo.jpeg']);
+  assert.equal(text(path.join(dest, 'photo (2).jpeg')), '59A08A22.jpeg');
+  assert.deepEqual(res.done.map((d) => path.basename(d.to)), ['photo (2).jpeg']);
+});

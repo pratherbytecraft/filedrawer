@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('filedrawer', {
   startDrag: (paths) => ipcRenderer.send('drag:start', paths),
   // copy forces a copy, otherwise items move on the same disk and copy to another.
   drop: (paths, dest, copy) => ipcRenderer.invoke('op:drop', paths, dest, copy),
+  // true while a drag that started in a Filedrawer window is going on.
+  onDragOwn: on('drag:own'),
   sendToZip: (paths) => ipcRenderer.invoke('send:zip', paths),
   sendToDesktop: (paths) => ipcRenderer.invoke('send:desktop', paths),
   sendToMail: (paths) => ipcRenderer.send('send:mail', paths),
