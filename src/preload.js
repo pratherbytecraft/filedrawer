@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('filedrawer', {
   terminals: () => ipcRenderer.invoke('settings:terminals'),
   setLoginItem: (on) => ipcRenderer.send('settings:login', on),
   checkUpdates: () => ipcRenderer.send('updates:check'),
+  copyText: (text) => ipcRenderer.send('clipboard:text', text),
   exportSettings: () => ipcRenderer.send('settings:export'),
   importSettings: () => ipcRenderer.send('settings:import'),
   resetSettings: () => ipcRenderer.send('settings:reset'),

@@ -99,6 +99,7 @@
   .apps { flex-wrap: wrap; }
   [hidden] { display: none !important; }
   .foot-note code { font: 11px ui-monospace, Menlo, monospace; }
+  .lbl small code { font: 11px ui-monospace, Menlo, monospace; user-select: text; }
   .row.sub { padding-left: 24px; }
   .row.dim { opacity: .4; }
   .row .lbl small.warn { color: #ff9f0a; }

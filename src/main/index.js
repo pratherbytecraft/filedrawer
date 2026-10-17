@@ -37,6 +37,10 @@ if (!app.requestSingleInstanceLock()) {
 
 app.setName('Filedrawer');
 
+// The line that updates this copy, for the General page: Homebrew keeps
+// what it installs in its Cellar folder, npm in a node_modules folder.
+const UPDATE_COMMAND = /\/Cellar\/filedrawer\//.test(fs.realpathSync(__dirname)) ? 'brew upgrade filedrawer' : 'npm install -g filedrawer';
+
 const windows = new Set();
 let cut = null; // { paths, change } after Cut, until a paste moves them or the clipboard changes
 let ready = false;
@@ -57,6 +61,7 @@ function state() {
     version: VERSION,
     loginItem: prefs.loginItem(),
     update: updates.get(),
+    updateCommand: UPDATE_COMMAND,
     themes: THEME_LIST,
     finder: finder.permission,
     startbar: startbarInstalled(),
@@ -996,6 +1001,7 @@ app.whenReady().then(() => {
   updates.onChange(pushState);
   updates.schedule(VERSION, () => settings.get().updates.auto);
   ipcMain.on('updates:check', () => updates.check(VERSION));
+  ipcMain.on('clipboard:text', (_e, text) => clipboard.writeText(String(text)));
   ipcMain.on('settings:open', (_e, page) => prefs.show(page));
   ipcMain.on('link', (_e, name) => {
     const links = { kofi: 'https://ko-fi.com/prathercc', issues: PKG.bugs.url, github: PKG.homepage };

@@ -95,10 +95,12 @@ function drawVersion() {
   const line = {
     checking: 'Checking...',
     current: 'This is the newest version.',
-    available: `Version ${u.latest} is out. Run npm install -g filedrawer in Terminal to get it.`,
+    available: `Version ${u.latest} is out. Run the line below in Terminal, then quit Filedrawer and open it again.`,
     failed: 'The check didn\'t go through. Try again in a bit.'
   }[u.state] || '';
   $('version').innerHTML = `Version ${app.version}${line ? `<small>${line}</small>` : ''}`;
+  // The line matches how this copy was installed, Homebrew or npm.
+  $('update-cmd').textContent = app.updateCommand;
 }
 
 function drawTerminals() {
@@ -223,6 +225,11 @@ $('start').addEventListener('change', (e) => {
 });
 $('login').addEventListener('click', () => api.setLoginItem(!app.loginItem.on));
 $('check').addEventListener('click', () => api.checkUpdates());
+$('copy-cmd').addEventListener('click', () => {
+  api.copyText(app.updateCommand);
+  $('copy-cmd').textContent = 'Copied';
+  setTimeout(() => { $('copy-cmd').textContent = 'Copy'; }, 1500);
+});
 $('export').addEventListener('click', () => api.exportSettings());
 $('import').addEventListener('click', () => api.importSettings());
 $('reset').addEventListener('click', () => api.resetSettings());

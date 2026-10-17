@@ -25,6 +25,19 @@ describe('settings window', () => {
     cy.calls('updateSettings').should('deep.include', [{ theme: 'classic-1995' }]);
   });
 
+  it('General shows the update line for how Filedrawer was installed, with a Copy button', () => {
+    cy.page('settings/index.html', (state) => {
+      state.updateCommand = 'brew upgrade filedrawer';
+      state.update = { state: 'available', latest: '9.9.10' };
+    });
+    open('General');
+    cy.get('#version small').should('have.text', 'Version 9.9.10 is out. Run the line below in Terminal, then quit Filedrawer and open it again.');
+    cy.get('#update-cmd').should('have.text', 'brew upgrade filedrawer');
+    cy.get('#copy-cmd').click();
+    cy.calls('copyText').should('deep.equal', [['brew upgrade filedrawer']]);
+    cy.get('#copy-cmd').should('have.text', 'Copied');
+  });
+
   it('the buttons on General call the app', () => {
     cy.page('settings/index.html');
     open('General');

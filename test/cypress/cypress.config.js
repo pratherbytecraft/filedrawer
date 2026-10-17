@@ -49,7 +49,8 @@ function filedrawerState() {
     ],
     finder: { accessibility: true, automation: 'allowed' },
     startbar: false,
-    startFolder: '/Users/test'
+    startFolder: '/Users/test',
+    updateCommand: 'npm install -g filedrawer'
   };
 }
 

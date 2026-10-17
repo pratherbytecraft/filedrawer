@@ -96,7 +96,7 @@ The Trash needs Full Disk Access, since macOS keeps the Trash private from other
 
 ## Updates
 
-Filedrawer checks for a newer version now and then and shows it on the General page. It never installs anything by itself. To update, run `npm install -g filedrawer` again, or `brew upgrade filedrawer`, then quit Filedrawer and open it.
+Filedrawer checks for a newer version now and then and shows it on the General page. It never installs anything by itself. To update, run `npm install -g filedrawer` again, or `brew upgrade filedrawer` if you installed it with Homebrew, then quit Filedrawer and open it. The General page shows the line that fits your copy, with a Copy button.
 
 ## Help
 
