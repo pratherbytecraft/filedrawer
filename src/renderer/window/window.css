@@ -109,7 +109,8 @@ body.split .sidehead { display: flex; }
 .divider { flex: none; width: 5px; cursor: col-resize; }
 
 /* Details */
-table.det { border-collapse: collapse; width: 100%; table-layout: fixed; }
+/* A margin on every side, so a selection box can start there. */
+table.det { border-collapse: collapse; width: calc(100% - 16px); margin: 6px 8px 0; table-layout: fixed; }
 table.det th { position: sticky; top: 0; z-index: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.det th.r, table.det td.r { text-align: right; }
 table.det td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

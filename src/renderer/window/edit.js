@@ -496,8 +496,7 @@ function drawBand() {
   const box = { l: left - f.scrollLeft + r.left, t: top - f.scrollTop + r.top, r: left + w - f.scrollLeft + r.left, b: top + h - f.scrollTop + r.top };
   const hits = new Set();
   for (const el of rows()) {
-    const target = el.querySelector('.cell') || el; // in Details, the name and icon
-    const q = target.getBoundingClientRect();
+    const q = el.getBoundingClientRect(); // in Details, the whole row counts
     if (q.right >= box.l && q.left <= box.r && q.bottom >= box.t && q.top <= box.b) hits.add(items[el.dataset.i].path);
   }
   const next = new Set(band.base);
