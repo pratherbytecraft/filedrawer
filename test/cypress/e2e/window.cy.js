@@ -109,6 +109,25 @@ describe('file window', () => {
     cy.get('#pane [data-box="tasks"]').should('not.exist');
   });
 
+  it('buttons that do not fit move into the More menu', () => {
+    cy.viewport(1000, 600);
+    cy.page(HOME);
+    cy.get('#b-more').should('not.be.visible');
+    cy.get('#b-hidden').should('be.visible');
+    cy.viewport(540, 600);
+    cy.get('#b-more').should('be.visible');
+    cy.get('#b-hidden').should('not.be.visible');
+    cy.get('#b-term').should('not.be.visible');
+    cy.get('#b-search').should('be.visible');
+    cy.get('#b-more').trigger('mousedown');
+    cy.get('#menu .mi').then((els) => [...els].map((e) => e.textContent)).should('deep.equal', ['Open Terminal Here', 'Hidden Files']);
+    cy.contains('#menu .mi', 'Hidden Files').click();
+    cy.calls('updateSettings').should('deep.include', [{ showHidden: true }]);
+    cy.viewport(1000, 600);
+    cy.get('#b-more').should('not.be.visible');
+    cy.get('#b-hidden').should('be.visible');
+  });
+
   it('a new tab opens on the start folder and tabs switch', () => {
     cy.page(HOME);
     item('Documents').dblclick();

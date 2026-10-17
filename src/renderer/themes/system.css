@@ -34,7 +34,10 @@ body { background: var(--bg); color: var(--text); }
 .tb:hover { background: var(--hover); }
 .tb .tb-drop { margin-right: -3px; border-radius: 4px; }
 .tb .tb-drop:hover { background: var(--hover); }
-.tb.down, .tb.on { background: var(--hover); color: var(--accent); }
+.tb.down { background: var(--hover); color: var(--accent); }
+/* A pressed toggle is tinted with the accent, so it reads apart from a hover. */
+.tb.on, .tb.on:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.tb.on .lb { color: var(--accent); }
 .tb.off { opacity: .35; }
 .tbsep { background: var(--line); height: 18px; margin: 0 4px; }
 

@@ -757,7 +757,7 @@ function sortBy(key) {
 }
 
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest('.menu') && !e.target.closest('[data-drop]') && !e.target.closest('#b-places') && !e.target.closest('#b-views')) closeMenu();
+  if (!e.target.closest('.menu') && !e.target.closest('[data-drop]') && !e.target.closest('#b-places') && !e.target.closest('#b-views') && !e.target.closest('#b-more')) closeMenu();
   if (!e.target.closest('.addrrow')) hideSuggest();
 }, true);
 window.addEventListener('blur', closeMenu);
@@ -1103,11 +1103,69 @@ const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane'
 function applyChrome() {
   const s = app.settings;
   document.body.classList.toggle('no-pane', !s.showPane);
-  $('b-term').hidden = !s.terminalButton;
-  $('b-hidden').hidden = !s.hiddenButton;
-  $('b-term').previousElementSibling.hidden = !s.terminalButton && !s.hiddenButton;
   $('b-hidden').classList.toggle('on', !!s.showHidden);
+  fitToolbar();
 }
+
+// ---------- a toolbar that fits the window ----------
+
+// Buttons that don't fit move into the More button's menu, right most first.
+const OVERFLOW = ['b-hidden', 'b-term', 'b-split', 'b-folders', 'b-search'];
+const OVERFLOW_ICONS = { 'b-hidden': 'p-hidden', 'b-term': 'p-term', 'b-split': 't-split', 'b-folders': 't-folders', 'b-search': 't-search' };
+const overflowed = new Set();
+const toolbar = document.querySelector('.toolbar');
+
+const buttonWanted = (id) => (id !== 'b-term' || app.settings.terminalButton) && (id !== 'b-hidden' || app.settings.hiddenButton);
+
+// A separator shows only between two visible buttons.
+function syncSeps() {
+  let seen = false;
+  let last = null;
+  for (const el of toolbar.children) {
+    if (el.classList.contains('tbsep')) {
+      el.hidden = !seen;
+      if (seen) last = el;
+      seen = false;
+    } else if (!el.hidden) seen = true;
+  }
+  if (!seen && last) last.hidden = true;
+}
+
+function fitToolbar() {
+  if (!app) return;
+  overflowed.clear();
+  for (const id of OVERFLOW) $(id).hidden = !buttonWanted(id);
+  $('b-more').hidden = true;
+  syncSeps();
+  for (const id of OVERFLOW) {
+    if (toolbar.scrollWidth <= toolbar.clientWidth) break;
+    if (!buttonWanted(id)) continue;
+    $(id).hidden = true;
+    overflowed.add(id);
+    $('b-more').hidden = false;
+    syncSeps();
+  }
+  if ($('menu').classList.contains('open') && $('b-more').classList.contains('down')) closeMenu();
+}
+
+new ResizeObserver(fitToolbar).observe(toolbar);
+
+$('b-more').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  if ($('menu').classList.contains('open') && $('b-more').classList.contains('down')) {
+    closeMenu();
+    return;
+  }
+  const entry = (id) => {
+    const b = $(id);
+    return { label: b.title, icon: OVERFLOW_ICONS[id], checked: b.classList.contains('on') || b.classList.contains('down'), click: () => b.click() };
+  };
+  const views = ['b-search', 'b-folders', 'b-split'].filter((id) => overflowed.has(id)).map(entry);
+  const tools = ['b-term', 'b-hidden'].filter((id) => overflowed.has(id)).map(entry);
+  const r = $('b-more').getBoundingClientRect();
+  openMenu([...views, ...(views.length && tools.length ? ['sep'] : []), ...tools], r.left, r.bottom + 2);
+  $('b-more').classList.add('down');
+});
 
 function applyState(state) {
   const old = app;
