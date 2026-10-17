@@ -263,17 +263,104 @@ const SEARCH_COLUMNS = [
   { key: 'modified', label: 'Date Modified', width: '18%' }
 ];
 
+// The column widths are kept per kind of list, since their columns differ.
+const COLUMN_SETS = { files: COLUMNS, computer: COMPUTER_COLUMNS, trash: TRASH_COLUMNS, recents: RECENTS_COLUMNS, search: SEARCH_COLUMNS };
+const columnSet = () => (searchOn() ? 'search' : cwd === COMPUTER ? 'computer' : cwd === TRASH ? 'trash' : cwd === RECENTS ? 'recents' : 'files');
+
 function renderDetails() {
   const fixedHead = (cwd === COMPUTER || cwd === RECENTS) && !searchOn(); // headers that don't sort
-  const cols = searchOn() ? SEARCH_COLUMNS : cwd === COMPUTER ? COMPUTER_COLUMNS : cwd === TRASH ? TRASH_COLUMNS : cwd === RECENTS ? RECENTS_COLUMNS : COLUMNS;
+  const set = columnSet();
+  const cols = COLUMN_SETS[set];
+  // Widths in points once a column was resized, shares of the window until then.
+  const saved = app.settings.columnWidths[set];
+  const widths = saved && cols.every((c) => saved[c.key]) ? cols.map((c) => saved[c.key]) : null;
   const { key, dir } = folderSort();
-  const head = cols.map((c) => fixedHead || c.key === 'folder' ? `<th class="${c.cls || ''}">${c.label}</th>` :
-    `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
+  const edge = (c) => `<span class="rz" data-rz="${c.key}"></span>`;
+  const head = cols.map((c) => fixedHead || c.key === 'folder' ? `<th data-col="${c.key}" class="${c.cls || ''}">${c.label}${edge(c)}</th>` :
+    `<th data-col="${c.key}" data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}${edge(c)}</th>`).join('');
   const rows = items.map((it, i) =>
     `<tr ${itemAttrs(it, i)}>` +
     cols.map((c) => `<td class="${c.cls || ''}">${cellFor(c, it)}</td>`).join('') + '</tr>').join('');
-  return `<table class="det"><colgroup>${cols.map((c) => `<col style="width:${c.width}">`).join('')}</colgroup>` +
+  const width = widths ? ` style="width:${widths.reduce((a, b) => a + b, 0)}px"` : '';
+  return `<table class="det" data-set="${set}"${width}><colgroup>${cols.map((c, i) => `<col style="width:${widths ? widths[i] + 'px' : c.width}">`).join('')}</colgroup>` +
     `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// Dragging the edge of a header makes that column wider or narrower, and a
+// double click fits it to its longest entry. Every column of the list is
+// saved in points then, and the list scrolls sideways when they don't fit.
+const MIN_COLUMN = 40;
+
+function saveWidths(table, widths) {
+  const keys = [...table.querySelectorAll('th')].map((th) => th.dataset.col);
+  const set = Object.fromEntries(keys.map((k, i) => [k, Math.round(widths[i])]));
+  api.updateSettings({ columnWidths: { ...app.settings.columnWidths, [table.dataset.set]: set } });
+}
+
+function resizeColumn(edge, e) {
+  e.preventDefault();
+  const table = edge.closest('table');
+  const ths = [...table.querySelectorAll('th')];
+  const cols = [...table.querySelectorAll('col')];
+  const widths = ths.map((th) => th.getBoundingClientRect().width);
+  const i = ths.indexOf(edge.closest('th'));
+  const x0 = e.clientX;
+  const w0 = widths[i];
+  let moved = false;
+  const draw = () => {
+    cols.forEach((col, k) => { col.style.width = widths[k] + 'px'; });
+    table.style.width = widths.reduce((a, b) => a + b, 0) + 'px';
+  };
+  document.body.classList.add('resizing');
+  const move = (m) => {
+    if (m.clientX === x0 && !moved) return;
+    moved = true;
+    widths[i] = Math.max(MIN_COLUMN, Math.round(w0 + m.clientX - x0));
+    draw();
+  };
+  // A press on the edge that doesn't move leaves the widths as they were.
+  const up = () => {
+    removeEventListener('mousemove', move);
+    removeEventListener('mouseup', up);
+    document.body.classList.remove('resizing');
+    if (moved) saveWidths(table, widths);
+  };
+  addEventListener('mousemove', move);
+  addEventListener('mouseup', up);
+}
+
+// How wide a cell has to be to show all of its text, cut off now or not:
+// the text, anything before it such as the icon, and the padding.
+function contentWidth(cell) {
+  const range = document.createRange();
+  const walk = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let left = Infinity;
+  let right = -Infinity;
+  while (walk.nextNode()) {
+    range.selectNodeContents(walk.currentNode);
+    const r = range.getBoundingClientRect();
+    if (!r.width) continue;
+    left = Math.min(left, r.left);
+    right = Math.max(right, r.right);
+  }
+  if (right < left) return 0;
+  const box = cell.getBoundingClientRect();
+  const style = getComputedStyle(cell);
+  const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  // Right aligned text grows to the left, so only its own width counts.
+  return cell.classList.contains('r') ? right - left + pad : right - box.left + parseFloat(style.paddingRight);
+}
+
+function fitColumn(edge) {
+  const table = edge.closest('table');
+  const ths = [...table.querySelectorAll('th')];
+  const th = edge.closest('th');
+  const i = ths.indexOf(th);
+  let w = contentWidth(th) + 14; // room for the sort arrow
+  for (const row of table.tBodies[0].rows) w = Math.max(w, contentWidth(row.cells[i]));
+  const widths = ths.map((x) => x.getBoundingClientRect().width);
+  widths[i] = Math.max(MIN_COLUMN, Math.ceil(w) + 4);
+  saveWidths(table, widths);
 }
 
 const NOTES = {
@@ -552,6 +639,11 @@ function selectRange(from, to) {
 
 $('files').addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
+  const edge = e.target.closest('.rz');
+  if (edge) {
+    resizeColumn(edge, e);
+    return;
+  }
   const th = e.target.closest('th[data-sort]');
   if (th) {
     sortBy(th.dataset.sort);
@@ -579,8 +671,14 @@ $('files').addEventListener('mousedown', (e) => {
   showSelection();
 });
 
-// Command double click always opens a folder in a new window.
+// Command double click always opens a folder in a new window. On a
+// header's edge it fits the column.
 $('files').addEventListener('dblclick', (e) => {
+  const edge = e.target.closest('.rz');
+  if (edge) {
+    fitColumn(edge);
+    return;
+  }
   const el = e.target.closest('.item');
   if (!el || app.settings.clickToOpen === 'single') return;
   openItem(items[el.dataset.i], e.metaKey ? { newWindow: true } : undefined);
@@ -1201,6 +1299,11 @@ function applyState(state) {
     items = sortItems(items);
     render();
     api.setView(look());
+  } else if (old && JSON.stringify(old.settings.columnWidths) !== JSON.stringify(state.settings.columnWidths)) {
+    const { scrollTop, scrollLeft } = $('files');
+    render();
+    Object.assign($('files'), { scrollTop, scrollLeft });
+    if (split) drawOther();
   } else if (old && JSON.stringify(old.cut) !== JSON.stringify(state.cut)) {
     showCut();
   } else if (old && (JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins) ||

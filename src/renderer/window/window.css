@@ -114,6 +114,9 @@ body.split .sidehead { display: flex; }
 /* A margin on every side, so a selection box can start there. */
 table.det { border-collapse: collapse; width: calc(100% - 16px); margin: 6px 8px 0; table-layout: fixed; }
 table.det th { position: sticky; top: 0; z-index: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the right edge of a header, dragged to resize its column */
+table.det th .rz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
+body.resizing, body.resizing * { cursor: col-resize !important; }
 table.det th.r, table.det td.r { text-align: right; }
 table.det td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.det td .cell { display: flex; align-items: center; gap: 4px; min-width: 0; }

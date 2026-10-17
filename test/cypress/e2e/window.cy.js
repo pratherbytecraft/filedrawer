@@ -142,6 +142,34 @@ describe('file window', () => {
     cy.get('#files th[data-sort="name"]').should('have.class', 'desc');
   });
 
+  it('dragging a header edge resizes the column and saves the widths', () => {
+    cy.page(HOME);
+    cy.get('#files th[data-col="name"]').then(($th) => {
+      const r = $th[0].getBoundingClientRect();
+      cy.get('#files th[data-col="name"] .rz').trigger('mousedown', { button: 0, clientX: r.right - 2, clientY: r.top + 5 });
+      cy.document().trigger('mousemove', { clientX: r.right + 58, clientY: r.top + 5 });
+      cy.document().trigger('mouseup');
+      cy.calls('updateSettings').should((calls) => {
+        const saved = calls.map(([p]) => p.columnWidths).find(Boolean);
+        expect(saved.files.name).to.be.closeTo(r.width + 60, 1);
+        expect(Object.keys(saved.files)).to.deep.equal(['name', 'size', 'kind', 'modified']);
+      });
+      cy.get('#files col').first().should('have.attr', 'style').and('match', /width: ?\d+px/);
+    });
+  });
+
+  it('a double click on a header edge fits the column to its longest entry', () => {
+    cy.page(HOME);
+    cy.get('#files th[data-col="name"]').then(($th) => {
+      const before = $th[0].getBoundingClientRect().width;
+      cy.get('#files th[data-col="name"] .rz').dblclick();
+      cy.calls('updateSettings').should((calls) => {
+        const saved = calls.map(([p]) => p.columnWidths).filter(Boolean).pop();
+        expect(saved.files.name).to.be.within(60, before - 1);
+      });
+    });
+  });
+
   it('a new tab opens on the start folder and tabs switch', () => {
     cy.page(HOME);
     item('Documents').dblclick();

@@ -62,6 +62,13 @@ test('folder sorts keep only known keys and directions, and are replaced whole',
   assert.deepEqual(settings.get().folderSorts, { '/e': { key: 'size', dir: 'asc' } });
 });
 
+test('column widths keep whole points above zero for each kind of list', () => {
+  start({ columnWidths: { files: { name: 250.4, size: -3, kind: 'wide' }, trash: { name: 0 }, recents: 5 } });
+  assert.deepEqual(settings.get().columnWidths, { files: { name: 250 } });
+  settings.update({ columnWidths: { trash: { name: 200, from: 120 } } });
+  assert.deepEqual(settings.get().columnWidths, { trash: { name: 200, from: 120 } });
+});
+
 test('import and reset start from the defaults', () => {
   start({ theme: 'classic-1995', confirmTrash: true });
   settings.replace({ confirmTrash: true });

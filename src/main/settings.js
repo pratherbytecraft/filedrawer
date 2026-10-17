@@ -46,6 +46,10 @@ const DEFAULTS = Object.freeze({
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   openWith: {}, // extension -> the apps picked for it in the app list, last picked first
   folderSorts: {}, // folder path -> { key, dir }, picked from its headers or Arrange Icons By; other folders sort by name
+  // Details column widths in points, one set per kind of list (files, trash,
+  // recents, computer, search), once a column was resized; until then the
+  // columns share the window.
+  columnWidths: {},
   window: {
     width: 960,
     height: 620
@@ -93,6 +97,16 @@ function clean(saved, base) {
           if (sort && SORT_KEYS.includes(sort.key) && (sort.dir === 'asc' || sort.dir === 'desc')) out.folderSorts[k] = { key: sort.key, dir: sort.dir };
         }
       }
+    } else if (base === DEFAULTS && key === 'columnWidths') {
+      // Each kind of list with its columns' widths, whole points above zero.
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.columnWidths = {};
+        for (const [set, cols] of Object.entries(v)) {
+          if (!cols || typeof cols !== 'object' || Array.isArray(cols)) continue;
+          const kept = Object.entries(cols).filter(([, w]) => Number.isFinite(w) && w > 0);
+          if (kept.length) out.columnWidths[set] = Object.fromEntries(kept.map(([c, w]) => [c, Math.round(w)]));
+        }
+      }
     } else if (base === DEFAULTS && key === 'openWith') {
       // Any extension can be in here, each with a list of app paths.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -137,8 +151,9 @@ function save() {
 function update(patch) {
   const next = clean(patch, DEFAULTS);
   current = merge(current, next);
-  // A folder's view or sort is replaced, not merged, so one can be taken out.
-  for (const key of ['folderViews', 'folderSorts']) if (next[key]) current = { ...current, [key]: next[key] };
+  // A folder's view or sort, and the column widths, are replaced, not
+  // merged, so one can be taken out.
+  for (const key of ['folderViews', 'folderSorts', 'columnWidths']) if (next[key]) current = { ...current, [key]: next[key] };
   return save();
 }
 
