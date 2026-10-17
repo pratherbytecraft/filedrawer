@@ -128,6 +128,20 @@ describe('file window', () => {
     cy.get('#b-hidden').should('be.visible');
   });
 
+  it('a header sorts only the folder it is in, and each folder keeps its own', () => {
+    cy.page(HOME, (state) => { state.settings.folderSorts = { '/Users/test/Documents': { key: 'name', dir: 'desc' } }; });
+    names().should('deep.equal', ['Documents', 'Pictures', 'Projects', 'notes.txt', 'photo.jpg']);
+    cy.get('#files th[data-sort="name"]').should('have.class', 'asc').click();
+    cy.calls('updateSettings').should('deep.include', [{ folderSorts: { '/Users/test/Documents': { key: 'name', dir: 'desc' }, '/Users/test': { key: 'name', dir: 'desc' } } }]);
+    names().should('deep.equal', ['Projects', 'Pictures', 'Documents', 'photo.jpg', 'notes.txt']);
+    item('Projects').dblclick();
+    names().should('deep.equal', ['Filedrawer', 'Startbar']);
+    cy.get('#b-back').click();
+    item('Documents').dblclick();
+    names().should('deep.equal', ['Report.pdf', 'Budget.txt']);
+    cy.get('#files th[data-sort="name"]').should('have.class', 'desc');
+  });
+
   it('a new tab opens on the start folder and tabs switch', () => {
     cy.page(HOME);
     item('Documents').dblclick();

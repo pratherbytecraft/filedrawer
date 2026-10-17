@@ -182,10 +182,17 @@ function watchThumbs() {
 
 // ---------- the list ----------
 
+// Each folder keeps the sort picked for it; one never sorted goes by name.
+const BY_NAME = { key: 'name', dir: 'asc' };
+const folderSort = () => (app && app.settings.folderSorts[cwd]) || BY_NAME;
+
+// What the menus show for this window.
+const look = () => ({ view, pane, cwd, split: !!split, sort: folderSort() });
+
 function sortItems(list) {
   // Computer is always by name and Recents newest first, whatever the folders' sort.
-  const fixedSort = searchOn() ? null : cwd === COMPUTER ? { key: 'name', dir: 'asc' } : cwd === RECENTS ? { key: 'used', dir: 'desc' } : null;
-  const { key, dir } = fixedSort || app.settings.sort;
+  const fixedSort = searchOn() ? null : cwd === COMPUTER ? BY_NAME : cwd === RECENTS ? { key: 'used', dir: 'desc' } : null;
+  const { key, dir } = fixedSort || folderSort();
   const m = dir === 'desc' ? -1 : 1;
   const byName = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' });
   return list.slice().sort((a, b) => {
@@ -259,7 +266,7 @@ const SEARCH_COLUMNS = [
 function renderDetails() {
   const fixedHead = (cwd === COMPUTER || cwd === RECENTS) && !searchOn(); // headers that don't sort
   const cols = searchOn() ? SEARCH_COLUMNS : cwd === COMPUTER ? COMPUTER_COLUMNS : cwd === TRASH ? TRASH_COLUMNS : cwd === RECENTS ? RECENTS_COLUMNS : COLUMNS;
-  const { key, dir } = app.settings.sort;
+  const { key, dir } = folderSort();
   const head = cols.map((c) => fixedHead || c.key === 'folder' ? `<th class="${c.cls || ''}">${c.label}</th>` :
     `<th data-sort="${c.key}" class="${c.cls || ''}${c.key === key ? ` sorted ${dir}` : ''}">${c.label}</th>`).join('');
   const rows = items.map((it, i) =>
@@ -344,7 +351,7 @@ function render() {
 function setView(v) {
   if (!RENDER[v] || v === view) return;
   view = v;
-  api.setView({ view, pane, cwd, split: !!split });
+  api.setView(look());
   const patch = { view: v };
   if (app.settings.perFolderView && cwd !== COMPUTER) patch.folderViews = { ...app.settings.folderViews, [cwd]: v };
   api.updateSettings(patch);
@@ -418,7 +425,7 @@ function updateChrome() {
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
   $('title-icon').innerHTML = icon;
-  api.setView({ view, pane, cwd, split: !!split });
+  api.setView(look());
   updateTitle();
   renderTree();
 }
@@ -460,7 +467,7 @@ async function navigate(dir, { push = true, select = null, selectMany = null, ke
     const want = RENDER[own] ? own : app.settings.view;
     if (want !== view) {
       view = want;
-      api.setView({ view, pane, cwd, split: !!split });
+      api.setView(look());
     }
   }
   listError = res.error || null;
@@ -748,12 +755,13 @@ const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'],
 const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
 
 const viewEntries = () => VIEWS.map(([v, label]) => ({ label, checked: v === view, click: () => setView(v) }));
-const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === app.settings.sort.key, click: () => sortBy(k) }));
+const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === folderSort().key, click: () => sortBy(k) }));
 
-// Sorting by the same thing again turns it around.
+// Sorts the folder shown, and only that one. Sorting by the same thing again
+// turns it around.
 function sortBy(key) {
-  const s = app.settings.sort;
-  api.updateSettings({ sort: { key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' } });
+  const s = folderSort();
+  api.updateSettings({ folderSorts: { ...app.settings.folderSorts, [cwd]: { key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' } } });
 }
 
 document.addEventListener('mousedown', (e) => {
@@ -1172,9 +1180,10 @@ function applyState(state) {
   app = state;
   window.applyTheme(state);
   applyChrome();
+  const sortChanged = (dir) => old && JSON.stringify(old.settings.folderSorts[dir]) !== JSON.stringify(state.settings.folderSorts[dir]);
   // The other side lists again when what it shows changes.
   if (split && old && (['showHidden', 'showExtensions', 'foldersFirst', 'theme'].some((k) => old.settings[k] !== state.settings[k]) ||
-    JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort))) refreshOther();
+    sortChanged(split.other.cwd))) refreshOther();
   if (old && LOOK_KEYS.some((k) => old.settings[k] !== state.settings[k])) {
     treeKids.clear();
     treeShownFor = null;
@@ -1188,9 +1197,10 @@ function applyState(state) {
   } else if (old && old.settings.theme !== state.settings.theme) {
     // Icon sizes come from the theme, so everything is drawn again once its stylesheet is in.
     $('theme-css').addEventListener('load', () => render(), { once: true });
-  } else if (old && JSON.stringify(old.settings.sort) !== JSON.stringify(state.settings.sort)) {
+  } else if (sortChanged(cwd)) {
     items = sortItems(items);
     render();
+    api.setView(look());
   } else if (old && JSON.stringify(old.cut) !== JSON.stringify(state.cut)) {
     showCut();
   } else if (old && (JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins) ||
@@ -1585,7 +1595,7 @@ function setPane(p, { save = true, quiet = false } = {}) {
   pane = p === 'folders' ? 'folders' : 'tasks';
   document.body.dataset.pane = pane;
   $('b-folders').classList.toggle('down', pane === 'folders');
-  api.setView({ view, pane, cwd, split: !!split });
+  api.setView(look());
   if (save) api.updateSettings({ pane });
   treeShownFor = null;
   renderPane();

@@ -45,15 +45,14 @@ const DEFAULTS = Object.freeze({
   },
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   openWith: {}, // extension -> the apps picked for it in the app list, last picked first
-  sort: {
-    key: 'name', // name | size | kind | modified
-    dir: 'asc' // asc | desc
-  },
+  folderSorts: {}, // folder path -> { key, dir }, picked from its headers or Arrange Icons By; other folders sort by name
   window: {
     width: 960,
     height: 620
   }
 });
+
+const SORT_KEYS = ['name', 'size', 'kind', 'modified', 'deleted', 'from', 'used'];
 
 let dir;
 let file;
@@ -85,6 +84,14 @@ function clean(saved, base) {
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.folderViews = {};
         for (const [k, view] of Object.entries(v)) if (typeof view === 'string') out.folderViews[k] = view;
+      }
+    } else if (base === DEFAULTS && key === 'folderSorts') {
+      // Any folder can be in here, each with a known key and a direction.
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.folderSorts = {};
+        for (const [k, sort] of Object.entries(v)) {
+          if (sort && SORT_KEYS.includes(sort.key) && (sort.dir === 'asc' || sort.dir === 'desc')) out.folderSorts[k] = { key: sort.key, dir: sort.dir };
+        }
       }
     } else if (base === DEFAULTS && key === 'openWith') {
       // Any extension can be in here, each with a list of app paths.
@@ -130,8 +137,8 @@ function save() {
 function update(patch) {
   const next = clean(patch, DEFAULTS);
   current = merge(current, next);
-  // A folder's view is replaced, not merged, so one can be taken out.
-  if (next.folderViews) current = { ...current, folderViews: next.folderViews };
+  // A folder's view or sort is replaced, not merged, so one can be taken out.
+  for (const key of ['folderViews', 'folderSorts']) if (next[key]) current = { ...current, [key]: next[key] };
   return save();
 }
 

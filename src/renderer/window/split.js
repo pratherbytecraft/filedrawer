@@ -127,7 +127,7 @@ function setSplit(on) {
     api.watch(null, 'other');
   }
   $('b-split').classList.toggle('down', !!split);
-  api.setView({ view, pane, cwd, split: !!split });
+  api.setView(look());
   fitList();
 }
 

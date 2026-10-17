@@ -533,7 +533,7 @@ function buildMenu() {
           label: 'Arrange Icons By',
           enabled: hasWindow,
           submenu: SORTS.map(([key, label]) => ({
-            label, type: 'radio', checked: s.sort.key === key, click: () => send('sort', key)
+            label, type: 'radio', checked: (s.sort || { key: 'name' }).key === key, click: () => send('sort', key)
           }))
         },
         { type: 'separator' },

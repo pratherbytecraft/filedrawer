@@ -42,6 +42,8 @@ Two Panes on the toolbar, or Option Command P, splits a tab into two sides, each
 
 Type a path into the address bar and press Return, and it fills in folder names as you type. Back and Forward each keep a list of where you've been, and Up goes to the folder above. The arrow at the end of the address bar lists the folders above this one and your pinned folders.
 
+Click a column header in Details to sort by it, and click it again to reverse it. Each folder keeps its own sort, so Downloads can stay newest first while Documents goes by name. Folders you haven't sorted go by name.
+
 The left pane shows your pinned folders, other places and the details of the selection. Everything you can do to a file or folder is on its right click, and the right click of empty space has New Folder, Pin This Folder, Open in New Window and Open Terminal Here. The Folders button swaps it for a folder tree. Drop a folder on Pinned to pin it, or right click a folder and pick Pin to Pinned.
 
 Open Terminal Here is on the toolbar, the File menu and the right click menus, and opens the folder in Terminal or the terminal app you pick in Settings. Hidden Files on the toolbar shows and hides hidden files, the same as Show Hidden Files on the View menu. When the window is too narrow for every button, the ones that don't fit move into a More button at the end of the toolbar.
