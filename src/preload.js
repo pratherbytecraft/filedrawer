@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('filedrawer', {
   // The path of a file dropped from Finder or another app.
   pathForFile: (file) => webUtils.getPathForFile(file),
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
+  // One path, or several that open together (pictures share one Preview window).
   open: (p) => ipcRenderer.send('open', p),
   openWindow: (dir) => ipcRenderer.send('window:open', dir),
   setTitle: (name, dir) => ipcRenderer.send('window:title', { name, dir }),

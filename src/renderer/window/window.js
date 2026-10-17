@@ -513,9 +513,12 @@ function openItem(it, { newWindow = app.settings.openFolders === 'new', inTab = 
 function openSelected({ newWindow = app.settings.openFolders === 'new', inTab = app.settings.openFolders === 'tab' } = {}) {
   const picked = items.filter((it) => sel.has(it.path));
   if (!picked.length) return;
-  // More than one folder each open in their own tab, or window.
+  // More than one folder each open in their own tab, or window. Files open
+  // together, so pictures share one Preview window.
   const many = picked.filter(isFolder).length > 1;
-  for (const it of picked) openItem(it, { newWindow, inTab: inTab || (many && !newWindow) });
+  const files = picked.filter((it) => !isFolder(it) && !(it.alias && it.aliasDir));
+  if (files.length > 1) api.open(files.map((it) => it.path));
+  for (const it of picked) if (files.length < 2 || !files.includes(it)) openItem(it, { newWindow, inTab: inTab || (many && !newWindow) });
 }
 
 // ---------- selection with the mouse and keys ----------

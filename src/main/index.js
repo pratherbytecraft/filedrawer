@@ -613,7 +613,7 @@ ipcMain.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
 ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipcMain.handle('settings:update', (_e, patch) => settings.update(patch));
-ipcMain.on('open', (_e, p) => shell.openPath(p));
+ipcMain.on('open', (_e, p) => (Array.isArray(p) ? execFile('open', p, () => {}) : shell.openPath(p)));
 
 // A file operation's answer. A failure is shown on the window that asked,
 // as a sheet, before the answer goes back.
