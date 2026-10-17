@@ -18,9 +18,10 @@ function message(err, what) {
 const exists = (p) => fs.promises.lstat(p).then(() => true, () => false);
 
 // base, or "base (2)", "base (3)" and so on, whichever isn't taken. The
-// number goes before the extension, as in "New Text Document (2).txt".
+// number goes before the extension, as in "New Text Document (2).txt". An
+// extension with a space isn't one ("a.txt alias" gets "a.txt alias (2)").
 async function freeName(dir, base) {
-  const ext = path.extname(base);
+  const ext = /\s/.test(path.extname(base)) ? '' : path.extname(base);
   const stem = ext ? base.slice(0, -ext.length) : base;
   for (let n = 1; ; n++) {
     const name = n === 1 ? base : `${stem} (${n})${ext}`;
