@@ -8,3 +8,5 @@ helper/filedrawer-helper
 npm-debug.log*
 bundle/
 *.tgz
+test/cypress/screenshots/
+test/cypress/downloads/
