@@ -1,6 +1,6 @@
 {
   "name": "filedrawer",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "A file manager for macOS, laid out like the classic file windows: a toolbar, a text address bar, a task pane and Icons, Tiles, List, Details and Thumbnails views.",
   "author": "Prather Bytecraft",
   "license": "SEE LICENSE IN LICENSE",
