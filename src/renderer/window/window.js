@@ -1255,18 +1255,21 @@ function tasksBox() {
     return box('tasks', 'Trash Tasks', taskRow('putBack', 'p-putback', one ? 'Put back this item' : 'Put back the selected items') +
       taskRow('deleteNow', 'p-trash', one ? 'Delete this item immediately' : 'Delete the selected items immediately'), true);
   }
+  // Rows keep one order wherever they show (Open, Make a new folder,
+  // Rename, Open in a new window, Open Terminal Here, Pin, Eject, hidden
+  // files, Trash), so a task sits in the same row as often as it can.
   if (!picked.length) {
-    if (isPlace(cwd)) return '';
+    const hidden = taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files');
+    if (isPlace(cwd)) return box('tasks', 'Folder Tasks', taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') + hidden, true);
     return box('tasks', 'Folder Tasks', (cwdWritable ? taskRow('newFolder', 'p-newfolder', 'Make a new folder') : '') +
-      taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) +
       taskRow('newWindowHere', 'p-open', 'Open this folder in a new window') +
-      taskRow('hidden', 'p-hidden', app.settings.showHidden ? 'Hide hidden files' : 'Show hidden files'), true);
+      taskRow('terminal', 'p-term', 'Open Terminal Here') + pinRow(cwd) + hidden, true);
   }
   if (one && isFolder(one)) {
     return box('tasks', 'Folder Tasks', taskRow('open', 'p-open', one.volume ? 'Open this volume' : 'Open this folder') +
-      (one.volume && ejectable(one.path) ? taskRow('eject', 'p-eject', 'Eject this volume') : '') +
       (one.volume || one.fixed ? '' : taskRow('rename', 'p-rename', 'Rename this folder')) +
       taskRow('openNew', 'p-open', 'Open in a new window') + taskRow('terminal', 'p-term', 'Open Terminal Here') + (one.volume ? '' : pinRow(one.path)) +
+      (one.volume && ejectable(one.path) ? taskRow('eject', 'p-eject', 'Eject this volume') : '') +
       (one.volume || one.fixed ? '' : taskRow('trash', 'p-trash', 'Move this folder to the Trash')), true);
   }
   if (one) {
@@ -1326,9 +1329,64 @@ async function loadCount() {
   el.innerHTML = `${n} item${n === 1 ? '' : 's'}<br>`;
 }
 
+// Every list the tasks box can show, with its longest wording, so the box
+// can keep the room for the tallest one in this theme and pane width.
+const TASK_LISTS = [
+  ['newFolder', 'p-newfolder', 'Make a new folder', 'newWindowHere', 'p-open', 'Open this folder in a new window', 'terminal', 'p-term', 'Open Terminal Here',
+    'unpin', 'p-pin', 'Unpin this folder', 'hidden', 'p-hidden', 'Show hidden files'],
+  ['open', 'p-open', 'Open this volume', 'rename', 'p-rename', 'Rename this folder', 'openNew', 'p-open', 'Open in a new window', 'terminal', 'p-term', 'Open Terminal Here',
+    'unpin', 'p-pin', 'Unpin this folder', 'eject', 'p-eject', 'Eject this volume', 'trash', 'p-trash', 'Move this folder to the Trash'],
+  ['open', 'p-open', 'Open the selected items', 'trash', 'p-trash', 'Move the selected items to the Trash'],
+  ['putBack', 'p-putback', 'Put back the selected items', 'deleteNow', 'p-trash', 'Delete the selected items immediately']
+].map((flat) => {
+  let html = '';
+  for (let i = 0; i < flat.length; i += 3) html += taskRow(flat[i], flat[i + 1], flat[i + 2]);
+  return html;
+});
+
+// The tasks box changes its rows with every click. It always takes the
+// room for its tallest list, measured in the box itself (long rows wrap in
+// the narrow pane), so Pinned, Other Places and Details never move.
+function fitTasksBox() {
+  const bd = $('pane').querySelector('.box.first .bd');
+  if (!bd) return;
+  const probe = document.createElement('div');
+  probe.className = 'bd';
+  probe.style.cssText = 'position:absolute; left:0; right:0; visibility:hidden;';
+  bd.parentNode.style.position = 'relative';
+  bd.parentNode.appendChild(probe);
+  let tallest = 0;
+  for (const rows of TASK_LISTS) {
+    probe.innerHTML = rows;
+    tallest = Math.max(tallest, probe.offsetHeight);
+  }
+  probe.remove();
+  if (tallest) bd.style.minHeight = `${tallest}px`;
+}
+
+// Only a box whose markup changed is redrawn, so a click that changes the
+// tasks and Details doesn't make Pinned and Other Places blink.
+const paneDrawn = {}; // box id -> the markup it was last drawn from
 function renderPane() {
   if (pane !== 'tasks' || !app) return;
-  $('pane').innerHTML = tasksBox() + pinnedBox() + placesBox() + detailsBox();
+  const el = $('pane');
+  let after = null;
+  for (const [id, html] of [['tasks', tasksBox()], ['pinned', pinnedBox()], ['places', placesBox()], ['details', detailsBox()]]) {
+    let node = el.querySelector(`[data-box="${id}"]`);
+    if (!node || paneDrawn[id] !== html) {
+      if (node) node.remove();
+      node = null;
+      if (html) {
+        const t = document.createElement('template');
+        t.innerHTML = html;
+        node = t.content.firstElementChild;
+        el.insertBefore(node, after ? after.nextSibling : el.firstChild);
+      }
+      paneDrawn[id] = html;
+    }
+    if (node) after = node;
+  }
+  fitTasksBox();
   loadCount();
 }
 
