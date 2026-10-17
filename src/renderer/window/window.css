@@ -122,6 +122,10 @@ table.det td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.det td .cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
 table.det td .nm { overflow: hidden; text-overflow: ellipsis; }
 .ic { flex: none; }
+/* a Quick Look preview in place of an icon: the file's shape inside the
+   icon's square, with a thin edge so a white page doesn't fade into the list */
+.pv { display: flex; align-items: center; justify-content: center; }
+.pv img { display: block; max-width: 100%; max-height: 100%; box-shadow: 0 0 0 1px rgba(127, 127, 127, .45), 0 1px 2px rgba(0, 0, 0, .15); }
 img.ic:not([src]), img.big:not([src]) { visibility: hidden; }
 .big { flex: none; width: var(--big); height: var(--big); }
 .item.hid .ic, .item.hid .big, .item.hid .nm, .item.hid .pic { opacity: .5; }

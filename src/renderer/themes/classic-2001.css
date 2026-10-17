@@ -92,7 +92,7 @@ table.det td .ic { width: 16px; height: 16px; }
 .item .nm { padding: 0 2px; }
 .item.sel .nm { background: var(--sel); color: var(--sel-text); }
 body.idle .item.sel .nm, .files.other .item.sel .nm { background: var(--idle-sel); color: #000; }
-.item.sel svg.big, .item.sel img.big, table.det tr.item.sel .ic { filter: brightness(.82) sepia(.3) hue-rotate(180deg) saturate(2); }
+.item.sel svg.big, .item.sel img.big, .item.sel .pv.big, table.det tr.item.sel .ic { filter: brightness(.82) sepia(.3) hue-rotate(180deg) saturate(2); }
 .g-icons { grid-template-columns: repeat(auto-fill, 78px); gap: 14px 6px; padding: 10px; }
 .g-icons .item { gap: 3px; }
 .g-icons .nm { line-height: 1.25; max-width: 76px; }

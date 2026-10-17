@@ -14,6 +14,7 @@ const TREE = {
   '/Users/test/Projects/Filedrawer': []
 };
 
+const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const KINDS = { txt: 'Plain Text Document', jpg: 'JPEG Image', pdf: 'PDF Document' };
 const dirname = (p) => p.slice(0, p.lastIndexOf('/')) || '/';
 const basename = (p) => p.slice(p.lastIndexOf('/') + 1);
@@ -72,7 +73,8 @@ export function fakeFiledrawer(names, state, extra = {}) {
     volume: () => ({ name: 'Macintosh HD', free: 100e9 }),
     count: (dir) => (tree[dir] ? tree[dir].filter((e) => !e.startsWith('.')).length : null),
     icons: () => ({}),
-    thumbs: () => ({}),
+    // Pictures and PDFs get a one pixel picture, like Quick Look would draw.
+    thumbs: (paths) => Object.fromEntries(paths.filter((p) => /\.(jpe?g|png|pdf)$/i.test(p)).map((p) => [p, PIXEL])),
     placeOf: () => null,
     waitFolder: () => null,
     askExtension: () => false,

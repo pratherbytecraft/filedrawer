@@ -45,6 +45,19 @@ test('icons come back as PNG pictures, for a file and for a kind', async () => {
   assert.equal((await helper.request('icon', { path: path.join(dir, 'gone'), size: 32 })).error, 'no icon');
 });
 
+test('thumb gives a picture in the file\'s own shape, and nothing for a file with only an icon', async () => {
+  const dir = folder(['notes.txt']);
+  const wide = path.join(dir, 'wide.jpg');
+  execFileSync('sips', ['-s', 'format', 'jpeg', '-z', '85', '140', '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns', '--out', wide], { stdio: 'ignore' });
+  execFileSync('zip', ['-q', 'a.zip', 'notes.txt'], { cwd: dir });
+  const pic = await helper.request('thumb', { path: wide, size: 96 });
+  assert.ok(isPng(pic.png));
+  assert.equal(pic.width, 96);
+  assert.ok(pic.height < pic.width, 'a wide picture stays wide');
+  assert.equal((await helper.request('thumb', { path: path.join(dir, 'a.zip'), size: 96 })).error, 'no picture');
+  assert.equal((await helper.request('thumb', { path: path.join(dir, 'gone.jpg'), size: 96 })).error, 'no picture');
+});
+
 test('volume gives the disk name and space', async () => {
   const res = await helper.request('volume', { path: tempDir() });
   assert.ok(res.name.length > 0);

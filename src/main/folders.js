@@ -283,11 +283,16 @@ async function icons(reqs, px) {
   return out;
 }
 
-// Pictures of files for the Thumbnails view, from Quick Look, as data URLs
-// by path. A file Quick Look can't draw gets null and keeps its icon. Kept
-// for the last few hundred files, by path, size and date.
+// Pictures of files for the Thumbnails view and for previews in place of
+// icons, from Quick Look, as data URLs by path. The helper asks for them the
+// way Finder does, so each keeps its shape and documents come out as pages.
+// A file Quick Look can't draw gets null and keeps its icon. Without the
+// helper, Electron's thumbnail stands in. Kept for the last few hundred
+// files, by path, size and date.
 const thumbCache = new Map();
 const THUMB_KEEP = 400;
+const THUMB_TIMEOUT = 10000; // a long video can take Quick Look a while
+const THUMB_BATCH = 6; // asked at once, so a folder of photos doesn't flood the helper
 
 async function thumb(p, px) {
   let st;
@@ -299,11 +304,15 @@ async function thumb(p, px) {
   const key = `${p}@${px}:${st.size}:${st.mtimeMs}`;
   if (thumbCache.has(key)) return thumbCache.get(key);
   let url = null;
-  try {
-    const img = await nativeImage.createThumbnailFromPath(p, { width: px, height: px });
-    if (!img.isEmpty()) url = img.toDataURL();
-  } catch {
-    url = null;
+  const res = await helper.request('thumb', { path: p, size: px }, { withError: true, timeout: THUMB_TIMEOUT });
+  if (res && res.png) url = 'data:image/png;base64,' + res.png;
+  else if (!res) {
+    try {
+      const img = await nativeImage.createThumbnailFromPath(p, { width: px, height: px });
+      if (!img.isEmpty()) url = img.toDataURL();
+    } catch {
+      url = null;
+    }
   }
   thumbCache.set(key, url);
   if (thumbCache.size > THUMB_KEEP) thumbCache.delete(thumbCache.keys().next().value);
@@ -313,8 +322,8 @@ async function thumb(p, px) {
 async function thumbs(paths, px) {
   const out = {};
   // A few at a time, so a folder of photos doesn't hold up everything else.
-  for (let i = 0; i < paths.length; i += 4) {
-    await Promise.all(paths.slice(i, i + 4).map(async (p) => {
+  for (let i = 0; i < paths.length; i += THUMB_BATCH) {
+    await Promise.all(paths.slice(i, i + THUMB_BATCH).map(async (p) => {
       out[p] = await thumb(p, px);
     }));
   }

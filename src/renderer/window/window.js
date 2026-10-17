@@ -107,6 +107,8 @@ const drawn = (it) => isFolder(it) && !it.volume;
 
 function iconHtml(it, cls = 'ic') {
   if (drawn(it)) return `<svg class="${cls}"><use href="#${specialIcon(it.path) || 'i-folder'}"/></svg>`;
+  const pic = previewsOn() && canPreview(it) ? thumbUrls.get(thumbKey(it)) : null;
+  if (pic) return previewHtml(pic, cls);
   const url = iconUrls.get(`${iconKey(it)}@${iconPx()}`);
   return `<img class="${cls}" alt="" data-key="${esc(iconKey(it))}"${url ? ` src="${url}"` : ''}>`;
 }
@@ -131,11 +133,18 @@ async function loadIcons() {
   }
 }
 
-// Thumbnails: Quick Look pictures of the files in sight, asked for as they
-// scroll into view. A file Quick Look can't draw keeps its icon.
+// Quick Look pictures of the files in sight, asked for as they scroll into
+// view: always in Thumbnails, and in place of the icon in the other views
+// while previews are on. A file Quick Look can't draw keeps its icon.
+// Folders, apps and other packages, disks and aliases always do.
 const THUMB_PX = 192;
-const thumbUrls = new Map(); // by path and date, null when there's no picture
-const thumbKey = (it) => `${it.path}:${it.modified}`;
+const thumbUrls = new Map(); // by path, date and size, null when there's no picture
+const previewsOn = () => view !== 'thumbs' && !!(app && app.settings.previews);
+const previewPx = () => (view === 'thumbs' ? THUMB_PX : iconPx());
+const thumbKey = (it, px = previewPx()) => `${it.path}:${it.modified}@${px}`;
+const canPreview = (it) => !isFolder(it) && !it.package && !it.volume && !it.alias;
+// The picture keeps its shape inside the icon's square.
+const previewHtml = (url, cls) => `<span class="${cls} pv"><img alt="" src="${url}"></span>`;
 let thumbWant = new Set();
 let thumbTimer = null;
 const thumbSeen = new IntersectionObserver((entries) => {
@@ -153,9 +162,10 @@ async function loadThumbs() {
   const want = [...thumbWant];
   thumbWant = new Set();
   if (!want.length) return;
-  const got = await api.thumbs(want.map((it) => it.path), THUMB_PX);
-  for (const it of want) thumbUrls.set(thumbKey(it), got[it.path] || null);
-  if (view !== 'thumbs') return;
+  const px = previewPx();
+  const got = await api.thumbs(want.map((it) => it.path), px);
+  for (const it of want) thumbUrls.set(thumbKey(it, px), got[it.path] || null);
+  if (px !== previewPx() || (view !== 'thumbs' && !previewsOn())) return;
   for (const el of rows()) {
     const it = items[el.dataset.i];
     const url = it && thumbUrls.get(thumbKey(it));
@@ -165,18 +175,23 @@ async function loadThumbs() {
 
 function showThumb(el, url) {
   const frame = el.querySelector('.frame');
-  if (frame && !frame.querySelector('.pic')) frame.innerHTML = `<img class="pic" alt="" src="${url}">`;
+  if (frame) {
+    if (!frame.querySelector('.pic')) frame.innerHTML = `<img class="pic" alt="" src="${url}">`;
+    return;
+  }
+  const icon = el.querySelector('img.ic, img.big');
+  if (icon) icon.outerHTML = previewHtml(url, icon.classList.contains('big') ? 'big' : 'ic');
 }
 
 function watchThumbs() {
   thumbSeen.disconnect();
-  if (view !== 'thumbs') return;
+  if (view !== 'thumbs' && !previewsOn()) return;
   for (const el of rows()) {
     const it = items[el.dataset.i];
-    if (isFolder(it)) continue;
+    if (!it || !canPreview(it)) continue;
     const url = thumbUrls.get(thumbKey(it));
     if (url) showThumb(el, url);
-    else if (url === undefined) thumbSeen.observe(el.querySelector('.frame'));
+    else if (url === undefined) thumbSeen.observe(el);
   }
 }
 
@@ -1208,7 +1223,7 @@ api.onCommand(({ command, arg }) => {
 // ---------- start ----------
 
 // Settings that only change how things are drawn.
-const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane', 'terminalButton', 'hiddenButton'];
+const LOOK_KEYS = ['showExtensions', 'foldersFirst', 'fullPathTitle', 'showPane', 'terminalButton', 'hiddenButton', 'previews'];
 
 function applyChrome() {
   const s = app.settings;

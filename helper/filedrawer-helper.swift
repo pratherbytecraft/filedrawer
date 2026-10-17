@@ -16,6 +16,10 @@
 //     -> {"id":2,"png":"<base64>"}
 //   {"id":3,"cmd":"typeIcon","ext":"pdf","size":64}
 //     -> {"id":3,"png":"<base64>"}
+//   {"id":19,"cmd":"thumb","path":"/Users/you/Beach.jpg","size":96}
+//     -> {"id":19,"png":"<base64>","width":96,"height":58}, or {"id":19,"error":"no picture"}
+//     (Quick Look's picture of the file in its own shape, the way Finder's icon
+//     view draws it; a file Quick Look only has an icon for has no picture)
 //   {"id":4,"cmd":"volume","path":"/Users/you"}
 //     -> {"id":4,"name":"Macintosh HD","free":195000000000,"total":494000000000}
 //   {"id":5,"cmd":"trash","paths":["/Users/you/a.txt"]}
@@ -83,6 +87,7 @@ import CoreServices
 import Foundation
 import ImageIO
 import Photos
+import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 setvbuf(stdout, nil, _IOLBF, 0)
@@ -158,6 +163,24 @@ func photoExport(_ id: String, dest: String, name: String, done: @escaping ([Str
         } catch {
             done(["error": error.localizedDescription])
         }
+    }
+}
+
+// Quick Look's picture of a file, at most size x size pixels and in the
+// file's own shape: a photo stays wide, a document comes out as its first
+// page. Only a real picture counts; when Quick Look would only have the
+// file's icon, the answer is "no picture" and Filedrawer keeps its own icon.
+func thumbnail(_ path: String, _ size: Int, done: @escaping ([String: Any]) -> Void) {
+    guard FileManager.default.fileExists(atPath: path) else { return done(["error": "no picture"]) }
+    let request = QLThumbnailGenerator.Request(fileAt: URL(fileURLWithPath: path), size: CGSize(width: size, height: size),
+                                               scale: 1, representationTypes: .thumbnail)
+    QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
+        guard let rep, rep.type == .thumbnail else { return done(["error": "no picture"]) }
+        let image = rep.cgImage
+        guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+            return done(["error": "no picture"])
+        }
+        done(["png": data.base64EncodedString(), "width": image.width, "height": image.height])
     }
 }
 
@@ -334,6 +357,8 @@ func handle(_ req: [String: Any]) {
             items.append(entry)
         }
         reply(["id": id, "items": items, "change": board.changeCount])
+    case "thumb":
+        thumbnail(req["path"] as? String ?? "", size) { result in reply(["id": id].merging(result) { a, _ in a }) }
     case "photosStatus":
         reply(["id": id, "status": photosStatus()])
     case "askPhotos":

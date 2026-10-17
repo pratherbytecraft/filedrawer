@@ -188,6 +188,27 @@ describe('file window', () => {
     cy.get('#b-empty').should('be.visible').and('have.class', 'off');
   });
 
+  it('pictures show a preview in place of their icon in every view', () => {
+    cy.page(HOME);
+    for (const view of ['icons', 'tiles', 'list', 'details']) {
+      command('view', view);
+      cy.get('#files').should('have.attr', 'data-view', view);
+      item('photo.jpg').find('.pv img').should('have.attr', 'src').and('match', /^data:image/);
+      item('notes.txt').find('.pv').should('not.exist');
+      item('Documents').find('.pv').should('not.exist');
+    }
+    cy.calls('thumbs').should((calls) => expect(calls.map(([, px]) => px)).to.include.members([36]));
+  });
+
+  it('with previews off, files keep their icons outside Thumbnails', () => {
+    cy.page(HOME, (state) => { state.settings.previews = false; });
+    command('view', 'icons');
+    item('photo.jpg').find('img.big').should('exist');
+    item('photo.jpg').find('.pv').should('not.exist');
+    command('view', 'thumbs');
+    item('photo.jpg').find('.frame img.pic').should('exist');
+  });
+
   it('a new tab opens on the start folder and tabs switch', () => {
     cy.page(HOME);
     item('Documents').dblclick();

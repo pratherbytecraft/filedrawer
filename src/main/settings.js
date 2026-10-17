@@ -24,6 +24,7 @@ const DEFAULTS = Object.freeze({
   showPane: true, // the left pane; off, the Folders button still shows the tree
   perFolderView: false, // each folder keeps its own view (folderViews)
   folderViews: {}, // folder path -> view, while perFolderView is on
+  previews: true, // pictures, PDFs and the like show what's in them in place of their icon in every view (Thumbnails always does)
   showExtensions: false, // every extension, not only the ones the Mac shows
   fullPathTitle: false, // the whole path in the title bar
   foldersFirst: true, // folders above files whatever the sort

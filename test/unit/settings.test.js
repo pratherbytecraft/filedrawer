@@ -19,6 +19,7 @@ function start(saved) {
 test('a first run, or a broken file, gets the defaults', () => {
   start();
   assert.deepEqual(settings.get(), settings.DEFAULTS);
+  assert.equal(settings.get().previews, true);
   start('{ broken');
   assert.deepEqual(settings.get(), settings.DEFAULTS);
 });
