@@ -99,11 +99,34 @@ func photosStatus() -> String {
     }
 }
 
+// A video from the Photos library, written into dest under name with the
+// extension of its file. The edited version when there is one, else the
+// original. The drag's own file is only the poster frame; the video itself
+// is a file promise, which another process can't receive.
+func videoExport(_ asset: PHAsset, dest: String, name: String, done: @escaping ([String: Any]) -> Void) {
+    let resources = PHAssetResource.assetResources(for: asset)
+    guard let res = resources.first(where: { $0.type == .fullSizeVideo }) ?? resources.first(where: { $0.type == .video }) else {
+        return done(["error": "The video wasn't found in the Photos library."])
+    }
+    let type = UTType(res.uniformTypeIdentifier)
+    let ext = (res.originalFilename as NSString).pathExtension.lowercased()
+    let out = ext.isEmpty ? (type?.preferredFilenameExtension ?? "mov") : ext
+    let stem = (name as NSString).deletingPathExtension
+    let file = URL(fileURLWithPath: dest).appendingPathComponent((stem.isEmpty ? "Video" : stem) + "." + out)
+    let options = PHAssetResourceRequestOptions()
+    options.isNetworkAccessAllowed = true
+    PHAssetResourceManager.default().writeData(for: res, toFile: file, options: options) { error in
+        if let error { done(["error": error.localizedDescription]) }
+        else { done(["path": file.path, "type": res.uniformTypeIdentifier]) }
+    }
+}
+
 func photoExport(_ id: String, dest: String, name: String, done: @escaping ([String: Any]) -> Void) {
     guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
         return done(["error": "The photo wasn't found in the Photos library."])
     }
-    guard asset.mediaType == .image else { return done(["error": "Only pictures are exported."]) }
+    if asset.mediaType == .video { return videoExport(asset, dest: dest, name: name, done: done) }
+    guard asset.mediaType == .image else { return done(["error": "Only pictures and videos are exported."]) }
     let options = PHImageRequestOptions()
     options.version = .current
     options.isNetworkAccessAllowed = true
@@ -317,9 +340,9 @@ func handle(_ req: [String: Any]) {
         // macOS's Photos prompt. The answer comes back when it's closed.
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in reply(["id": id, "status": photosStatus()]) }
     case "photoExport":
-        // The current version of a photo in the Photos library, written into
-        // dest under name (with the extension of what comes out). HEIC comes
-        // out as JPEG, the way Photos exports it for Finder.
+        // The current version of a photo or video in the Photos library,
+        // written into dest under name (with the extension of what comes
+        // out). HEIC comes out as JPEG, the way Photos exports it for Finder.
         let asset = req["asset"] as? String ?? ""
         let dest = req["dest"] as? String ?? ""
         let name = req["name"] as? String ?? "Photo"

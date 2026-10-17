@@ -151,7 +151,7 @@ function setPlist(dest) {
   set('NSAppleEventsUsageDescription', 'string', 'Filedrawer asks Finder which folder a new Finder window shows, so it can open that folder itself.');
   // Shown in macOS's prompt for Photos, which Filedrawer uses to take a
   // picture dropped from Photos as its edited version.
-  set('NSPhotoLibraryUsageDescription', 'string', 'Filedrawer takes a picture dropped from Photos as its edited version, the way Finder does.');
+  set('NSPhotoLibraryUsageDescription', 'string', 'Filedrawer takes a picture or video dropped from Photos as its edited version, the way Finder does.');
   // Folders can be opened with Filedrawer, from `filedrawer <folder>` and
   // later as the default folder viewer.
   set('CFBundleDocumentTypes', 'json', JSON.stringify([{

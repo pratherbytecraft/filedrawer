@@ -72,16 +72,16 @@ function draw() {
   drawPhotos();
 }
 
-// The Photos row on General: with the Photos permission, a picture dropped
-// from Photos comes out as its edited version, the way Finder gets it.
+// The Photos row on General: with the Photos permission, a picture or video
+// dropped from Photos comes out as its edited version, the way Finder gets it.
 function drawPhotos() {
   const p = app.photos || 'unknown';
   const allowed = '<span class="status"><i></i>Allowed</span>';
   const missing = (label) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="ph-btn">${label}</span>`;
   $('ph-ctl').innerHTML = p === 'allowed' ? allowed : missing(p === 'denied' ? 'Open Privacy Settings' : 'Allow');
   $('photos-note').textContent = p === 'allowed'
-    ? 'A picture dropped from Photos lands as its edited version, as a JPEG, the way Finder gets it.'
-    : 'With the Photos permission, a picture dropped from Photos lands as its edited version, as a JPEG. Without it, the original file is copied.';
+    ? 'A picture or video dropped from Photos lands as its edited version, the way Finder gets it. Pictures come out as JPEG.'
+    : 'With the Photos permission, a picture or video dropped from Photos lands as its edited version, the way Finder gets it. Without it, a picture lands as its original file and a video can\'t be dropped.';
 }
 
 // The Finder takeover: the switch, and a row per permission it needs.

@@ -688,14 +688,23 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
   const names = await dragNames();
   const moves = [];
   const copies = [];
-  const exported = []; // pictures from Photos, written to a temp folder first
+  const exported = []; // pictures and videos from Photos, written to a temp folder first
+  let videoError = null;
   for (const p of paths) {
     const st = await fs.promises.lstat(p).catch(() => null);
     if (!st) continue;
     const info = names.get(p) || {};
-    const out = info.asset && info.mediaType === 1 ? await photoExport(info) : null;
-    if (out) {
-      exported.push({ src: out, target: null, name: path.basename(out) });
+    const isPhoto = info.asset && info.mediaType === 1;
+    const isVideo = info.asset && info.mediaType === 2;
+    const out = isPhoto || isVideo ? await photoExport(info) : null;
+    if (out?.path) {
+      exported.push({ src: out.path, target: null, name: path.basename(out.path) });
+      continue;
+    }
+    // A video's file on the drag is only its poster frame, so without the
+    // export there's nothing right to copy.
+    if (isVideo) {
+      videoError = out?.error || videoError;
       continue;
     }
     const pair = { src: p, target: null, name: info.name };
@@ -709,6 +718,7 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
     done.push(...(await moveOrCopy(e, 'copy', exported, dest)).done);
     for (const x of exported) fs.promises.rm(path.dirname(x.src), { recursive: true, force: true }).catch(() => {});
   }
+  if (videoError) await answer(e, { error: videoError });
   return { paths: done.map((d) => d.to) };
 });
 
@@ -728,10 +738,12 @@ async function dragNames() {
   return names;
 }
 
-// With the Photos permission, a picture dropped from Photos comes out as
-// its current version, edits and all, the way Finder gets it. The file is
-// written to a temp folder and the copy job takes it from there, or null
-// when Photos isn't allowed or the export fails (the original is copied).
+// With the Photos permission, a picture or video dropped from Photos comes
+// out as its current version, edits and all, the way Finder gets it. The
+// file is written to a temp folder and the copy job takes it from there.
+// When Photos isn't allowed or the export fails the answer carries the
+// reason instead (a picture's original is copied then; a video is skipped,
+// since the file on the drag is only its poster frame).
 let photos = 'unknown';
 async function refreshPhotos() {
   const res = await helper.request('photosStatus');
@@ -739,12 +751,14 @@ async function refreshPhotos() {
   return photos;
 }
 async function photoExport(info) {
-  if (photos !== 'allowed' && (await refreshPhotos()) !== 'allowed') return null;
+  if (photos !== 'allowed' && (await refreshPhotos()) !== 'allowed') {
+    return { error: 'Filedrawer needs the Photos permission to take a video dropped from Photos. You can allow it on the General page in Settings.' };
+  }
   const dir = await fs.promises.mkdtemp(path.join(app.getPath('temp'), 'filedrawer-photo-'));
-  const res = await helper.request('photoExport', { asset: info.asset, dest: dir, name: info.suggested }, { timeout: 120000 });
-  if (res?.path) return res.path;
+  const res = await helper.request('photoExport', { asset: info.asset, dest: dir, name: info.suggested }, { timeout: 10 * 60 * 1000 });
+  if (res?.path) return { path: res.path };
   fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
-  return null;
+  return { error: res?.error ? `The video couldn't be taken from Photos. ${res.error}` : "The video couldn't be taken from Photos." };
 }
 
 // The Photos row on the General page: macOS's prompt, or Privacy Settings
