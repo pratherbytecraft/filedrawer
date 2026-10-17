@@ -429,6 +429,9 @@ function render() {
     f.innerHTML = RENDER[view]();
     fitList();
   }
+  // Greyed while the Trash is empty. Without Full Disk Access Filedrawer
+  // can't see inside, and Finder can still empty it.
+  $('b-empty').classList.toggle('off', cwd === TRASH && !listError && !items.length);
   renderStatus();
   renderPane();
   loadIcons();
@@ -509,6 +512,7 @@ function updateChrome() {
   $('b-forward').classList.toggle('off', hIndex >= history.length - 1);
   $('b-up').classList.toggle('off', !parentOf(cwd));
   $('b-term').classList.toggle('off', !targetFolder());
+  if ($('b-empty').hidden !== !buttonWanted('b-empty')) fitToolbar();
   const icon = `<use href="#${specialIcon(cwd) || 'i-folder'}"/>`;
   $('addr-icon').innerHTML = icon;
   $('title-icon').innerHTML = icon;
@@ -1216,12 +1220,14 @@ function applyChrome() {
 // ---------- a toolbar that fits the window ----------
 
 // Buttons that don't fit move into the More button's menu, right most first.
-const OVERFLOW = ['b-hidden', 'b-term', 'b-split', 'b-folders', 'b-search'];
-const OVERFLOW_ICONS = { 'b-hidden': 'p-hidden', 'b-term': 'p-term', 'b-split': 't-split', 'b-folders': 't-folders', 'b-search': 't-search' };
+const OVERFLOW = ['b-empty', 'b-hidden', 'b-term', 'b-split', 'b-folders', 'b-search'];
+const OVERFLOW_ICONS = { 'b-empty': 'p-trash', 'b-hidden': 'p-hidden', 'b-term': 'p-term', 'b-split': 't-split', 'b-folders': 't-folders', 'b-search': 't-search' };
 const overflowed = new Set();
 const toolbar = document.querySelector('.toolbar');
 
-const buttonWanted = (id) => (id !== 'b-term' || app.settings.terminalButton) && (id !== 'b-hidden' || app.settings.hiddenButton);
+// Empty Trash is only on the toolbar in the Trash.
+const buttonWanted = (id) => (id !== 'b-term' || app.settings.terminalButton) && (id !== 'b-hidden' || app.settings.hiddenButton) &&
+  (id !== 'b-empty' || cwd === TRASH);
 
 // A separator shows only between two visible buttons.
 function syncSeps() {
@@ -1267,7 +1273,7 @@ $('b-more').addEventListener('mousedown', (e) => {
     return { label: b.title, icon: OVERFLOW_ICONS[id], checked: b.classList.contains('on') || b.classList.contains('down'), click: () => b.click() };
   };
   const views = ['b-search', 'b-folders', 'b-split'].filter((id) => overflowed.has(id)).map(entry);
-  const tools = ['b-term', 'b-hidden'].filter((id) => overflowed.has(id)).map(entry);
+  const tools = ['b-term', 'b-hidden', 'b-empty'].filter((id) => overflowed.has(id)).map(entry);
   const r = $('b-more').getBoundingClientRect();
   openMenu([...views, ...(views.length && tools.length ? ['sep'] : []), ...tools], r.left, r.bottom + 2);
   $('b-more').classList.add('down');
@@ -1392,6 +1398,9 @@ function openTerminal(p = targetFolder()) {
 // The selected folder, when one is, or the open one.
 $('b-term').addEventListener('click', () => openTerminal());
 $('b-hidden').addEventListener('click', () => api.updateSettings({ showHidden: !app.settings.showHidden }));
+$('b-empty').addEventListener('click', () => {
+  if (!$('b-empty').classList.contains('off')) api.emptyTrash();
+});
 
 // ---------- the left pane: Pinned, Other Places and Details ----------
 

@@ -170,6 +170,24 @@ describe('file window', () => {
     });
   });
 
+  it('the Trash has an Empty Trash button that other folders leave out', () => {
+    cy.page('window/index.html?path=::trash', (state, extra) => {
+      extra.tree = { '/Users/test': ['Documents/'], '/Users/test/Documents': [], '::trash': ['old.txt'] };
+    });
+    cy.get('#b-empty').should('be.visible').and('not.have.class', 'off').click();
+    cy.calls('emptyTrash').should('have.length', 1);
+    cy.get('#path').type('/Users/test/Documents{enter}');
+    cy.get('#title').should('have.text', 'Documents');
+    cy.get('#b-empty').should('not.be.visible');
+  });
+
+  it('Empty Trash is greyed out while the Trash is empty', () => {
+    cy.page('window/index.html?path=::trash', (state, extra) => {
+      extra.tree = { '/Users/test': [], '::trash': [] };
+    });
+    cy.get('#b-empty').should('be.visible').and('have.class', 'off');
+  });
+
   it('a new tab opens on the start folder and tabs switch', () => {
     cy.page(HOME);
     item('Documents').dblclick();

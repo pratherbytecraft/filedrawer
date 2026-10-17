@@ -58,7 +58,7 @@ The Search button finds files by name, by a word inside them, by date or by size
 
 Computer lists your disks with their size and free space, and ejects them.
 
-The Trash shows where each item came from and when it was deleted. Put Back moves items to where they were, and Delete Immediately removes them for good. Recents lists the files you opened in the last 30 days, newest first, and iCloud Drive opens here too.
+The Trash shows where each item came from and when it was deleted. Empty Trash is on the toolbar while the Trash is open. Put Back moves items to where they were, and Delete Immediately removes them for good. Recents lists the files you opened in the last 30 days, newest first, and iCloud Drive opens here too.
 
 ![The Trash with Original Location and Date Deleted](https://raw.githubusercontent.com/pratherbytecraft/filedrawer/main/docs/screenshots/trash.png)
 
