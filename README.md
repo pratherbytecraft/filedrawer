@@ -42,7 +42,7 @@ Two Panes on the toolbar, or Option Command P, splits a tab into two sides, each
 
 Type a path into the address bar and press Return, and it fills in folder names as you type. Back and Forward each keep a list of where you've been, and Up goes to the folder above. The arrow at the end of the address bar lists the folders above this one and your pinned folders.
 
-Click a column header in Details to sort by it, and click it again to reverse it. Each folder keeps its own sort, so Downloads can stay newest first while Documents goes by name. Folders you haven't sorted go by name. Drag the edge of a column header to make the column wider or narrower, or double click the edge to fit its longest name.
+Click a column header in Details to sort by it, and click it again to reverse it. Right click a column header to turn columns on or off, including Date Created and Date Added. Each folder keeps its own sort and columns. Downloads starts with Date Added, newest first, and other folders you haven't changed go by name with Date Modified. Drag the edge of a column header to make the column wider or narrower, or double click the edge to fit its longest name.
 
 Pictures, PDFs and other files show what's in them in place of their icon in every view. Show previews in place of icons on the Folder Options page turns that off for every view but Thumbnails.
 

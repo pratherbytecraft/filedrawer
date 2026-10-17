@@ -26,6 +26,7 @@ function item(dir, entry) {
   return {
     name, display: name, path: `${dir}/${name}`, dir: isDir, package: false, link: false, ext,
     size: isDir ? null : 1024 * (name.length + 1), modified: Date.UTC(2026, 9, 1 + name.length), created: Date.UTC(2026, 0, 1),
+    added: Date.UTC(2026, 9, 25 - name.length),
     hidden: name.startsWith('.'), kind: isDir ? 'Folder' : KINDS[ext] || 'Document', fixed: false, canAdd: isDir
   };
 }

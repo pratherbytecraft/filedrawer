@@ -410,7 +410,7 @@ app.on('will-quit', () => {
 
 const THEMES = [['system', 'System'], ['classic-2009', 'Classic 2009'], ['classic-2001', 'Classic 2001'], ['classic-1995', 'Classic 1995']];
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
-const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
+const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified'], ['created', 'Date Created'], ['added', 'Date Added']];
 
 function send(command, arg) {
   const win = BrowserWindow.getFocusedWindow();

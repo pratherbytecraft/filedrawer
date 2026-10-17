@@ -197,9 +197,22 @@ function watchThumbs() {
 
 // ---------- the list ----------
 
-// Each folder keeps the sort picked for it; one never sorted goes by name.
+// Each folder keeps the sort and the Details columns picked for it. One never
+// changed goes by name and shows Date Modified, except Downloads, which goes
+// newest added first and shows Date Added, like Finder.
 const BY_NAME = { key: 'name', dir: 'asc' };
-const folderSort = () => (app && app.settings.folderSorts[cwd]) || BY_NAME;
+const NEWEST_ADDED = { key: 'added', dir: 'desc' };
+const isDownloads = (dir) => !!app && dir === app.home + '/Downloads';
+const folderColumns = () => (app && app.settings.folderColumns[cwd]) || (isDownloads(cwd) ? ['size', 'kind', 'added'] : ['size', 'kind', 'modified']);
+
+// A sort on a column the list doesn't show goes back to the folder's first sort.
+function folderSort() {
+  const s = app && app.settings.folderSorts[cwd];
+  const set = columnSet();
+  const shown = set === 'files' ? ['name', ...folderColumns()] : set === 'search' ? SEARCH_COLUMNS.map((c) => c.key) : null;
+  if (s && (!shown || shown.includes(s.key))) return s;
+  return set === 'files' && isDownloads(cwd) ? NEWEST_ADDED : BY_NAME;
+}
 
 // What the menus show for this window.
 const look = () => ({ view, pane, cwd, split: !!split, sort: folderSort() });
@@ -218,6 +231,8 @@ function sortItems(list) {
     if (key === 'size') c = (a.size ?? -1) - (b.size ?? -1);
     else if (key === 'kind') c = a.kind.localeCompare(b.kind);
     else if (key === 'modified') c = a.modified - b.modified;
+    else if (key === 'created') c = (a.created || 0) - (b.created || 0);
+    else if (key === 'added') c = (a.added || 0) - (b.added || 0);
     else if (key === 'deleted') c = (a.deleted || 0) - (b.deleted || 0);
     else if (key === 'used') c = (a.used || 0) - (b.used || 0);
     else if (key === 'from') c = (a.from || '').localeCompare(b.from || '');
@@ -225,12 +240,23 @@ function sortItems(list) {
   });
 }
 
-const COLUMNS = [
-  { key: 'name', label: 'Name', width: '40%' },
-  { key: 'size', label: 'Size', width: '15%', cls: 'r' },
-  { key: 'kind', label: 'Kind', width: '21%' },
-  { key: 'modified', label: 'Date Modified', width: '24%' }
+// Every column a folder can show, in the order they sit, with their shares
+// of the window until a column was resized.
+const FILE_COLUMNS = [
+  { key: 'name', label: 'Name', share: 40 },
+  { key: 'size', label: 'Size', share: 15, cls: 'r' },
+  { key: 'kind', label: 'Kind', share: 21 },
+  { key: 'modified', label: 'Date Modified', share: 24 },
+  { key: 'created', label: 'Date Created', share: 24 },
+  { key: 'added', label: 'Date Added', share: 24 }
 ];
+
+function filesColumns() {
+  const shown = folderColumns();
+  const cols = FILE_COLUMNS.filter((c) => c.key === 'name' || shown.includes(c.key));
+  const total = cols.reduce((t, c) => t + c.share, 0);
+  return cols.map((c) => ({ ...c, width: `${+(c.share * 100 / total).toFixed(2)}%` }));
+}
 
 // Computer lists volumes, with their sizes instead of dates.
 const COMPUTER_COLUMNS = [
@@ -266,6 +292,8 @@ function cellFor(col, it) {
   if (col.key === 'from') return it.from ? `<span title="${esc(dirname(it.from))}">${esc(shortFolder(it.from))}</span>` : '';
   if (col.key === 'deleted') return it.deleted ? fmtDate(it.deleted) : '';
   if (col.key === 'used') return it.used ? fmtDate(it.used) : '';
+  if (col.key === 'created') return it.created ? fmtDate(it.created) : '';
+  if (col.key === 'added') return it.added ? fmtDate(it.added) : '';
   return fmtDate(it.modified);
 }
 
@@ -279,16 +307,19 @@ const SEARCH_COLUMNS = [
 ];
 
 // The column widths are kept per kind of list, since their columns differ.
-const COLUMN_SETS = { files: COLUMNS, computer: COMPUTER_COLUMNS, trash: TRASH_COLUMNS, recents: RECENTS_COLUMNS, search: SEARCH_COLUMNS };
+const COLUMN_SETS = { files: null, computer: COMPUTER_COLUMNS, trash: TRASH_COLUMNS, recents: RECENTS_COLUMNS, search: SEARCH_COLUMNS };
 const columnSet = () => (searchOn() ? 'search' : cwd === COMPUTER ? 'computer' : cwd === TRASH ? 'trash' : cwd === RECENTS ? 'recents' : 'files');
 
 function renderDetails() {
   const fixedHead = (cwd === COMPUTER || cwd === RECENTS) && !searchOn(); // headers that don't sort
   const set = columnSet();
-  const cols = COLUMN_SETS[set];
-  // Widths in points once a column was resized, shares of the window until then.
+  const cols = set === 'files' ? filesColumns() : COLUMN_SETS[set];
+  // Widths in points once a column was resized, shares of the window until
+  // then. A date turned on after that starts as wide as the other dates.
   const saved = app.settings.columnWidths[set];
-  const widths = saved && cols.every((c) => saved[c.key]) ? cols.map((c) => saved[c.key]) : null;
+  const dateWidth = saved && (saved.modified || saved.created || saved.added);
+  const fresh = (c) => (DATE_COLUMNS.includes(c.key) && dateWidth) || NEW_COLUMN;
+  const widths = saved && cols.some((c) => saved[c.key]) ? cols.map((c) => saved[c.key] || fresh(c)) : null;
   const { key, dir } = folderSort();
   const edge = (c) => `<span class="rz" data-rz="${c.key}"></span>`;
   const head = cols.map((c) => fixedHead || c.key === 'folder' ? `<th data-col="${c.key}" class="${c.cls || ''}">${c.label}${edge(c)}</th>` :
@@ -305,11 +336,15 @@ function renderDetails() {
 // double click fits it to its longest entry. Every column of the list is
 // saved in points then, and the list scrolls sideways when they don't fit.
 const MIN_COLUMN = 40;
+const NEW_COLUMN = 160;
+const DATE_COLUMNS = ['modified', 'created', 'added'];
 
 function saveWidths(table, widths) {
   const keys = [...table.querySelectorAll('th')].map((th) => th.dataset.col);
   const set = Object.fromEntries(keys.map((k, i) => [k, Math.round(widths[i])]));
-  api.updateSettings({ columnWidths: { ...app.settings.columnWidths, [table.dataset.set]: set } });
+  // Columns turned off keep their widths for when they come back.
+  const old = app.settings.columnWidths[table.dataset.set];
+  api.updateSettings({ columnWidths: { ...app.settings.columnWidths, [table.dataset.set]: { ...old, ...set } } });
 }
 
 function resizeColumn(edge, e) {
@@ -869,16 +904,36 @@ function closeMenu() {
 }
 
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
-const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified']];
+const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified'], ['created', 'Date Created'], ['added', 'Date Added']];
 
 const viewEntries = () => VIEWS.map(([v, label]) => ({ label, checked: v === view, click: () => setView(v) }));
 const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === folderSort().key, click: () => sortBy(k) }));
 
 // Sorts the folder shown, and only that one. Sorting by the same thing again
-// turns it around.
+// turns it around. Arranging by a column the folder doesn't show turns it on.
 function sortBy(key) {
   const s = folderSort();
-  api.updateSettings({ folderSorts: { ...app.settings.folderSorts, [cwd]: { key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' } } });
+  const patch = { folderSorts: { ...app.settings.folderSorts, [cwd]: { key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' } } };
+  const shown = folderColumns();
+  if (columnSet() === 'files' && key !== 'name' && !shown.includes(key)) patch.folderColumns = { ...app.settings.folderColumns, [cwd]: withColumn(shown, key) };
+  api.updateSettings(patch);
+}
+
+// A header's right click turns this folder's columns on and off. Name always shows.
+const withColumn = (shown, key) => FILE_COLUMNS.map((c) => c.key).filter((k) => k === key || shown.includes(k));
+const columnEntries = () => FILE_COLUMNS.map((c) => (c.key === 'name' ? { label: c.label, checked: true, disabled: true }
+  : { label: c.label, checked: folderColumns().includes(c.key), click: () => toggleColumn(c.key) }));
+
+function toggleColumn(key) {
+  const shown = folderColumns();
+  const on = !shown.includes(key);
+  const patch = { folderColumns: { ...app.settings.folderColumns, [cwd]: on ? withColumn(shown, key) : shown.filter((k) => k !== key) } };
+  // Turning off the column it sorts by puts the folder back on its first sort.
+  if (!on && (app.settings.folderSorts[cwd] || {}).key === key) {
+    patch.folderSorts = { ...app.settings.folderSorts };
+    delete patch.folderSorts[cwd];
+  }
+  api.updateSettings(patch);
 }
 
 document.addEventListener('mousedown', (e) => {
@@ -889,6 +944,10 @@ window.addEventListener('blur', closeMenu);
 
 $('files').addEventListener('contextmenu', async (e) => {
   e.preventDefault();
+  if (e.target.closest('thead')) {
+    if (columnSet() === 'files') openMenu(columnEntries(), e.clientX, e.clientY);
+    return;
+  }
   const el = e.target.closest('.item');
   if (!el) {
     sel.clear();
@@ -1299,7 +1358,7 @@ function applyState(state) {
   app = state;
   window.applyTheme(state);
   applyChrome();
-  const sortChanged = (dir) => old && JSON.stringify(old.settings.folderSorts[dir]) !== JSON.stringify(state.settings.folderSorts[dir]);
+  const sortChanged = (dir) => old && ['folderSorts', 'folderColumns'].some((k) => JSON.stringify(old.settings[k][dir]) !== JSON.stringify(state.settings[k][dir]));
   // The other side lists again when what it shows changes.
   if (split && old && (['showHidden', 'showExtensions', 'foldersFirst', 'theme'].some((k) => old.settings[k] !== state.settings[k]) ||
     sortChanged(split.other.cwd))) refreshOther();

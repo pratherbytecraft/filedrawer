@@ -47,6 +47,7 @@ const DEFAULTS = Object.freeze({
   terminal: 'Terminal', // the app Open Terminal Here opens, by name or path
   openWith: {}, // extension -> the apps picked for it in the app list, last picked first
   folderSorts: {}, // folder path -> { key, dir }, picked from its headers or Arrange Icons By; other folders sort by name
+  folderColumns: {}, // folder path -> the Details columns after Name, picked from a header's right click
   // Details column widths in points, one set per kind of list (files, trash,
   // recents, computer, search), once a column was resized; until then the
   // columns share the window.
@@ -57,7 +58,8 @@ const DEFAULTS = Object.freeze({
   }
 });
 
-const SORT_KEYS = ['name', 'size', 'kind', 'modified', 'deleted', 'from', 'used'];
+const SORT_KEYS = ['name', 'size', 'kind', 'modified', 'created', 'added', 'deleted', 'from', 'used'];
+const COLUMN_KEYS = ['size', 'kind', 'modified', 'created', 'added'];
 
 let dir;
 let file;
@@ -96,6 +98,14 @@ function clean(saved, base) {
         out.folderSorts = {};
         for (const [k, sort] of Object.entries(v)) {
           if (sort && SORT_KEYS.includes(sort.key) && (sort.dir === 'asc' || sort.dir === 'desc')) out.folderSorts[k] = { key: sort.key, dir: sort.dir };
+        }
+      }
+    } else if (base === DEFAULTS && key === 'folderColumns') {
+      // Any folder can be in here, each with the known columns it shows.
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.folderColumns = {};
+        for (const [k, cols] of Object.entries(v)) {
+          if (Array.isArray(cols)) out.folderColumns[k] = COLUMN_KEYS.filter((c) => cols.includes(c));
         }
       }
     } else if (base === DEFAULTS && key === 'columnWidths') {
@@ -152,9 +162,9 @@ function save() {
 function update(patch) {
   const next = clean(patch, DEFAULTS);
   current = merge(current, next);
-  // A folder's view or sort, and the column widths, are replaced, not
-  // merged, so one can be taken out.
-  for (const key of ['folderViews', 'folderSorts', 'columnWidths']) if (next[key]) current = { ...current, [key]: next[key] };
+  // A folder's view, sort or columns, and the column widths, are replaced,
+  // not merged, so one can be taken out.
+  for (const key of ['folderViews', 'folderSorts', 'folderColumns', 'columnWidths']) if (next[key]) current = { ...current, [key]: next[key] };
   return save();
 }
 

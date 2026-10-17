@@ -142,6 +142,50 @@ describe('file window', () => {
     cy.get('#files th[data-sort="name"]').should('have.class', 'desc');
   });
 
+  it("a header's right click turns that folder's columns on and off", () => {
+    const heads = () => cy.get('#files th').then((els) => [...els].map((e) => e.textContent));
+    cy.page(HOME);
+    heads().should('deep.equal', ['Name', 'Size', 'Kind', 'Date Modified']);
+    cy.get('#files th[data-col="kind"]').rightclick();
+    cy.get('#menu .mi').then((els) => [...els].map((e) => e.textContent)).should('deep.equal', ['Name', 'Size', 'Kind', 'Date Modified', 'Date Created', 'Date Added']);
+    cy.contains('#menu .mi', 'Name').should('have.class', 'disabled').and('have.class', 'chk');
+    cy.contains('#menu .mi', 'Date Added').should('not.have.class', 'chk').click();
+    cy.calls('updateSettings').should('deep.include', [{ folderColumns: { '/Users/test': ['size', 'kind', 'modified', 'added'] } }]);
+    heads().should('deep.equal', ['Name', 'Size', 'Kind', 'Date Modified', 'Date Added']);
+    cy.get('#files th[data-col="size"]').rightclick();
+    cy.contains('#menu .mi', 'Date Modified').click();
+    heads().should('deep.equal', ['Name', 'Size', 'Kind', 'Date Added']);
+    item('Documents').dblclick();
+    heads().should('deep.equal', ['Name', 'Size', 'Kind', 'Date Modified']);
+  });
+
+  it('Downloads starts with Date Added, newest first', () => {
+    cy.page('window/index.html?path=/Users/test/Downloads', (state, extra) => {
+      extra.tree = { '/Users/test': ['Downloads/'], '/Users/test/Downloads': ['a.zip', 'longer.zip', 'mid.zip'] };
+    });
+    cy.get('#files th').then((els) => [...els].map((e) => e.textContent)).should('deep.equal', ['Name', 'Size', 'Kind', 'Date Added']);
+    cy.get('#files th[data-sort="added"]').should('have.class', 'desc');
+    names().should('deep.equal', ['a.zip', 'mid.zip', 'longer.zip']);
+  });
+
+  it('turning off the sorted column goes back to sorting by name', () => {
+    cy.page(HOME, (state) => { state.settings.folderSorts = { '/Users/test': { key: 'modified', dir: 'desc' } }; });
+    names().should('deep.equal', ['Documents', 'Projects', 'Pictures', 'photo.jpg', 'notes.txt']);
+    cy.get('#files th[data-col="name"]').rightclick();
+    cy.contains('#menu .mi', 'Date Modified').click();
+    cy.calls('updateSettings').should('deep.include', [{ folderColumns: { '/Users/test': ['size', 'kind'] }, folderSorts: {} }]);
+    names().should('deep.equal', ['Documents', 'Pictures', 'Projects', 'notes.txt', 'photo.jpg']);
+  });
+
+  it('arranging by a date the folder does not show turns that column on', () => {
+    cy.page(HOME);
+    command('sort', 'created');
+    cy.calls('updateSettings').should('deep.include', [{
+      folderSorts: { '/Users/test': { key: 'created', dir: 'asc' } }, folderColumns: { '/Users/test': ['size', 'kind', 'modified', 'created'] }
+    }]);
+    cy.get('#files th[data-sort="created"]').should('have.class', 'asc');
+  });
+
   it('dragging a header edge resizes the column and saves the widths', () => {
     cy.page(HOME);
     cy.get('#files th[data-col="name"]').then(($th) => {

@@ -63,6 +63,13 @@ test('folder sorts keep only known keys and directions, and are replaced whole',
   assert.deepEqual(settings.get().folderSorts, { '/e': { key: 'size', dir: 'asc' } });
 });
 
+test('folder columns keep only known columns, in their own order, and are replaced whole', () => {
+  start({ folderColumns: { '/a': ['added', 'size', 'name', 'colour'], '/b': 'size', '/c': [] } });
+  assert.deepEqual(settings.get().folderColumns, { '/a': ['size', 'added'], '/c': [] });
+  settings.update({ folderColumns: { '/d': ['kind', 'created'] } });
+  assert.deepEqual(settings.get().folderColumns, { '/d': ['kind', 'created'] });
+});
+
 test('column widths keep whole points above zero for each kind of list', () => {
   start({ columnWidths: { files: { name: 250.4, size: -3, kind: 'wide' }, trash: { name: 0 }, recents: 5 } });
   assert.deepEqual(settings.get().columnWidths, { files: { name: 250 } });

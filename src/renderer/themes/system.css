@@ -139,7 +139,8 @@ input.ren { color: var(--text); background: var(--bg); border: 0; border-radius:
 .menu .mi:hover, .menu .mi.on { background: var(--accent); color: var(--accent-text); }
 .menu .mi b { font-weight: 600; }
 .menu .mi .mic { display: none; }
-.menu .mi.chk { padding-left: 20px; }
+/* Every row of a menu with ticks lines up with the ticked ones. */
+.menu:has(.mi.chk) .mi { padding-left: 20px; }
 .menu .mi.chk::before { content: "\2713"; position: absolute; left: 5px; font-size: 11px; }
 .menu .sep { height: 1px; background: var(--line); margin: 4px 8px; }
 .menu .mi .key { color: var(--dim); }
