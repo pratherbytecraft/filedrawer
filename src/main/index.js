@@ -1100,5 +1100,16 @@ app.whenReady().then(() => {
   early.forEach(([dir, select]) => openWindow(dir, select));
   const start = argvFolders(process.argv);
   if (start.length) start.forEach(openPath);
-  else if (!early.length) openWindow(prefs.startFolder());
+  else if (!early.length && !openedAtLogin()) openWindow(prefs.startFolder());
 });
+
+// Opened at login, which Filedrawer does for the Finder takeover (it only
+// works while Filedrawer runs): no window until one is asked for, from
+// Finder, the Dock icon or a pin.
+function openedAtLogin() {
+  try {
+    return !!app.getLoginItemSettings({ type: 'mainAppService' }).wasOpenedAtLogin;
+  } catch {
+    return false;
+  }
+}
