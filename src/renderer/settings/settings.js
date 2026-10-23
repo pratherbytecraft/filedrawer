@@ -66,6 +66,7 @@ function draw() {
   $('login-note').textContent = app.loginItem.needsApproval ? 'macOS wants this allowed in System Settings, General, Login Items.' : '';
   drawVersion();
   $('about-version').textContent = `Version ${app.version}`;
+  drawSiblings();
   drawTerminals();
   drawPreview();
   drawFinder();
@@ -115,6 +116,40 @@ function drawVersion() {
   // The line matches how this copy was installed, Homebrew or npm.
   $('update-cmd').textContent = app.updateCommand;
 }
+
+// The other two apps' icons, from their design/app-icon.svg.
+const SIBLING_ICONS = {
+  startbar: '<svg viewBox="0 0 120 120"><defs><linearGradient id="sr1" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9fa8ff"/><stop offset=".55" stop-color="#5865F2"/><stop offset="1" stop-color="#4c46d6"/></linearGradient><linearGradient id="sg1" x1="0" y1="44" x2="0" y2="76" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b6f47a"/><stop offset="1" stop-color="#2fae57"/></linearGradient></defs><circle cx="60" cy="60" r="54" fill="#0b0e1a" stroke="url(#sr1)" stroke-width="5"/><rect x="22" y="44" width="76" height="32" rx="16" fill="url(#sg1)"/><circle cx="40" cy="60" r="8" fill="#0b0e1a"/><path d="M52 55 H84 M52 65 H74" stroke="#0b0e1a" stroke-width="5" stroke-linecap="round"/></svg>',
+  shotdrawer: '<svg viewBox="0 0 120 120"><defs><linearGradient id="sr3" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9fa8ff"/><stop offset=".55" stop-color="#5865F2"/><stop offset="1" stop-color="#4c46d6"/></linearGradient><linearGradient id="ss3" x1="0" y1="42" x2="0" y2="78" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a8e6ff"/><stop offset="1" stop-color="#2f8cf0"/></linearGradient></defs><circle cx="60" cy="60" r="54" fill="#0b0e1a" stroke="url(#sr3)" stroke-width="5"/><rect x="36" y="42" width="48" height="36" rx="3" fill="url(#ss3)"/><circle cx="70.6" cy="53.5" r="4.7" fill="#fff" fill-opacity=".9"/><path d="M36 78 L52.3 60 L62.9 70.1 L69.6 64.3 L84 78 Z" fill="#0b0e1a" fill-opacity=".55"/><path d="M26 44V30h14M80 30h14v14M94 76v14H80M40 90H26V76" fill="none" stroke="#f5f7ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+let copiedLine = null; // the install line just copied, for a moment
+
+// Also from Prather Bytecraft under About: the other two apps, Open when
+// installed, else the line that installs them with a Copy button.
+function drawSiblings() {
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  $('siblings').innerHTML = (app.siblings || []).map((s) => `<div class="row sib" data-key="${s.key}"><span class="sib-icon">${SIBLING_ICONS[s.key] || ''}</span>
+    <div class="lbl">${esc(s.name)}<small>${esc(s.desc)}</small>${s.installed ? '' : `<code>${esc(s.line)}</code>`}</div>
+    <div class="ctl">${s.installed ? '<span class="sib-state">Installed</span><span class="btn" data-act="open">Open</span>'
+      : `<span class="btn" data-act="copy">${copiedLine === s.line ? 'Copied' : 'Copy'}</span>`}</div></div>`).join('');
+}
+
+$('siblings').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const s = app.siblings.find((x) => x.key === b.closest('[data-key]').dataset.key);
+  if (b.dataset.act === 'open') {
+    api.openSibling(s.key);
+    return;
+  }
+  api.copyText(s.line);
+  copiedLine = s.line;
+  drawSiblings();
+  setTimeout(() => {
+    copiedLine = null;
+    drawSiblings();
+  }, 1500);
+});
 
 function drawTerminals() {
   const want = app.settings.terminal;

@@ -91,6 +91,12 @@
   .about h1 { font-size: 20px; margin: 0; }
   .about p { color: var(--muted); margin: 4px 0; font-size: 12px; }
   .about .links { display: flex; gap: 8px; justify-content: center; margin: 14px 0 6px; }
+  .sib .sib-icon { width: 36px; height: 36px; flex: none; }
+  .sib .sib-icon svg { width: 100%; height: 100%; display: block; }
+  .sib .lbl { font-weight: 600; }
+  .sib .lbl small { font-weight: 400; }
+  .sib .lbl code { display: inline-block; margin-top: 6px; background: var(--row-line); border-radius: 6px; padding: 3px 8px; font: 11px ui-monospace, Menlo, monospace; font-weight: 400; user-select: text; }
+  .sib .sib-state { color: var(--muted); font-size: 11.5px; }
 
   .row.block { display: block; }
   .row.block .lbl { margin-bottom: 8px; }

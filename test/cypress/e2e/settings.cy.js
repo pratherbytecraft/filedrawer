@@ -25,6 +25,18 @@ describe('settings window', () => {
     cy.calls('updateSettings').should('deep.include', [{ theme: 'classic-1995' }]);
   });
 
+  it('About lists the other apps, Open for one that\'s installed and its install line for one that isn\'t', () => {
+    cy.page('settings/index.html');
+    open('About');
+    cy.get('.sib[data-key="startbar"]').should('contain', 'Installed').find('code').should('not.exist');
+    cy.get('.sib[data-key="startbar"] [data-act="open"]').click();
+    cy.calls('openSibling').should('deep.equal', [['startbar']]);
+    cy.get('.sib[data-key="shotdrawer"] code').should('have.text', 'npm install -g shotdrawer');
+    cy.get('.sib[data-key="shotdrawer"] [data-act="copy"]').click();
+    cy.calls('copyText').should('deep.equal', [['npm install -g shotdrawer']]);
+    cy.get('.sib[data-key="shotdrawer"] [data-act="copy"]').should('have.text', 'Copied');
+  });
+
   it('General shows the update line for how Filedrawer was installed, with a Copy button', () => {
     cy.page('settings/index.html', (state) => {
       state.updateCommand = 'brew upgrade filedrawer';

@@ -5,7 +5,7 @@ const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dial
 // Electron reads .asar files as folders. Filedrawer doesn't use any, and
 // the ones inside other apps are plain files to list, measure and copy.
 process.noAsar = true;
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -39,7 +39,8 @@ app.setName('Filedrawer');
 
 // The line that updates this copy, for the General page: Homebrew keeps
 // what it installs in its Cellar folder, npm in a node_modules folder.
-const UPDATE_COMMAND = /\/Cellar\/filedrawer\//.test(fs.realpathSync(__dirname)) ? 'brew upgrade filedrawer' : 'npm install -g filedrawer';
+const BREW = /\/Cellar\/filedrawer\//.test(fs.realpathSync(__dirname));
+const UPDATE_COMMAND = BREW ? 'brew upgrade filedrawer' : 'npm install -g filedrawer';
 
 const windows = new Set();
 let cut = null; // { paths, change } after Cut, until a paste moves them or the clipboard changes
@@ -66,18 +67,56 @@ function state() {
     finder: finder.permission,
     photos,
     startbar: startbarInstalled(),
+    siblings: siblingsAbout(),
     startFolder: prefs.startFolder()
   };
 }
 
-// Startbar, Prather Bytecraft's taskbar, when it's installed: the Default
-// File Manager page points to its own setting.
-let startbarSeen = { at: 0, found: false };
-function startbarInstalled() {
-  if (Date.now() - startbarSeen.at < 30 * 1000) return startbarSeen.found;
-  const found = [path.join(os.homedir(), 'Applications', 'Startbar.app'), '/Applications/Startbar.app'].some((p) => fs.existsSync(p));
-  startbarSeen = { at: Date.now(), found };
+// Prather Bytecraft's other apps, Startbar (the taskbar) and Shotdrawer
+// (recent screenshots), when they're installed. Each is found by its bundle
+// id, looked up now and then, not on every redraw.
+const SIBLINGS = {
+  startbar: { id: 'com.pratherbytecraft.startbar', name: 'Startbar.app' },
+  shotdrawer: { id: 'com.pratherbytecraft.shotdrawer', name: 'Shotdrawer.app' }
+};
+const siblingSeen = {};
+
+function siblingApp(key) {
+  const sib = SIBLINGS[key];
+  const seen = siblingSeen[key];
+  if (seen && Date.now() - seen.at < 30 * 1000) return seen.path;
+  let found = null;
+  for (const p of [path.join(os.homedir(), 'Applications', sib.name), path.join('/Applications', sib.name)]) {
+    try {
+      const id = execFileSync('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', path.join(p, 'Contents', 'Info.plist')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (id === sib.id) {
+        found = p;
+        break;
+      }
+    } catch {
+      // not there
+    }
+  }
+  siblingSeen[key] = { at: Date.now(), path: found };
   return found;
+}
+
+// Startbar installed: the Default File Manager page points to its own setting.
+const startbarInstalled = () => !!siblingApp('startbar');
+
+// The About page's Also from Prather Bytecraft group: each app, whether it's
+// installed, and the line that installs it the same way this copy was.
+const ABOUT = [
+  { key: 'startbar', name: 'Startbar', desc: 'A taskbar along the bottom of the screen, with a Start menu and a button for every window.' },
+  { key: 'shotdrawer', name: 'Shotdrawer', desc: 'Your recent screenshots in the menu bar. Click one to copy its path.' }
+];
+
+function siblingsAbout() {
+  return ABOUT.map((a) => ({
+    ...a,
+    installed: !!siblingApp(a.key),
+    line: BREW ? `brew install pratherbytecraft/tap/${a.key}` : `npm install -g ${a.key}`
+  }));
 }
 
 // Every window that shows settings: the folder windows and the settings window.
@@ -1090,6 +1129,11 @@ app.whenReady().then(() => {
   ipcMain.on('updates:check', () => updates.check(VERSION));
   ipcMain.on('clipboard:text', (_e, text) => clipboard.writeText(String(text)));
   ipcMain.on('settings:open', (_e, page) => prefs.show(page));
+  // Starts one of the other apps, or brings it forward when it's running.
+  ipcMain.on('sibling:open', (_e, key) => {
+    const at = SIBLINGS[key] && siblingApp(key);
+    if (at) execFile('open', ['-a', at], (err) => err && console.log(`Filedrawer: ${key} didn't open: ${err.message}`));
+  });
   ipcMain.on('link', (_e, name) => {
     const links = { kofi: 'https://ko-fi.com/prathercc', issues: PKG.bugs.url, github: PKG.homepage };
     if (links[name]) shell.openExternal(links[name]);

@@ -49,6 +49,10 @@ function filedrawerState() {
     ],
     finder: { accessibility: true, automation: 'allowed' },
     startbar: false,
+    siblings: [
+      { key: 'startbar', name: 'Startbar', desc: 'A taskbar.', installed: true, line: 'npm install -g startbar' },
+      { key: 'shotdrawer', name: 'Shotdrawer', desc: 'Recent screenshots.', installed: false, line: 'npm install -g shotdrawer' }
+    ],
     startFolder: '/Users/test',
     updateCommand: 'npm install -g filedrawer'
   };
