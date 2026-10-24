@@ -377,6 +377,8 @@ export interface SiteManagerData {
   configShown: string[];
   passwords: string[]; // site ids
   select: string | null;
+  // A new site filled in from a link Filedrawer had no site for.
+  draft?: { host: string; port: number; user: string; start: string } | null;
 }
 
 // Save in Site Manager. passwords: a new password for a site, or null to

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Launches Filedrawer. `filedrawer` opens a window at the home folder,
-// `filedrawer <folder>` opens one at that folder, and both return at once.
+// `filedrawer <folder>` opens one at that folder, `filedrawer sftp://user@host/path`
+// opens one on that SSH site, and all return at once.
 // `filedrawer --foreground` keeps it attached to the terminal so its log shows.
 //
 // Filedrawer.app is opened through Launch Services (`open`), not run
@@ -20,10 +21,11 @@ import { appPath, build, BUNDLE_ID } from '../scripts/build-app';
 import { fix } from '../scripts/fix-electron';
 const args = process.argv.slice(2);
 const foreground = args.includes('--foreground');
-const folders = args.filter((a) => !a.startsWith('--')).map((a) => path.resolve(a));
+const isLink = (a: string) => /^sftp:\/\//i.test(a);
+const folders = args.filter((a) => !a.startsWith('--')).map((a) => (isLink(a) ? a : path.resolve(a)));
 
 for (const folder of folders) {
-  if (!fs.existsSync(folder)) {
+  if (!isLink(folder) && !fs.existsSync(folder)) {
     console.error(`Filedrawer: ${folder} was not found.`);
     process.exit(1);
   }

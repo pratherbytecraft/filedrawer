@@ -80,15 +80,38 @@ export interface Typed {
   path: string; // as typed after the colon
 }
 
+// The parts of an sftp:// link: user, host, port and path (decoded, empty for the home folder).
+export interface SftpUrl {
+  user: string;
+  host: string;
+  port: number;
+  path: string;
+}
+
+export function parseSftpUrl(text: string): SftpUrl | null {
+  const m = /^sftp:\/\/(?:([^@/]+)@)?(\[[^\]]+\]|[^:/]+)(?::(\d+))?(\/.*)?$/i.exec(text.trim());
+  if (!m) return null;
+  let p = '';
+  try {
+    p = m[4] ? decodeURIComponent(m[4]) : '';
+  } catch {
+    return null;
+  }
+  return { user: m[1] ? decodeURIComponent(m[1]) : '', host: m[2].replace(/^\[|\]$/g, ''), port: m[3] ? Number(m[3]) : 22, path: p };
+}
+
+export const isSftpUrl = (text: string) => /^sftp:\/\//i.test(text.trim());
+
 export function parseAddress(text: string): Typed | null {
   const t = text.trim();
   if (!t || /^[/~.]/.test(t) || !t.includes(':')) return null;
   const sites = all();
-  const url = /^sftp:\/\/(?:([^@/]+)@)?([^:/]+)(?::(\d+))?(\/.*)?$/i.exec(t);
-  if (url) {
-    const [, user, host, port, rest] = url;
-    const site = sites.find((s) => s.host.toLowerCase() === host.toLowerCase() && (!user || s.user === user) && (!port || s.port === Number(port)));
-    return site ? { site, path: rest ? decodeURIComponent(rest) : '' } : null;
+  if (isSftpUrl(t)) {
+    const url = parseSftpUrl(t);
+    if (!url) return null;
+    // A site matches by host, and by user and port when the link has them.
+    const site = sites.find((s) => s.host.toLowerCase() === url.host.toLowerCase() && (!url.user || s.user === url.user) && s.port === url.port);
+    return site ? { site, path: url.path } : null;
   }
   const colon = t.indexOf(':');
   if (colon < 1 || t.slice(0, colon).includes('/')) return null;

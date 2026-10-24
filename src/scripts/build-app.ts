@@ -157,6 +157,8 @@ function setPlist(dest: string) {
   // Shown in macOS's prompt for the local network, which SSH sites on
   // this network need.
   set('NSLocalNetworkUsageDescription', 'string', 'Filedrawer connects to the SSH sites you add, which can be on your local network.');
+  // sftp:// links open the site in Filedrawer.
+  set('CFBundleURLTypes', 'json', JSON.stringify([{ CFBundleURLName: 'SFTP Site', CFBundleURLSchemes: ['sftp'] }]));
   // Folders can be opened with Filedrawer, from `filedrawer <folder>` and
   // later as the default folder viewer.
   set('CFBundleDocumentTypes', 'json', JSON.stringify([{

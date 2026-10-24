@@ -178,3 +178,20 @@ test('a search on a site becomes one find, with grep for a word, and nothing typ
     `find '/my files' -mindepth 1 -name '.*' -prune -o -type f -size -2048k -exec grep -lIiF -- 'don'\\''t $(rm)' '{}' + 2>/dev/null`.replace(`'{}'`, '{}'));
   assert.match(findCommand('/srv', { ...q, size: 'large' }), /-type f -print/);
 });
+
+test('sftp:// links split into user, host, port and path, and find their site by all three', () => {
+  fakeHome(CONFIG);
+  settings.init();
+  settings.update({ sites: [], configShown: [] });
+  assert.deepEqual(sites.parseSftpUrl('sftp://aaron@homelab.local/opt/homelab/slots/image'), { user: 'aaron', host: 'homelab.local', port: 22, path: '/opt/homelab/slots/image' });
+  assert.deepEqual(sites.parseSftpUrl('SFTP://nas.lan:2222/My%20Files'), { user: '', host: 'nas.lan', port: 2222, path: '/My Files' });
+  assert.deepEqual(sites.parseSftpUrl('sftp://me@[fe80::1]'), { user: 'me', host: 'fe80::1', port: 22, path: '' });
+  assert.equal(sites.parseSftpUrl('sftp://bad/%E0%A4%A'), null);
+  assert.equal(sites.parseSftpUrl('/Users/me'), null);
+  const found = (t: string) => sites.parseAddress(t)?.site.id ?? null;
+  assert.equal(found('sftp://aaron@homelab.local/opt/homelab'), 'ssh-homelab');
+  assert.equal(found('sftp://storage@homelab.local/'), 'ssh-homelab-storage');
+  assert.equal(found('sftp://box:2222/'), 'ssh-box');
+  assert.equal(found('sftp://box/'), null); // box is on 2222
+  assert.equal(found('sftp://someone@homelab.local/'), null);
+});

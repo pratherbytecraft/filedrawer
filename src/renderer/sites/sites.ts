@@ -242,6 +242,13 @@ api.sitesGet().then((data) => {
   shown = new Set(data.configShown);
   withPassword = new Set(data.passwords);
   picked = data.select && (savedSite(data.select) || configSite(data.select)) ? data.select : (saved[0] || config[0] || { id: null }).id;
+  if (data.draft) {
+    // Opened from a link with no site yet: a new one, filled in from the link.
+    const d = data.draft;
+    const s: SavedSite = { id: newId(), name: freeName(d.host), host: d.host, port: d.port, user: d.user, logon: 'key', key: '', start: d.start, local: '', side: true };
+    saved.push(s);
+    picked = s.id;
+  }
   draw();
   $('list').focus();
 });

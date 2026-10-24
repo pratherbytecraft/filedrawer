@@ -459,16 +459,59 @@ app.on('open-file', (e, p) => {
   openPath(p);
 });
 
-// Run as plain Electron (no Filedrawer.app), folders come in on the command line.
+// Run as plain Electron (no Filedrawer.app), folders and sftp:// links come in on the command line.
 function argvFolders(argv: string[]) {
-  return argv.slice(app.isPackaged ? 1 : 2).filter((a) => !a.startsWith('-') && path.isAbsolute(a));
+  return argv.slice(app.isPackaged ? 1 : 2).filter((a) => !a.startsWith('-') && (path.isAbsolute(a) || sites.isSftpUrl(a)));
+}
+
+// A folder, or an sftp:// link to a folder or file on a site.
+function openArg(a: string) {
+  if (sites.isSftpUrl(a)) openLink(a);
+  else openPath(a);
 }
 
 app.on('second-instance', (_e, argv) => {
   const list = argvFolders(argv);
-  if (list.length) list.forEach(openPath);
+  if (list.length) list.forEach(openArg);
   else openWindow(prefs.startFolder());
 });
+
+// sftp:// links, from a click in another app, `open -b` with the app's id,
+// or `filedrawer sftp://...`, open a window on the site at that path, a
+// file's folder with the file picked. A link to a server with no site asks
+// to add one in Site Manager, filled in from the link.
+const queuedLinks: string[] = [];
+app.on('open-url', (e, url) => {
+  e.preventDefault();
+  openLink(url);
+});
+
+async function openLink(url: string) {
+  if (!ready) {
+    queuedLinks.push(url);
+    return;
+  }
+  const link = sites.parseSftpUrl(url);
+  if (!link) return;
+  if (!sites.parseAddress(url)) {
+    const who = `${link.user ? link.user + '@' : ''}${link.host}${link.port !== 22 ? ':' + link.port : ''}`;
+    const opts: MessageBoxOptions = {
+      type: 'question',
+      message: `Filedrawer doesn't have a site for ${who}.`,
+      detail: 'Add it in Site Manager, then it opens at this link.',
+      buttons: ['Add Site...', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1
+    };
+    const near = BrowserWindow.getFocusedWindow();
+    const { response } = near ? await dialog.showMessageBox(near, opts) : await dialog.showMessageBox(opts);
+    if (response === 0) sitemanager.show(near && windows.has(near) ? near : null, null, { host: link.host, port: link.port, user: link.user, start: link.path });
+    return;
+  }
+  const res = await folders.resolve(url, '');
+  if (res.type === 'file') openWindow(fsx.dirname(res.path), res.path);
+  else openWindow(res.path);
+}
 
 // The Dock icon clicked with no windows open.
 app.on('activate', () => {
@@ -1375,9 +1418,11 @@ app.whenReady().then(() => {
   ready = true;
   const early = queued.splice(0);
   early.forEach(([dir, select]) => openWindow(dir, select));
+  const links = queuedLinks.splice(0);
+  links.forEach(openLink);
   const start = argvFolders(process.argv);
-  if (start.length) start.forEach(openPath);
-  else if (!early.length && !openedAtLogin()) openWindow(prefs.startFolder());
+  if (start.length) start.forEach(openArg);
+  else if (!early.length && !links.length && !openedAtLogin()) openWindow(prefs.startFolder());
 });
 
 // Opened at login, which Filedrawer does for the Finder takeover (it only

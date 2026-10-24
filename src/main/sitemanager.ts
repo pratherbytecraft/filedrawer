@@ -18,14 +18,17 @@ const page = (name: string) => path.join(__dirname, '..', 'renderer', name, 'ind
 let manager: BrowserWindow | null = null;
 let from: BrowserWindow | null = null; // the window it was opened from, where Connect opens a site
 let firstPick: string | null = null;
+let draft: SiteManagerData['draft'] = null;
 let onConnect: (id: string, win: BrowserWindow | null) => void = () => {};
 
 export function init(opts: { onConnect: (id: string, win: BrowserWindow | null) => void }) {
   onConnect = opts.onConnect;
 }
 
-export function show(near: BrowserWindow | null, select: string | null = null) {
+export function show(near: BrowserWindow | null, select: string | null = null, newSite: SiteManagerData['draft'] = null) {
   from = near && !near.isDestroyed() ? near : null;
+  draft = newSite;
+  if (manager && !manager.isDestroyed() && newSite) manager.close();
   if (manager && !manager.isDestroyed()) {
     if (select) ipc.send(manager.webContents, 'sites:select', select);
     manager.show();
@@ -64,13 +67,16 @@ export const window = () => (manager && !manager.isDestroyed() ? manager : null)
 ipc.handle('sites:get', (): SiteManagerData => {
   const s = settings.get();
   const pick = firstPick;
+  const fresh = draft;
   firstPick = null;
+  draft = null;
   return {
     saved: s.sites,
     config: sites.info().filter((x) => x.from === 'config'),
     configShown: s.configShown,
     passwords: s.sites.filter((x) => secrets.has(x.id)).map((x) => x.id),
-    select: pick
+    select: pick,
+    draft: fresh
   };
 });
 

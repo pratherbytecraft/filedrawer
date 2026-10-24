@@ -74,6 +74,8 @@ Copy, move, paste and drag work between your Mac and a site, and Rename, New Fol
 
 Opening a file on a site opens a copy in its app, and saving it sends it back to the site. Open Terminal Here opens an SSH session in that folder. Search runs on the server, so it finds a name or a word inside files the same way it does on your Mac. Files on a site don't show previews and can't be dragged to Finder.
 
+An `sftp://` link opens in Filedrawer, from a click in another app or from Terminal with `filedrawer sftp://user@host/path`. A link to a file opens its folder with the file picked. A link to a server without a site offers to add one in Site Manager, filled in from the link.
+
 ## Themes
 
 The System theme follows your Mac's light or dark setting and your accent color. Classic 2009, Classic 2001 and Classic 1995 are in Settings if you want a retro look, each with its own color schemes.
