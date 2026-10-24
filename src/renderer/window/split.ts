@@ -1,30 +1,55 @@
 // Two panes: the file list splits into two sides, each with its own folder,
-// history, view and selection. The side in use is the live one (window.js's
+// history, view and selection. The side in use is the live one (window.ts's
 // state, drawn in #files); the other side is kept here and drawn in
 // #files-other, and the two swap when the other side is clicked. The
 // toolbar, address bar, left pane and status bar follow the side in use.
-// Loaded after window.js, edit.js, search.js and tabs.js.
+// Loaded after window.ts, edit.ts, search.ts and tabs.ts.
+
+// One side's state, as window.ts keeps the live one.
+interface Side {
+  cwd: string;
+  history: string[];
+  hIndex: number;
+  items: Item[];
+  sel: Set<string>;
+  anchor: string | null;
+  cursor: string | null;
+  view: string;
+  listError: ListError | null;
+  folderModified: number | null;
+  cwdWritable: boolean;
+  volumeName: string;
+  scroll: number;
+}
+interface Split {
+  other: Side;
+}
+// Two panes as a tab keeps them: the other side, and whether the side in use is the left one.
+interface SavedSplit {
+  other: Omit<Side, 'sel'> & { sel: string[] };
+  left: boolean;
+}
 
 const SIDE_KEYS = ['cwd', 'history', 'hIndex', 'items', 'sel', 'anchor', 'cursor', 'view', 'listError', 'folderModified', 'cwdWritable', 'volumeName'];
 
 // The live side's state, to put away.
-function takeSide() {
+function takeSide(): Side {
   return {
-    cwd, history: history.slice(), hIndex, items, sel: new Set(sel), anchor, cursor, view, listError,
+    cwd, history: hist.slice(), hIndex, items, sel: new Set(sel), anchor, cursor, view, listError,
     folderModified, cwdWritable, volumeName, scroll: $('files').scrollTop
   };
 }
 
-function putSide(s) {
+function putSide(s: Side) {
   ({ cwd, hIndex, items, anchor, cursor, view, listError, folderModified, cwdWritable, volumeName } = s);
-  history = s.history.slice();
+  hist = s.history.slice();
   sel = new Set(s.sel);
 }
 
 // Runs fn with the other side's state as the live one, for drawing it.
-function asOther(fn) {
+function asOther<T>(fn: () => T) {
   const mine = takeSide();
-  putSide(split.other);
+  putSide((split as Split).other); // only called with two panes
   try {
     return fn();
   } finally {
@@ -32,7 +57,7 @@ function asOther(fn) {
   }
 }
 
-const sideOf = (el) => el.closest('.side');
+const sideOf = (el: Element) => el.closest('.side') as HTMLElement; // both lists sit in a side
 const liveSide = () => sideOf($('files'));
 
 // Draws the other side from its state, and fetches its missing icons.
@@ -64,8 +89,8 @@ async function refreshOther() {
 // The folder bar on top of each side.
 function drawHeads() {
   if (!split) return;
-  const head = (side, dir) => {
-    side.querySelector('.sidehead').innerHTML = `<svg><use href="#${specialIcon(dir) || 'i-folder'}"/></svg><span>${esc(shownPath(dir))}</span>`;
+  const head = (side: HTMLElement, dir: string) => {
+    (side.querySelector('.sidehead') as HTMLElement).innerHTML = `<svg><use href="#${specialIcon(dir) || 'i-folder'}"/></svg><span>${esc(shownPath(dir))}</span>`;
   };
   head(liveSide(), cwd);
   head(sideOf($('files-other')), split.other.cwd);
@@ -104,10 +129,10 @@ async function swapSides() {
 }
 
 // Turns two panes on, the new side at the same folder, or off, keeping the side in use.
-function setSplit(on) {
+function setSplit(on: boolean) {
   if (on === !!split) return;
   if (on) {
-    split = { other: { ...takeSide(), history: [cwd], hIndex: 0, sel: new Set(), anchor: null, cursor: null, scroll: 0 } };
+    split = { other: { ...takeSide(), history: [cwd], hIndex: 0, sel: new Set<string>(), anchor: null, cursor: null, scroll: 0 } };
     document.body.classList.add('split');
     $('side-r').hidden = false;
     $('divider').hidden = false;
@@ -132,15 +157,15 @@ function setSplit(on) {
 }
 
 // For tabs: what to keep, and putting a tab's panes back.
-function splitNow() {
+function splitNow(): SavedSplit | null {
   return split ? { other: { ...split.other, sel: [...split.other.sel], scroll: $('files-other').scrollTop }, left: liveSide() === $('side-l') } : null;
 }
 
-async function restoreSplit(saved) {
+async function restoreSplit(saved: SavedSplit | null) {
   setSplit(false);
   if (!saved) return;
   setSplit(true);
-  split.other = { ...saved.other, sel: new Set(saved.other.sel) };
+  (split as Split).other = { ...saved.other, sel: new Set(saved.other.sel) }; // set just now
   if (!saved.left) {
     // The side in use was the right one.
     $('side-l').appendChild($('files-other'));
@@ -151,12 +176,12 @@ async function restoreSplit(saved) {
 
 // ---------- using the other side ----------
 
-let pending = null; // a press on the other side, which makes it the live one on release
+let pending: { i: number | null; meta: boolean } | null = null; // a press on the other side, which makes it the live one on release
 let justSwapped = 0;
 
 $('files-other').addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
-  const el = e.target.closest('.item');
+  const el = (e.target as HTMLElement).closest<Row>('.item');
   pending = { i: el ? Number(el.dataset.i) : null, meta: e.metaKey || e.shiftKey };
 });
 
@@ -164,7 +189,7 @@ document.addEventListener('mouseup', async (e) => {
   if (!pending) return;
   const p = pending;
   pending = null;
-  if (!e.target.closest('#files-other')) return;
+  if (!(e.target as HTMLElement).closest('#files-other')) return;
   await swapSides();
   justSwapped = Date.now();
   if (p.i !== null && items[p.i]) {
@@ -178,13 +203,14 @@ document.addEventListener('mouseup', async (e) => {
 
 // Dragging straight from the other side drags its items without switching.
 $('files-other').addEventListener('dragstart', (e) => {
-  const el = e.target.closest('.item');
+  const el = (e.target as HTMLElement).closest<Row>('.item');
   pending = null;
   e.preventDefault();
   if (!el || !split) return;
   const it = split.other.items[el.dataset.i];
   if (!it || it.volume) return;
-  const paths = split.other.sel.has(it.path) ? split.other.items.filter((x) => split.other.sel.has(x.path)).map((x) => x.path) : [it.path];
+  // split is set, checked above.
+  const paths = split.other.sel.has(it.path) ? split.other.items.filter((x) => (split as Split).other.sel.has(x.path)).map((x) => x.path) : [it.path];
   api.startDrag(paths);
 });
 
@@ -202,15 +228,15 @@ $('files-other').addEventListener('contextmenu', async (e) => {
 // The second click of a double click lands after the switch.
 $('files').addEventListener('mousedown', (e) => {
   if (e.detail !== 2 || Date.now() - justSwapped > 600 || app.settings.clickToOpen === 'single') return;
-  const el = e.target.closest('.item');
+  const el = (e.target as HTMLElement).closest<Row>('.item');
   justSwapped = 0;
   if (el) openItem(items[el.dataset.i]);
 }, true);
 
 // Where a drop on the other side lands: a folder under the pointer, or its folder.
-function otherDropTarget(e) {
+function otherDropTarget(e: DragEvent): DropTarget | null {
   if (!split) return null;
-  const el = e.target.closest('#files-other .item');
+  const el = (e.target as HTMLElement).closest<Row>('#files-other .item');
   if (el) {
     const it = split.other.items[el.dataset.i];
     if (it && isFolder(it)) return { dir: it.path, el };
@@ -222,7 +248,7 @@ function otherDropTarget(e) {
 
 // ---------- Copy and Move to Other Side ----------
 
-async function toOtherSide(move) {
+async function toOtherSide(move: boolean) {
   if (!split || isPlace(split.other.cwd) || split.other.listError) return;
   const picked = selectedItems().filter((it) => !it.volume && !(move && it.fixed));
   if (!picked.length) return;
@@ -233,14 +259,14 @@ async function toOtherSide(move) {
 }
 
 // Opens a folder or place in the other side, and moves to it.
-async function openInOther(dir) {
+async function openInOther(dir: string) {
   if (!split) setSplit(true);
   await swapSides();
   await navigate(dir);
 }
 
 document.addEventListener('keydown', (e) => {
-  if (!split || e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!split || (e.target as HTMLElement).closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Tab' && !e.shiftKey) {
     e.preventDefault();
     swapSides();
@@ -257,7 +283,7 @@ $('b-split').addEventListener('click', () => setSplit(!split));
 
 // A click on the other side's folder bar switches to it as well.
 $('sides').addEventListener('mousedown', (e) => {
-  const head = e.target.closest('.sidehead');
+  const head = (e.target as HTMLElement).closest('.sidehead');
   if (head && split && sideOf(head) !== liveSide()) swapSides();
 });
 
@@ -265,7 +291,7 @@ $('sides').addEventListener('mousedown', (e) => {
 $('divider').addEventListener('mousedown', (e) => {
   e.preventDefault();
   const box = $('sides').getBoundingClientRect();
-  const move = (m) => {
+  const move = (m: MouseEvent) => {
     const f = Math.min(0.8, Math.max(0.2, (m.clientX - box.left) / box.width));
     $('side-l').style.flex = `${f} 1 0`;
     $('side-r').style.flex = `${1 - f} 1 0`;

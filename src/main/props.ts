@@ -23,7 +23,7 @@ type Totals = Omit<PropsSize, 'done'>;
 type Flags = Pick<PropsChange, 'locked' | 'hidden' | 'hideExt'>;
 
 const open = new Map<number, Entry>(); // window id -> { paths, stopped }
-let renameItem: ((from: string, name: string) => Promise<OpResult>) | null = null; // (from, name) -> { path } | { error }, with Undo, from index.js
+let renameItem: ((from: string, name: string) => Promise<OpResult>) | null = null; // (from, name) -> { path } | { error }, with Undo, from index.ts
 
 // Adds up a folder's files and folders as it goes, telling onStep now and
 // then, and stops when stopped() says so.

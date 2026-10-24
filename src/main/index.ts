@@ -33,7 +33,7 @@ import type {
 } from '../shared/types';
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
-// so it stays the same across updates (see scripts/build-app.js).
+// so it stays the same across updates (see scripts/build-app.ts).
 import PKG from '../../package.json';
 import { BUNDLE_ID } from '../../scripts/build-app';
 const VERSION = PKG.version;

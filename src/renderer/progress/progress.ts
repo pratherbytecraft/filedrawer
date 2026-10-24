@@ -1,8 +1,9 @@
 // The window of a copy or move: what's going where, how far along, the time
 // left, and the question when a name is taken.
 const api = window.filedrawer;
-const $ = (id) => document.getElementById(id);
-const id = new URLSearchParams(location.search).get('id');
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// The copier always puts the job's id in the query.
+const id = new URLSearchParams(location.search).get('id') as string;
 
 api.getState().then((state) => window.applyTheme(state));
 api.onState((state) => window.applyTheme(state));
@@ -25,7 +26,7 @@ api.onJob((u) => {
   }
 });
 
-const answer = (choice) => api.answerJob(id, choice, $('all').checked);
+const answer = (choice: JobChoice) => api.answerJob(id, choice, $<HTMLInputElement>('all').checked);
 $('replace').addEventListener('click', () => answer('replace'));
 $('keep').addEventListener('click', () => answer('keep'));
 $('skip').addEventListener('click', () => answer('skip'));

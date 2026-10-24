@@ -1,11 +1,11 @@
 // The first launch note: ask, then a row per permission ticked off as each
 // is allowed, then all set. The permissions come with the app's state.
 const api = window.filedrawer;
-const $ = (id) => document.getElementById(id);
-let step = 'ask'; // ask | wait | done
-let app = null;
+const $ = (id: string) => document.getElementById(id) as HTMLElement;
+let step: 'ask' | 'wait' | 'done' = 'ask';
+let app: State | null = null;
 
-function row(ok, name, text, id, label) {
+function row(ok: boolean, name: string, text: string, id?: string, label?: string) {
   return `<div class="row"><span class="check${ok ? ' ok' : ''}">${ok ? '&#10003;' : ''}</span>`
     + `<div class="lbl">${name}<small>${text}</small></div>`
     + (ok || !id ? '' : `<div class="ctl"><span class="btn primary" id="${id}">${label}</span></div>`) + '</div>';
@@ -43,7 +43,7 @@ function draw() {
 }
 
 document.addEventListener('click', (e) => {
-  switch (e.target.id) {
+  switch ((e.target as HTMLElement).id) {
     case 'go':
       step = 'wait';
       api.welcome('continue');

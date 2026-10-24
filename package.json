@@ -33,7 +33,7 @@
   "scripts": {
     "start": "npm run build && node dist/bin/filedrawer.js --foreground",
     "build": "tsx scripts/build.ts",
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && tsc -p src/renderer/window && tsc -p src/renderer/settings && tsc -p src/renderer/props && tsc -p src/renderer/chooser && tsc -p src/renderer/progress && tsc -p src/renderer/welcome",
     "prepack": "npm run typecheck && npm run build",
     "postinstall": "node dist/scripts/fix-electron.js && node dist/scripts/build-helper.js && node dist/scripts/build-app.js",
     "build-app": "node dist/scripts/build-app.js",

@@ -2,30 +2,33 @@
 // dot for a nested one), and every change is saved at once. The small window
 // at the top follows the Appearance and Folder Options pages.
 const api = window.filedrawer;
-const $ = (id) => document.getElementById(id);
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-let app = null; // state from the main process
+// The page draws only once getState has answered, so code that reads app
+// runs with it set.
+let app = null as unknown as State; // state from the main process
 let page = new URLSearchParams(location.search).get('page') || 'appearance';
-let terminals = [];
+let terminals: TerminalApp[] = [];
 
-const TITLES = { appearance: 'Appearance', folders: 'Folder Options', terminal: 'Terminal', viewer: 'Default File Manager', general: 'General', about: 'About' };
+const TITLES: Record<string, string> = { appearance: 'Appearance', folders: 'Folder Options', terminal: 'Terminal', viewer: 'Default File Manager', general: 'General', about: 'About' };
 const PREVIEW_ON = new Set(['appearance', 'folders']);
 const FILES = [['Invoices', 'd'], ['Projects', 'd'], ['Recipes', 'd'], ['.config', 'h'], ['Budget 2026', 'f', '.numbers'], ['Notes', 'f', '.txt'], ['Resume', 'f', '.pdf']];
 
-const get = (key) => key.split('.').reduce((o, k) => (o ? o[k] : undefined), app.settings);
+const get = (key: string) => key.split('.').reduce<unknown>((o, k) => (o ? (o as Record<string, unknown>)[k] : undefined), app.settings);
 
-function patchFor(key, value) {
+function patchFor(key: string, value: unknown) {
   const parts = key.split('.');
-  const out = {};
+  const out: Record<string, unknown> = {};
   let at = out;
   parts.slice(0, -1).forEach((k) => {
     at = at[k] = {};
   });
   at[parts[parts.length - 1]] = value;
-  return out;
+  // Built from a setting's key, so it has that setting's shape.
+  return out as SettingsPatch;
 }
 
-const set = (key, value) => api.updateSettings(patchFor(key, value));
+const set = (key: string, value: unknown) => api.updateSettings(patchFor(key, value));
 
 // ---------- drawing the controls from the settings ----------
 
@@ -37,10 +40,10 @@ function macLook() {
 function fillThemes() {
   const s = app.settings;
   $('theme').innerHTML = app.themes.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
-  $('theme').value = s.theme;
+  $<HTMLSelectElement>('theme').value = s.theme;
   const theme = app.themes.find((t) => t.id === s.theme) || app.themes[0];
   $('scheme').innerHTML = theme.schemes.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  if (theme.schemes.length) $('scheme').value = s.schemes[s.theme] || theme.schemes[0][0];
+  if (theme.schemes.length) $<HTMLSelectElement>('scheme').value = (s.schemes as Record<string, string>)[s.theme] || theme.schemes[0][0];
   $('row-scheme').hidden = theme.schemes.length < 2;
   const sys = s.theme === 'system';
   $('row-app').classList.toggle('off', !sys);
@@ -54,13 +57,14 @@ function draw() {
   if (s.accent === 'auto') document.documentElement.style.setProperty('--accent', app.system.accent);
   else document.documentElement.style.removeProperty('--accent');
   fillThemes();
-  for (const el of document.querySelectorAll('.toggle[data-key]')) el.classList.toggle('on', !!get(el.dataset.key));
-  for (const el of document.querySelectorAll('.seg[data-key]')) {
-    for (const span of el.children) span.classList.toggle('on', span.dataset.v === get(el.dataset.key));
+  // The selectors below only match elements with a data-key.
+  for (const el of document.querySelectorAll<HTMLElement>('.toggle[data-key]')) el.classList.toggle('on', !!get(el.dataset.key as string));
+  for (const el of document.querySelectorAll<HTMLElement>('.seg[data-key]')) {
+    for (const span of el.children as HTMLCollectionOf<HTMLElement>) span.classList.toggle('on', span.dataset.v === get(el.dataset.key as string));
   }
-  for (const el of document.querySelectorAll('select[data-key]')) el.value = get(el.dataset.key);
-  for (const i of document.querySelectorAll('#accent i')) i.classList.toggle('on', i.dataset.v === s.accent);
-  $('start').value = s.startFolder;
+  for (const el of document.querySelectorAll<HTMLSelectElement>('select[data-key]')) el.value = get(el.dataset.key as string) as string;
+  for (const i of document.querySelectorAll<HTMLElement>('#accent i')) i.classList.toggle('on', i.dataset.v === s.accent);
+  $<HTMLSelectElement>('start').value = s.startFolder;
   $('start-path').textContent = s.startFolder === 'custom' ? s.startPath : '';
   $('login').classList.toggle('on', app.loginItem.on);
   $('login-note').textContent = app.loginItem.needsApproval ? 'macOS wants this allowed in System Settings, General, Login Items.' : '';
@@ -78,7 +82,7 @@ function draw() {
 function drawPhotos() {
   const p = app.photos || 'unknown';
   const allowed = '<span class="status"><i></i>Allowed</span>';
-  const missing = (label) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="ph-btn">${label}</span>`;
+  const missing = (label: string) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="ph-btn">${label}</span>`;
   $('ph-ctl').innerHTML = p === 'allowed' ? allowed : missing(p === 'denied' ? 'Open Privacy Settings' : 'Allow');
   $('photos-note').textContent = p === 'allowed'
     ? 'A picture or video dropped from Photos lands as its edited version, the way Finder gets it. Pictures come out as JPEG.'
@@ -88,9 +92,9 @@ function drawPhotos() {
 // The Finder takeover: the switch, and a row per permission it needs.
 function drawFinder() {
   const on = app.settings.takeOverFinder;
-  const p = app.finder || {};
+  const p: Partial<FinderPermission> = app.finder || {};
   const allowed = '<span class="status"><i></i>Allowed</span>';
-  const missing = (id, label) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="${id}">${label}</span>`;
+  const missing = (id: string, label: string) => `<span class="status"><i class="warn"></i>Not allowed</span><span class="btn primary" id="${id}">${label}</span>`;
   $('ax-ctl').innerHTML = p.accessibility ? allowed : missing('ax-btn', 'Open Privacy Settings');
   $('ae-ctl').innerHTML = p.automation === 'allowed' ? allowed
     : missing('ae-btn', p.automation === 'denied' ? 'Open Privacy Settings' : 'Allow');
@@ -105,13 +109,13 @@ function drawFinder() {
 }
 
 function drawVersion() {
-  const u = app.update || { state: 'idle' };
-  const line = {
+  const u: UpdateStatus = app.update || { state: 'idle' };
+  const line = ({
     checking: 'Checking...',
     current: 'This is the newest version.',
     available: `Version ${u.latest} is out. Run the line below in Terminal, then quit Filedrawer and open it again.`,
     failed: 'The check didn\'t go through. Try again in a bit.'
-  }[u.state] || '';
+  } as Record<string, string>)[u.state] || '';
   $('version').innerHTML = `Version ${app.version}${line ? `<small>${line}</small>` : ''}`;
   // The line matches how this copy was installed, Homebrew or npm.
   $('update-cmd').textContent = app.updateCommand;
@@ -122,12 +126,12 @@ const SIBLING_ICONS = {
   startbar: '<svg viewBox="0 0 120 120"><defs><linearGradient id="sr1" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9fa8ff"/><stop offset=".55" stop-color="#5865F2"/><stop offset="1" stop-color="#4c46d6"/></linearGradient><linearGradient id="sg1" x1="0" y1="44" x2="0" y2="76" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b6f47a"/><stop offset="1" stop-color="#2fae57"/></linearGradient></defs><circle cx="60" cy="60" r="54" fill="#0b0e1a" stroke="url(#sr1)" stroke-width="5"/><rect x="22" y="44" width="76" height="32" rx="16" fill="url(#sg1)"/><circle cx="40" cy="60" r="8" fill="#0b0e1a"/><path d="M52 55 H84 M52 65 H74" stroke="#0b0e1a" stroke-width="5" stroke-linecap="round"/></svg>',
   shotdrawer: '<svg viewBox="0 0 120 120"><defs><linearGradient id="sr3" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9fa8ff"/><stop offset=".55" stop-color="#5865F2"/><stop offset="1" stop-color="#4c46d6"/></linearGradient><linearGradient id="ss3" x1="0" y1="42" x2="0" y2="78" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a8e6ff"/><stop offset="1" stop-color="#2f8cf0"/></linearGradient></defs><circle cx="60" cy="60" r="54" fill="#0b0e1a" stroke="url(#sr3)" stroke-width="5"/><rect x="36" y="42" width="48" height="36" rx="3" fill="url(#ss3)"/><circle cx="70.6" cy="53.5" r="4.7" fill="#fff" fill-opacity=".9"/><path d="M36 78 L52.3 60 L62.9 70.1 L69.6 64.3 L84 78 Z" fill="#0b0e1a" fill-opacity=".55"/><path d="M26 44V30h14M80 30h14v14M94 76v14H80M40 90H26V76" fill="none" stroke="#f5f7ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
-let copiedLine = null; // the install line just copied, for a moment
+let copiedLine: string | null = null; // the install line just copied, for a moment
 
 // Also from Prather Bytecraft under About: the other two apps, Open when
 // installed, else the line that installs them with a Copy button.
 function drawSiblings() {
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('siblings').innerHTML = (app.siblings || []).map((s) => `<div class="row sib" data-key="${s.key}"><span class="sib-icon">${SIBLING_ICONS[s.key] || ''}</span>
     <div class="lbl">${esc(s.name)}<small>${esc(s.desc)}</small>${s.installed ? '' : `<code>${esc(s.line)}</code>`}</div>
     <div class="ctl">${s.installed ? '<span class="sib-state">Installed</span><span class="btn" data-act="open">Open</span>'
@@ -135,9 +139,10 @@ function drawSiblings() {
 }
 
 $('siblings').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-act]');
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!b) return;
-  const s = app.siblings.find((x) => x.key === b.closest('[data-key]').dataset.key);
+  // Every button sits in a sibling's row, keyed by a sibling app.
+  const s = app.siblings.find((x) => x.key === (b.closest('[data-key]') as HTMLElement).dataset.key) as Sibling;
   if (b.dataset.act === 'open') {
     api.openSibling(s.key);
     return;
@@ -153,14 +158,14 @@ $('siblings').addEventListener('click', (e) => {
 
 function drawTerminals() {
   const want = app.settings.terminal;
-  const isOn = (t) => t.path === want || t.name === want;
+  const isOn = (t: TerminalApp) => t.path === want || t.name === want;
   $('apps').innerHTML = terminals.map((t, i) =>
     `<div class="app${isOn(t) ? ' on' : ''}" data-i="${i}">${t.icon ? `<img alt="" src="${t.icon}">` : '<i style="background:#3a3a3c">&gt;_</i>'}${t.name}</div>`).join('') +
     '<div class="app" data-other="1"><i style="background:rgba(127,127,127,.35);color:var(--text)">+</i>Other...</div>';
 }
 
 // The colors of the classic schemes the preview draws from variables.
-const SCHEME_1995 = {
+const SCHEME_1995: Record<string, string[]> = {
   standard: ['#c0c0c0', '#000080', '#1084d0'], brick: ['#c2bfa5', '#800000', '#c08060'], desert: ['#d5ccbb', '#008080', '#80c0b8'],
   eggplant: ['#90b0a8', '#5a4a7a', '#9a88c0'], lilac: ['#b0a8d0', '#5a4e8c', '#a094d0'], maple: ['#d8c098', '#804000', '#c08040'],
   marine: ['#88c0b8', '#004060', '#4080a0'], plum: ['#a89890', '#483048', '#987088'], pumpkin: ['#e0c070', '#604020', '#d08040'],
@@ -168,7 +173,7 @@ const SCHEME_1995 = {
   spruce: ['#a0c0a0', '#305030', '#70a070'], storm: ['#a0a0a0', '#202030', '#606080'], teal: ['#a8c8c0', '#006060', '#40a0a0'],
   wheat: ['#d8d0a0', '#808000', '#c0c060']
 };
-const SCHEME_2009 = {
+const SCHEME_2009: Record<string, string> = {
   sky: '#4a9ff5', dusk: '#2c4f8a', sea: '#14a4a8', leaf: '#4ca54d', lime: '#a3d55b', sun: '#f2c94c', pumpkin: '#f39c32', ruby: '#c8343b',
   pink: '#e055a5', blush: '#f4a6c6', violet: '#8b5bc0', lavender: '#b8a1e0', taupe: '#a69580', cocoa: '#6b4a2f', slate: '#6f7680',
   frost: '#e8eef5', graphite: '#8e8e93'
@@ -177,7 +182,7 @@ const SCHEME_2009 = {
 function drawPreview() {
   const s = app.settings;
   const mini = $('mini');
-  const scheme = s.theme === 'system' ? '' : s.schemes[s.theme] || '';
+  const scheme = s.theme === 'system' ? '' : (s.schemes as Record<string, string>)[s.theme] || '';
   mini.className = `mini ${s.theme === 'system' ? 'system' + (macLook() === 'dark' ? ' dark' : '') : s.theme + ' ' + scheme}`;
   const c95 = SCHEME_1995[scheme] || SCHEME_1995.standard;
   mini.style.setProperty('--face', c95[0]);
@@ -194,17 +199,17 @@ function drawPreview() {
 
 // ---------- pages and search ----------
 
-function showPage(p) {
+function showPage(p: string) {
   page = TITLES[p] ? p : 'appearance';
-  document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
-  document.querySelectorAll('.page').forEach((el) => el.classList.toggle('on', el.dataset.page === page));
+  document.querySelectorAll<HTMLElement>('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
+  document.querySelectorAll<HTMLElement>('.page').forEach((el) => el.classList.toggle('on', el.dataset.page === page));
   $('title').textContent = TITLES[page];
   $('preview').hidden = !PREVIEW_ON.has(page);
   $('content').scrollTop = 0;
 }
 
 function runSearch() {
-  const q = $('search').value.trim().toLowerCase();
+  const q = $<HTMLInputElement>('search').value.trim().toLowerCase();
   const c = $('content');
   c.classList.toggle('searching', !!q);
   let hits = 0;
@@ -219,64 +224,66 @@ function runSearch() {
 }
 
 $('nav').addEventListener('click', (e) => {
-  const a = e.target.closest('a');
+  const a = (e.target as HTMLElement).closest('a');
   if (!a) return;
   e.preventDefault();
-  $('search').value = '';
+  $<HTMLInputElement>('search').value = '';
   runSearch();
-  showPage(a.dataset.page);
+  showPage(a.dataset.page as string); // every nav link has a data-page
 });
 $('search').addEventListener('input', runSearch);
 
 // ---------- changes ----------
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('.toggle[data-key]');
+  // The selectors below only match elements with a data-key.
+  const t = (e.target as HTMLElement).closest<HTMLElement>('.toggle[data-key]');
   if (t) {
-    set(t.dataset.key, !get(t.dataset.key));
+    set(t.dataset.key as string, !get(t.dataset.key as string));
     return;
   }
-  const seg = e.target.closest('.seg[data-key] span');
+  const seg = (e.target as HTMLElement).closest<HTMLElement>('.seg[data-key] span');
   if (seg) {
-    set(seg.parentNode.dataset.key, seg.dataset.v);
+    set((seg.parentNode as HTMLElement).dataset.key as string, seg.dataset.v);
     return;
   }
-  const sw = e.target.closest('#accent i');
+  const sw = (e.target as HTMLElement).closest<HTMLElement>('#accent i');
   if (sw) {
     set('accent', sw.dataset.v);
     return;
   }
-  if (e.target.id === 'ax-btn') {
+  if ((e.target as HTMLElement).id === 'ax-btn') {
     api.finderAccessibility();
     return;
   }
-  if (e.target.id === 'ae-btn') {
+  if ((e.target as HTMLElement).id === 'ae-btn') {
     api.finderAutomation();
     return;
   }
-  if (e.target.id === 'ph-btn') {
+  if ((e.target as HTMLElement).id === 'ph-btn') {
     api.photosAsk();
     return;
   }
-  const term = e.target.closest('#apps .app');
+  const term = (e.target as HTMLElement).closest<HTMLElement>('#apps .app');
   if (term) {
     if (term.dataset.other) api.chooseTerminal();
-    else set('terminal', terminals[term.dataset.i].path);
+    // data-i is the row's index, as a string.
+    else set('terminal', terminals[term.dataset.i as unknown as number].path);
   }
 });
 
 // Back from Privacy Settings, the Photos row looks again.
 window.addEventListener('focus', () => api.photosRefresh());
 
-$('theme').addEventListener('change', (e) => set('theme', e.target.value));
-$('scheme').addEventListener('change', (e) => api.updateSettings({ schemes: { [app.settings.theme]: e.target.value } }));
-for (const el of document.querySelectorAll('select[data-key]')) el.addEventListener('change', () => set(el.dataset.key, el.value));
+$('theme').addEventListener('change', (e) => set('theme', (e.target as HTMLSelectElement).value));
+$('scheme').addEventListener('change', (e) => api.updateSettings({ schemes: { [app.settings.theme]: (e.target as HTMLSelectElement).value } }));
+for (const el of document.querySelectorAll<HTMLSelectElement>('select[data-key]')) el.addEventListener('change', () => set(el.dataset.key as string, el.value));
 $('start').addEventListener('change', (e) => {
-  if (e.target.value === 'custom') {
-    e.target.value = app.settings.startFolder; // until a folder is picked
+  if ((e.target as HTMLSelectElement).value === 'custom') {
+    (e.target as HTMLSelectElement).value = app.settings.startFolder; // until a folder is picked
     api.chooseStartFolder();
   } else {
-    set('startFolder', e.target.value);
+    set('startFolder', (e.target as HTMLSelectElement).value);
   }
 });
 $('login').addEventListener('click', () => api.setLoginItem(!app.loginItem.on));
@@ -289,9 +296,10 @@ $('copy-cmd').addEventListener('click', () => {
 $('export').addEventListener('click', () => api.exportSettings());
 $('import').addEventListener('click', () => api.importSettings());
 $('reset').addEventListener('click', () => api.resetSettings());
-document.querySelector('.about .links').addEventListener('click', (e) => {
-  const pill = e.target.closest('[data-link]');
-  if (pill) api.openLink(pill.dataset.link);
+// The About page always has its links.
+(document.querySelector('.about .links') as HTMLElement).addEventListener('click', (e) => {
+  const pill = (e.target as HTMLElement).closest<HTMLElement>('[data-link]');
+  if (pill) api.openLink(pill.dataset.link as LinkKey);
 });
 
 // ---------- start ----------
@@ -308,7 +316,7 @@ api.onState((state) => {
   if (terminalChanged) loadTerminals();
 });
 api.onSettingsPage((p) => {
-  $('search').value = '';
+  $<HTMLInputElement>('search').value = '';
   runSearch();
   showPage(p);
 });

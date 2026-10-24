@@ -1,17 +1,28 @@
 // Tabs, in a strip under the title bar. Each tab keeps its own folder, Back
 // and Forward history, view and selection; the window shows one at a time.
 // Switching tabs puts this tab's place away and lists the other's folder
-// again, so it's never out of date. Loaded after window.js, edit.js and
-// search.js, and shares their state (cwd, history, view, sel and so on).
+// again, so it's never out of date. Loaded after window.ts, edit.ts and
+// search.ts, and shares their state (cwd, history, view, sel and so on).
 
-let tabs = []; // { cwd, history, hIndex, view, sel, scroll } for every tab but the shown one's live state
+// A tab's place, put away while another tab is shown.
+interface Tab {
+  cwd: string;
+  history: string[];
+  hIndex: number;
+  view: string;
+  sel: string[];
+  scroll: number;
+  split?: SavedSplit | null;
+}
+
+let tabs: Tab[] = []; // { cwd, history, hIndex, view, sel, scroll } for every tab but the shown one's live state
 let tabOn = 0;
-let tabDrag = null; // the tab being dragged to a new spot
+let tabDrag: number | null = null; // the tab being dragged to a new spot
 
 const TAB_TYPE = 'application/x-filedrawer-tab';
 
-function tabNow() {
-  return { cwd, history: history.slice(), hIndex, view, sel: [...sel], scroll: $('files').scrollTop, split: splitNow() };
+function tabNow(): Tab {
+  return { cwd, history: hist.slice(), hIndex, view, sel: [...sel], scroll: $('files').scrollTop, split: splitNow() };
 }
 
 function startTabs() {
@@ -32,7 +43,7 @@ function drawTabs() {
 }
 
 // Puts the shown tab's place away and shows tab i.
-async function showTab(i) {
+async function showTab(i: number) {
   if (i === tabOn || !tabs[i]) return;
   if (renaming) endRename(true);
   closeMenu();
@@ -41,8 +52,8 @@ async function showTab(i) {
   await openTabState(tabs[i]);
 }
 
-async function openTabState(t) {
-  history = t.history.slice();
+async function openTabState(t: Tab) {
+  hist = t.history.slice();
   hIndex = t.hIndex;
   if (t.view !== view && RENDER[t.view]) view = t.view;
   // Two panes are this tab's own: the side in use comes back, then the other.
@@ -55,11 +66,11 @@ async function openTabState(t) {
 }
 
 // A new tab after the shown one, at dir or the start folder.
-async function newTab(dir = app.startFolder || app.home) {
+async function newTab(dir: string = app.startFolder || app.home) {
   if (renaming) endRename(true);
   closeMenu();
   tabs[tabOn] = tabNow();
-  const t = { cwd: dir, history: [dir], hIndex: 0, view: app.settings.newWindowView !== 'last' ? app.settings.newWindowView : app.settings.view, sel: [], scroll: 0 };
+  const t: Tab = { cwd: dir, history: [dir], hIndex: 0, view: app.settings.newWindowView !== 'last' ? app.settings.newWindowView : app.settings.view, sel: [], scroll: 0 };
   tabs.splice(tabOn + 1, 0, t);
   tabOn += 1;
   await openTabState(t);
@@ -82,27 +93,27 @@ async function closeTab(i = tabOn) {
   await openTabState(tabs[tabOn]);
 }
 
-const nextTab = (step) => showTab((tabOn + step + tabs.length) % tabs.length);
+const nextTab = (step: number) => showTab((tabOn + step + tabs.length) % tabs.length);
 
 $('tabstrip').addEventListener('mousedown', (e) => {
-  const x = e.target.closest('[data-close]');
+  const x = (e.target as HTMLElement).closest<Data<'close'>>('[data-close]');
   if (x && e.button === 0) {
     e.preventDefault();
     closeTab(Number(x.dataset.close));
     return;
   }
-  if (e.target.closest('#tab-add') && e.button === 0) {
+  if ((e.target as HTMLElement).closest('#tab-add') && e.button === 0) {
     e.preventDefault();
     newTab();
     return;
   }
-  const t = e.target.closest('.tab');
+  const t = (e.target as HTMLElement).closest<Data<'tab'>>('.tab');
   if (t && e.button === 0) showTab(Number(t.dataset.tab));
 });
 
 // A middle click closes a tab, a double click on the empty strip opens one.
 $('tabstrip').addEventListener('auxclick', (e) => {
-  const t = e.target.closest('.tab');
+  const t = (e.target as HTMLElement).closest<Data<'tab'>>('.tab');
   if (t && e.button === 1) closeTab(Number(t.dataset.tab));
 });
 $('tabstrip').addEventListener('dblclick', (e) => {
@@ -111,11 +122,12 @@ $('tabstrip').addEventListener('dblclick', (e) => {
 
 // Dragging a tab along the strip puts the tabs in another order.
 $('tabstrip').addEventListener('dragstart', (e) => {
-  const t = e.target.closest('.tab');
+  const t = (e.target as HTMLElement).closest<Data<'tab'>>('.tab');
   if (!t) return;
   tabDrag = Number(t.dataset.tab);
-  e.dataTransfer.setData(TAB_TYPE, String(tabDrag));
-  e.dataTransfer.effectAllowed = 'move';
+  // A drag event always has its dataTransfer.
+  e.dataTransfer!.setData(TAB_TYPE, String(tabDrag));
+  e.dataTransfer!.effectAllowed = 'move';
 });
 $('tabstrip').addEventListener('dragover', (e) => {
   if (tabDrag === null) return;
@@ -126,7 +138,7 @@ $('tabstrip').addEventListener('drop', (e) => {
   if (tabDrag === null) return;
   e.preventDefault();
   e.stopPropagation();
-  const over = e.target.closest('.tab');
+  const over = (e.target as HTMLElement).closest<Data<'tab'>>('.tab');
   const to = over ? Number(over.dataset.tab) : tabs.length - 1;
   tabs[tabOn] = tabNow();
   const shown = tabs[tabOn];

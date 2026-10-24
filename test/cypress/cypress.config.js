@@ -61,7 +61,7 @@ function filedrawerState() {
 
 // The functions the preload gives the pages, so the fake has the same ones.
 function apiNames() {
-  const preload = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'preload.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'preload.ts'), 'utf8');
   return [...preload.matchAll(/^  (\w+): /gm)].map((m) => m[1]);
 }
 

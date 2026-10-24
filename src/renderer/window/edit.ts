@@ -1,24 +1,24 @@
 // Working with the files in a window: renaming in place, new folders and
 // text documents, selecting with a box, and typing to jump to a name.
-// Loaded after window.js and shares its state (items, sel, cwd and so on).
+// Loaded after window.ts and shares its state (items, sel, cwd and so on).
 
 // ---------- renaming in place ----------
 
-let renaming = null; // { path, input, hiddenExt } while a name is being edited
+let renaming: { path: string; input: HTMLInputElement; hiddenExt: string; nm: Element } | null = null; // { path, input, hiddenExt } while a name is being edited
 let changedWhileRenaming = false; // the folder changed meanwhile, refresh after
 
 // The part of a name the Mac doesn't show, like ".app", kept on rename.
-function hiddenExt(it) {
+function hiddenExt(it: Item) {
   return it.name !== it.display && it.name.startsWith(it.display) ? it.name.slice(it.display.length) : '';
 }
 
-function itemEl(p) {
+function itemEl(p: string) {
   const i = items.findIndex((it) => it.path === p);
   return i >= 0 ? $('files').querySelector(`.item[data-i="${i}"]`) : null;
 }
 
 // text, when given, is what the user typed last time (after a name was turned down).
-function startRename(p, text) {
+function startRename(p: string, text?: string) {
   if (renaming || cwd === COMPUTER || cwd === TRASH) return;
   const it = items.find((x) => x.path === p);
   const el = itemEl(p);
@@ -64,7 +64,7 @@ function fitRename() {
   input.style.width = Math.max(40, input.scrollWidth + 8) + 'px';
 }
 
-async function endRename(keep) {
+async function endRename(keep: boolean) {
   if (!renaming) return;
   const { path: from, input, hiddenExt: ext, nm } = renaming;
   renaming = null;
@@ -85,9 +85,10 @@ async function endRename(keep) {
   changedWhileRenaming = false;
   // In search results the item is renamed where it stands.
   if (searchOn()) {
+    // A rename that worked always answers with the new path.
     Object.assign(it, { path: res.path, name: typed + ext, display: typed });
-    sel = new Set([res.path]);
-    anchor = cursor = res.path;
+    sel = new Set([res.path as string]);
+    anchor = cursor = res.path as string;
     render();
     return;
   }
@@ -96,9 +97,9 @@ async function endRename(keep) {
 
 // Changing or taking off a file's extension asks first, as Finder does,
 // since the file may then open in another app. Keep puts the old one back.
-async function withExtension(it, typed) {
+async function withExtension(it: Item, typed: string) {
   if (isFolder(it) || it.package || hiddenExt(it)) return typed;
-  const extOf = (n) => {
+  const extOf = (n: string) => {
     const i = n.lastIndexOf('.');
     return i > 0 ? n.slice(i + 1) : '';
   };
@@ -121,19 +122,19 @@ function renameSelected() {
 
 // A click on the name of the one selected item, held still for a moment
 // and not followed by a second click, starts a rename.
-let slowClick = null;
+let slowClick: number | null = null;
 $('files').addEventListener('mousedown', (e) => {
   clearTimeout(slowClick);
   slowClick = null;
-  const el = e.target.closest('.item');
-  const onName = e.target.closest('.nm');
+  const el = (e.target as HTMLElement).closest<Row>('.item');
+  const onName = (e.target as HTMLElement).closest('.nm');
   if (!el || !onName || e.button !== 0 || e.metaKey || e.shiftKey || app.settings.clickToOpen === 'single') return;
   const p = items[el.dataset.i].path;
   if (sel.size === 1 && sel.has(p)) {
     const x = e.clientX;
     const y = e.clientY;
     const startedAt = Date.now();
-    const up = (u) => {
+    const up = (u: MouseEvent) => {
       document.removeEventListener('mouseup', up, true);
       if (Math.abs(u.clientX - x) > 3 || Math.abs(u.clientY - y) > 3 || Date.now() - startedAt > 1000) return;
       slowClick = setTimeout(() => {
@@ -173,7 +174,7 @@ async function trashSelected() {
 
 // Undo and Redo undo typing while a name or the address bar is being
 // edited, and what was done to files otherwise.
-function undoOrRedo(which) {
+function undoOrRedo(which: UndoWhich) {
   const field = document.activeElement;
   if (field && field.matches('input')) document.execCommand(which);
   else api.undo(which);
@@ -181,15 +182,16 @@ function undoOrRedo(which) {
 
 // The menu's Command Delete reaches a field being typed in as the Mac's
 // delete-to-the-start, since the menu catches the key first.
-function deleteToStart(input) {
-  const end = input.selectionEnd;
-  const start = input.selectionStart === end ? 0 : input.selectionStart;
+function deleteToStart(input: HTMLInputElement) {
+  // A text field always has a selection.
+  const end = input.selectionEnd as number;
+  const start = input.selectionStart === end ? 0 : input.selectionStart as number;
   input.setRangeText('', start, end, 'start');
   input.dispatchEvent(new Event('input'));
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, textarea') || e.key !== 'Delete') return;
+  if ((e.target as HTMLElement).closest('input, textarea') || e.key !== 'Delete') return;
   e.preventDefault();
   trashSelected();
 });
@@ -226,7 +228,7 @@ function copyPaths() {
 // ---------- Cut, Copy and Paste ----------
 
 // Text being typed gets the text commands; otherwise they work on files.
-function clipCommand(which) {
+function clipCommand(which: EditCommand) {
   const field = document.activeElement;
   if (field && field.matches('input')) {
     api.editText(which);
@@ -243,7 +245,7 @@ function clipCommand(which) {
   else api.copyFiles(paths);
 }
 
-async function pasteInto(dir) {
+async function pasteInto(dir: string) {
   if (isPlace(dir) || (dir === cwd && (listError || !cwdWritable))) return;
   const res = await api.paste(dir);
   if (dir === cwd && res.paths.length) await navigate(cwd, { push: false, selectMany: res.paths });
@@ -260,7 +262,7 @@ function showCut() {
 // Items leave with the Mac's own drag, so Finder, other apps and other
 // Filedrawer windows all take them the same way.
 $('files').addEventListener('dragstart', (e) => {
-  const el = e.target.closest('.item');
+  const el = (e.target as HTMLElement).closest<Row>('.item');
   if (!el) return;
   e.preventDefault();
   if (renaming) return;
@@ -274,26 +276,29 @@ $('files').addEventListener('dragstart', (e) => {
   if (paths.length) api.startDrag(paths);
 });
 
+// A folder or the Trash, and the element marked while a drag is over it.
+type DropTarget = { dir: string; trash?: undefined; el: HTMLElement | null } | { trash: true; dir?: undefined; el: HTMLElement | null };
+
 // Where a drop lands: a folder in the list, the tree or the pane, the
 // Trash in Other Places, or the open folder.
-function dropTarget(e) {
-  const item = e.target.closest('#files .item');
+function dropTarget(e: DragEvent): DropTarget | null {
+  const item = (e.target as HTMLElement).closest<Row>('#files .item');
   if (item) {
     const it = items[item.dataset.i];
     if (isFolder(it)) return { dir: it.path, el: item };
   }
-  if (e.target.closest('#files-other')) return otherDropTarget(e);
-  if (e.target.closest('#files')) {
+  if ((e.target as HTMLElement).closest('#files-other')) return otherDropTarget(e);
+  if ((e.target as HTMLElement).closest('#files')) {
     if (cwd === TRASH && !listError) return { trash: true, el: null };
     return isPlace(cwd) || listError ? null : { dir: cwd, el: null };
   }
-  const node = e.target.closest('#tree-list .n');
+  const node = (e.target as HTMLElement).closest<Data<'path'>>('#tree-list .n');
   if (node) {
     const p = node.dataset.path;
     if (p === TRASH) return { trash: true, el: node };
     return isPlace(p) ? null : { dir: p, el: node };
   }
-  const place = e.target.closest('#pane [data-place]');
+  const place = (e.target as HTMLElement).closest<Data<'place'>>('#pane [data-place]');
   if (place) {
     const p = place.dataset.place;
     if (p === TRASH) return { trash: true, el: place };
@@ -307,20 +312,21 @@ function dropTarget(e) {
 // it). Filedrawer's own drags move, though the Mac reports them as copy only.
 let ownDrag = false;
 api.onDragOwn((own) => { ownDrag = own; });
-function dropCopies(e) {
+function dropCopies(e: DragEvent) {
   if (e.altKey) return true;
   if (ownDrag) return false;
-  const allowed = e.dataTransfer.effectAllowed;
+  // A drag event always has its dataTransfer.
+  const allowed = e.dataTransfer!.effectAllowed;
   return !(allowed === 'all' || allowed === 'uninitialized' || /move/i.test(allowed));
 }
 
 document.addEventListener('dragover', (e) => {
-  if (e.defaultPrevented || ![...e.dataTransfer.types].includes('Files')) return;
+  if (e.defaultPrevented || ![...e.dataTransfer!.types].includes('Files')) return;
   const t = dropTarget(e);
   clearDropMarks();
   if (!t) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect = dropCopies(e) ? 'copy' : 'move';
+  e.dataTransfer!.dropEffect = dropCopies(e) ? 'copy' : 'move';
   if (t.el) t.el.classList.add('drop-on');
 });
 
@@ -334,7 +340,7 @@ document.addEventListener('drop', async (e) => {
   clearDropMarks();
   if (!t) return;
   e.preventDefault();
-  const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
+  const paths = [...e.dataTransfer!.files].map((f) => api.pathForFile(f)).filter(Boolean);
   if (!paths.length) return;
   if (t.trash) {
     api.trash(paths);
@@ -358,7 +364,7 @@ function showProps() {
 // Space shows the selected file in Quick Look. Once the preview is up it
 // takes the keys itself, and Space closes it again.
 document.addEventListener('keydown', (e) => {
-  if (e.key !== ' ' || typed || e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key !== ' ' || typed || (e.target as HTMLElement).closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   const it = selectedItems()[0];
   if (!it) return;
   e.preventDefault();
@@ -367,16 +373,17 @@ document.addEventListener('keydown', (e) => {
 
 // The apps that can open the right clicked file, with its usual app first,
 // and Choose App... for the app list, which can also change the default.
-async function openWithEntries(paths) {
+async function openWithEntries(paths: string[]): Promise<MenuItem[]> {
   const apps = await api.openWithApps(paths[0]);
-  const sorted = apps.slice().sort((a, b) => (b.default - a.default) || a.name.localeCompare(b.name));
+  // true counts as 1.
+  const sorted = apps.slice().sort((a, b) => ((b.default as unknown as number) - (a.default as unknown as number)) || a.name.localeCompare(b.name));
   const rows = sorted.map((a) => ({ label: a.default ? `${a.name} (default)` : a.name, click: () => api.openWith(a.path, paths) }));
-  return [...rows, ...(rows.length ? ['sep'] : []), { label: 'Choose App...', click: () => api.chooseApp(paths) }];
+  return [...rows, ...(rows.length ? ['sep' as const] : []), { label: 'Choose App...', click: () => api.chooseApp(paths) }];
 }
 
 // ---------- Send To and Eject ----------
 
-function sendToEntries(paths) {
+function sendToEntries(paths: string[]): MenuItem[] {
   const dir = cwd;
   const pinned = pins().filter((p) => p !== dir && !paths.includes(p));
   return [
@@ -386,21 +393,21 @@ function sendToEntries(paths) {
     } },
     { label: 'Desktop (create alias)', icon: 'p-desktop', click: () => api.sendToDesktop(paths) },
     { label: 'Mail Recipient', icon: 'p-mail', click: () => api.sendToMail(paths) },
-    ...(pinned.length ? ['sep', ...pinned.map((p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', click: () => api.sendToFolder(paths, p) }))] : [])
+    ...(pinned.length ? ['sep' as const, ...pinned.map((p) => ({ label: placeLabel(p), icon: specialIcon(p) || 'i-folder', click: () => api.sendToFolder(paths, p) }))] : [])
   ];
 }
 
-const ejectable = (p) => /^\/Volumes\/[^/]+$/.test(p);
+const ejectable = (p: string) => /^\/Volumes\/[^/]+$/.test(p);
 
-async function eject(volume) {
+async function eject(volume: string) {
   const res = await api.eject(volume);
   if (!res.error && cwd === COMPUTER) navigate(cwd, { push: false, keep: true });
 }
 
 // A place in Other Places or Pinned: open it here or in a new window, and
 // for the Trash, empty it, for a pin, unpin it.
-function placeEntries(p) {
-  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
+function placeEntries(p: string) {
+  const entries: MenuItem[] = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
     { label: 'Open in New Tab', click: () => newTab(p) }];
   if (split) entries.push({ label: 'Open in Other Side', click: () => openInOther(p) });
   if (!isPlace(p)) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
@@ -410,7 +417,7 @@ function placeEntries(p) {
 }
 
 $('pane').addEventListener('contextmenu', (e) => {
-  const place = e.target.closest('[data-place]');
+  const place = (e.target as HTMLElement).closest<Data<'place'>>('[data-place]');
   if (!place) return;
   e.preventDefault();
   openMenu(placeEntries(place.dataset.place), e.clientX, e.clientY);
@@ -425,7 +432,7 @@ async function putBackSelected(paths = selectedItems().map((it) => it.path)) {
 
 // The Folders tree's own right click menu.
 $('tree-list').addEventListener('contextmenu', (e) => {
-  const n = e.target.closest('.n');
+  const n = (e.target as HTMLElement).closest<Data<'path'>>('.n');
   if (!n) return;
   e.preventDefault();
   const p = n.dataset.path;
@@ -433,7 +440,7 @@ $('tree-list').addEventListener('contextmenu', (e) => {
     openMenu(placeEntries(p), e.clientX, e.clientY);
     return;
   }
-  const entries = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
+  const entries: MenuItem[] = [{ label: 'Open', bold: true, click: () => navigate(p) }, { label: 'Open in New Window', click: () => api.openWindow(p) },
     { label: 'Open in New Tab', click: () => newTab(p) }];
   if (p !== COMPUTER) entries.push({ label: 'Open Terminal Here', icon: 'p-term', click: () => openTerminal(p) });
   if (ejectable(p)) entries.push('sep', { label: 'Eject', icon: 'p-eject', click: () => eject(p) });
@@ -445,20 +452,32 @@ $('tree-list').addEventListener('contextmenu', (e) => {
 
 // ---------- new folders and text documents ----------
 
-async function makeNew(kind) {
+async function makeNew(kind: string) {
   if (isPlace(cwd) || listError || !cwdWritable) return;
   const res = kind === 'folder' ? await api.newFolder(cwd) : await api.newText(cwd);
   if (res.error) return;
   await navigate(cwd, { push: false, select: res.path });
-  startRename(res.path);
+  startRename(res.path as string); // made, so it has a path
 }
 
 // ---------- selecting with a box ----------
 
-let band = null; // { x, y, base, el } while a box is being drawn, in the list's own coordinates
+interface Band {
+  x: number;
+  y: number;
+  base: Set<string>;
+  toggle: boolean;
+  el: HTMLDivElement;
+  mx: number;
+  my: number;
+  frame: number | null;
+  scroll: number | null;
+}
+
+let band: Band | null = null; // { x, y, base, el } while a box is being drawn, in the list's own coordinates
 
 $('files').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || e.target.closest('.item, th, .note')) return;
+  if (e.button !== 0 || (e.target as HTMLElement).closest('.item, th, .note')) return;
   const f = $('files');
   const r = f.getBoundingClientRect();
   if (e.clientX > r.left + f.clientWidth || e.clientY > r.top + f.clientHeight) return; // on a scroll bar
@@ -494,7 +513,7 @@ function drawBand() {
   Object.assign(band.el.style, { left: left + 'px', top: top + 'px', width: w + 'px', height: h + 'px' });
   // Items under the box, compared on the screen.
   const box = { l: left - f.scrollLeft + r.left, t: top - f.scrollTop + r.top, r: left + w - f.scrollLeft + r.left, b: top + h - f.scrollTop + r.top };
-  const hits = new Set();
+  const hits = new Set<string>();
   for (const el of rows()) {
     const q = el.getBoundingClientRect(); // in Details, the whole row counts
     if (q.right >= box.l && q.left <= box.r && q.bottom >= box.t && q.top <= box.b) hits.add(items[el.dataset.i].path);
@@ -550,10 +569,10 @@ document.addEventListener('mouseup', () => {
 // ---------- typing to jump to a name ----------
 
 let typed = '';
-let typedTimer = null;
+let typedTimer: number | null = null;
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if ((e.target as HTMLElement).closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   if ($('menu').classList.contains('open') || e.key.length !== 1) return;
   if (e.key === ' ' && !typed) return; // Space alone is for Quick Look
   e.preventDefault();

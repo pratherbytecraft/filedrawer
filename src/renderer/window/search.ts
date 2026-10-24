@@ -1,15 +1,15 @@
 // Searching from the left pane, like the old Search panel. The results take
 // the file list's place, with an In Folder column in Details, until the
-// search is closed or another folder is opened. Loaded after window.js.
+// search is closed or another folder is opened. Loaded after window.ts.
 
-let search = null; // { id, state, count, capped, pane } while results are shown
+let search: { id: number; state: SearchState['state']; count: number; capped: boolean } | null = null; // { id, state, count, capped, pane } while results are shown
 let searchId = 0;
 let paneBefore = 'tasks'; // the pane to go back to
 
 const searchOn = () => !!search;
 
 function rootChoices() {
-  const out = [];
+  const out: [string, string][] = [];
   if (!isPlace(cwd) && cwd !== app.home) out.push([cwd, placeLabel(cwd)]);
   out.push([app.home, `${placeLabel(app.home)} (your home folder)`]);
   out.push([COMPUTER, 'Computer (every disk)']);
@@ -24,7 +24,7 @@ function openSearch() {
   $('b-folders').classList.remove('down');
   fitList();
   $('q-name').focus();
-  $('q-name').select();
+  $<HTMLInputElement>('q-name').select();
 }
 
 // Back to the folder, and the pane that was there before.
@@ -41,17 +41,17 @@ function leaveSearch() {
   if (!search) return;
   api.stopSearch();
   search = null;
-  $('q-stop').disabled = true;
+  $<HTMLButtonElement>('q-stop').disabled = true;
   $('q-state').textContent = '';
 }
 
 function runSearch() {
-  const q = {
-    name: $('q-name').value.trim(),
-    word: $('q-word').value.trim(),
-    root: $('q-root').value,
-    age: $('q-age').value,
-    size: $('q-size').value,
+  const q: SearchQuery = {
+    name: $<HTMLInputElement>('q-name').value.trim(),
+    word: $<HTMLInputElement>('q-word').value.trim(),
+    root: $<HTMLSelectElement>('q-root').value,
+    age: $<HTMLSelectElement>('q-age').value,
+    size: $<HTMLSelectElement>('q-size').value,
     hidden: app.settings.showHidden,
     extensions: app.settings.showExtensions
   };
@@ -65,7 +65,7 @@ function runSearch() {
   sel = new Set();
   anchor = cursor = null;
   listError = null;
-  $('q-stop').disabled = false;
+  $<HTMLButtonElement>('q-stop').disabled = false;
   drawSearchState();
   render();
   updateTitle();
@@ -87,7 +87,7 @@ function drawSearchState() {
 }
 
 // Results come in batches; the list is drawn again a few times a second at most.
-let searchDraw = null;
+let searchDraw: number | null = null;
 api.onSearchResults(({ id, items: found }) => {
   if (!search || id !== search.id) return;
   items = sortItems(items.concat(found));
@@ -105,7 +105,7 @@ api.onSearchResults(({ id, items: found }) => {
 api.onSearchState(({ id, state, count, capped }) => {
   if (!search || id !== search.id) return;
   Object.assign(search, { state, count: count ?? search.count, capped: !!capped });
-  if (state === 'done' || state === 'stopped') $('q-stop').disabled = true;
+  if (state === 'done' || state === 'stopped') $<HTMLButtonElement>('q-stop').disabled = true;
   drawSearchState();
 });
 
@@ -130,7 +130,7 @@ for (const id of ['q-name', 'q-word']) {
 }
 
 // The folder a result is in, short: ~ for the home folder.
-function shortFolder(p) {
+function shortFolder(p: string) {
   const dir = dirname(p);
   return dir === app.home || dir.startsWith(app.home + '/') ? '~' + dir.slice(app.home.length) : dir;
 }
