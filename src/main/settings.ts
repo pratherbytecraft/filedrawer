@@ -53,6 +53,8 @@ export const DEFAULTS: Readonly<Settings> = Object.freeze({
   // recents, computer, search), once a column was resized; until then the
   // columns share the window.
   columnWidths: {},
+  sites: [], // the sites made in Site Manager, in the order shown
+  configShown: [], // the hosts from ~/.ssh/config ticked to show in the sidebar, by name
   window: {
     width: 960,
     height: 620
@@ -61,6 +63,23 @@ export const DEFAULTS: Readonly<Settings> = Object.freeze({
 
 const SORT_KEYS = ['name', 'size', 'kind', 'modified', 'created', 'added', 'deleted', 'from', 'used'];
 const COLUMN_KEYS = ['size', 'kind', 'modified', 'created', 'added'];
+const LOGONS = ['key', 'password', 'ask', 'agent'];
+
+// A saved site with every field of the right kind, or null when it has no
+// id or host to go by.
+function cleanSite(v: unknown): Json | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Json;
+  const str = (k: string) => (typeof o[k] === 'string' ? o[k] : '');
+  if (!str('id') || /[/]/.test(str('id')) || !str('host')) return null;
+  const port = Number(o.port);
+  return {
+    id: str('id'), name: str('name') || str('host'), host: str('host'),
+    port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 22,
+    user: str('user'), logon: LOGONS.includes(o.logon) ? o.logon : 'key', key: str('key'),
+    start: str('start'), local: str('local'), side: o.side !== false
+  };
+}
 
 let dir: string;
 let file: string;
@@ -129,6 +148,8 @@ function clean(saved: unknown, base: Json): Json {
         out.openWith = {};
         for (const [k, apps] of Object.entries(v as Json)) if (Array.isArray(apps)) out.openWith[k] = apps.filter((x) => typeof x === 'string');
       }
+    } else if (base === DEFAULTS && key === 'sites') {
+      if (Array.isArray(v)) out.sites = v.map(cleanSite).filter((x) => x);
     } else if (Array.isArray(b)) {
       if (Array.isArray(v)) out[key] = v.filter((x) => typeof x === 'string');
     } else if (b && typeof b === 'object') {

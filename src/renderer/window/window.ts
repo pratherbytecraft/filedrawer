@@ -59,6 +59,7 @@ let hist = [cwd];
 let hIndex = 0;
 let items: Item[] = []; // the folder's items, sorted
 let listError: ListError | null = null;
+let listMessage = ''; // what went wrong on a site, in the main process's words
 let sel = new Set<string>(); // selected paths
 let anchor: string | null = null; // where a Shift click or Shift arrow starts from
 let cursor: string | null = null; // the item the arrow keys move from
@@ -72,6 +73,17 @@ let TRASH = '::trash';
 let RECENTS = '::recents';
 let ICLOUD = '::icloud';
 const isPlace = (p: string) => p === COMPUTER || p === TRASH || p === RECENTS || p === ICLOUD;
+// A folder on an SSH site: ::site/, the site's id, then the path on the
+// server (see src/main/sites.ts).
+const SITE_PREFIX = '::site/';
+const isRemote = (p: string) => p.startsWith(SITE_PREFIX);
+function siteAt(p: string) {
+  const m = /^::site\/([^/]+)(\/.*)?$/.exec(p);
+  if (!m) return null;
+  return { id: m[1], path: m[2] || '/', site: app ? app.sites.find((s) => s.id === m[1]) || null : null };
+}
+const siteRoot = (id: string) => SITE_PREFIX + id;
+let siteStatus: SiteStatus = {};
 let folderModified: number | null = null; // the open folder's own date, for the Details box
 let cwdWritable = true; // new items and pastes can go in the open folder
 let split: Split | null = null; // { other } while this tab shows two panes, see split.ts
@@ -83,6 +95,7 @@ const isVolumeRoot = (p: string) => p === '/' || /^\/Volumes\/[^/]+$/.test(p);
 // The folder above p: a volume's top goes up to Computer, and Computer is the top.
 function parentOf(p: string) {
   if (isPlace(p)) return null;
+  if (isRemote(p)) return (siteAt(p) as { path: string }).path === '/' ? null : dirname(p); // a remote path always splits
   if (isVolumeRoot(p)) return COMPUTER;
   if (app && p.startsWith(app.home + '/.Trash/') && dirname(p) === app.home + '/.Trash') return TRASH;
   return dirname(p);
@@ -93,6 +106,8 @@ function placeLabel(p: string) {
   if (p === TRASH) return 'Trash';
   if (p === RECENTS) return 'Recents';
   if (p === ICLOUD) return 'iCloud Drive';
+  const at = siteAt(p);
+  if (at && at.path === '/') return at.site ? at.site.name : 'Site';
   if (p === '/') return volumeName || 'Macintosh HD';
   if (app && p === app.home) return app.user;
   return basename(p);
@@ -101,6 +116,7 @@ function placeLabel(p: string) {
 // Folders with an icon of their own, by path.
 function specialIcon(p: string) {
   if (!app) return null;
+  if (isRemote(p)) return p.replace(/^::site\/[^/]+/, '') ? null : 'p-site';
   const h = app.home;
   return { [h]: 'p-home', [h + '/Desktop']: 'p-desktop', [h + '/Documents']: 'p-docs', [h + '/Downloads']: 'p-down',
     '/Applications': 'p-apps', [COMPUTER]: 'p-computer', [TRASH]: 'p-trash', [RECENTS]: 'p-recents', [ICLOUD]: 'p-icloud' }[p] || (isVolumeRoot(p) ? 'p-drive' : null);
@@ -194,7 +210,7 @@ const thumbUrls = new Map<string, string | null>(); // by path, date and size, n
 const previewsOn = () => view !== 'thumbs' && !!(app && app.settings.previews);
 const previewPx = () => (view === 'thumbs' ? THUMB_PX : iconPx());
 const thumbKey = (it: Item, px = previewPx()) => `${it.path}:${it.modified}@${px}`;
-const canPreview = (it: Item) => !isFolder(it) && !it.package && !it.volume && !it.alias;
+const canPreview = (it: Item) => !isFolder(it) && !it.package && !it.volume && !it.alias && !isRemote(it.path);
 // The picture keeps its shape inside the icon's square.
 const previewHtml = (url: string, cls: string) => `<span class="${cls} pv"><img alt="" src="${url}"></span>`;
 let thumbWant = new Set<Item>();
@@ -256,7 +272,12 @@ function watchThumbs() {
 const BY_NAME: FolderSort = { key: 'name', dir: 'asc' };
 const NEWEST_ADDED: FolderSort = { key: 'added', dir: 'desc' };
 const isDownloads = (dir: string) => !!app && dir === app.home + '/Downloads';
-const folderColumns = (): ColumnKey[] => (app && app.settings.folderColumns[cwd]) || (isDownloads(cwd) ? ['size', 'kind', 'added'] : ['size', 'kind', 'modified']);
+// Servers don't say when a file was made or added to its folder.
+const NOT_ON_SITES: string[] = ['created', 'added'];
+const folderColumns = (): ColumnKey[] => {
+  const cols: ColumnKey[] = (app && app.settings.folderColumns[cwd]) || (isDownloads(cwd) ? ['size', 'kind', 'added'] : ['size', 'kind', 'modified']);
+  return isRemote(cwd) ? cols.filter((c) => !NOT_ON_SITES.includes(c)) : cols;
+};
 
 // A sort on a column the list doesn't show goes back to the folder's first sort.
 function folderSort() {
@@ -469,7 +490,10 @@ function fitColumn(edge: HTMLElement) {
   saveWidths(table, widths);
 }
 
-const NOTES = {
+const NOTES: Record<ListError, string> = {
+  offline: 'The server isn\'t answering.',
+  login: 'Filedrawer couldn\'t log in to this site.',
+  hostkey: 'Filedrawer didn\'t connect to this site.',
   denied: 'Filedrawer can\'t open this folder because macOS hasn\'t given it access.',
   missing: 'This folder isn\'t there anymore.',
   fda: '<b>Filedrawer needs Full Disk Access to show the Trash</b><br>macOS keeps the Trash private from other apps. Turn on Filedrawer under Full Disk Access in Privacy and Security, then pick Quit &amp; Reopen when macOS asks.',
@@ -523,7 +547,11 @@ function render() {
   if (renaming) endRename(true);
   const f = $('files');
   f.dataset.view = view;
-  if (listError) {
+  if (listError && listMessage) {
+    // A site that couldn't be reached says why, and can be tried again.
+    f.innerHTML = `<div class="note">${esc(listMessage)}<br><button id="b-retry">Try Again</button></div>`;
+    $('b-retry').addEventListener('click', retrySite);
+  } else if (listError) {
     f.innerHTML = `<div class="note">${NOTES[listError]}` +
       (listError === 'denied' ? '<br><button id="b-privacy">Open Privacy Settings</button>' : '') +
       (listError === 'fda' ? '<br><button id="b-fda">Open Privacy Settings</button> <button id="b-finder-trash">Open in Finder</button>' : '') + '</div>';
@@ -588,6 +616,12 @@ function renderStatus() {
 
 async function loadVolume() {
   const dir = cwd;
+  const at = siteAt(dir);
+  if (at) {
+    $('st3').textContent = !at.site ? '' : listError ? `Not connected to ${at.site.host}` : `Connected to ${at.site.host}`;
+    updateTitle();
+    return;
+  }
   if (isPlace(dir) && dir !== TRASH) {
     $('st3').textContent = '';
     updateTitle();
@@ -603,8 +637,8 @@ async function loadVolume() {
 // ---------- going places ----------
 
 function updateTitle() {
-  const short = isPlace(cwd) || cwd === '/' ? placeLabel(cwd) : basename(cwd);
-  const name = searchOn() ? 'Search Results' : app.settings.fullPathTitle && !isPlace(cwd) ? cwd : short;
+  const short = placeLabel(cwd);
+  const name = searchOn() ? 'Search Results' : app.settings.fullPathTitle && !isPlace(cwd) ? shownPath(cwd) : short;
   $('title').textContent = name;
   document.title = name;
   api.setTitle(name, cwd);
@@ -612,7 +646,13 @@ function updateTitle() {
   drawHeads();
 }
 
-const shownPath = (p: string) => (isPlace(p) ? placeLabel(p) : p);
+// A folder on a site shows as user@host:/path.
+function shownPath(p: string) {
+  if (isPlace(p)) return placeLabel(p);
+  const at = siteAt(p);
+  if (at) return at.site ? `${at.site.user}@${at.site.host}:${at.path}` : p;
+  return p;
+}
 
 function updateChrome() {
   if (document.activeElement !== $('path')) $<HTMLInputElement>('path').value = shownPath(cwd);
@@ -670,6 +710,7 @@ async function navigate(dir: string, { push = true, select = null, selectMany = 
     }
   }
   listError = res.error || null;
+  listMessage = (res.error && res.message) || '';
   // A listing that failed has neither, which reads the same as missing ones.
   folderModified = (res as FolderListing).modified || null;
   cwdWritable = (res as FolderListing).writable !== false;
@@ -686,7 +727,7 @@ async function navigate(dir: string, { push = true, select = null, selectMany = 
   }
   render();
   updateChrome();
-  if (!same || !volumeName) loadVolume();
+  if (!same || !volumeName || isRemote(dir)) loadVolume();
   if ((!keep || selectMany) && cursor) scrollToItem(cursor);
   else if (!keep) $('files').scrollTop = 0;
 }
@@ -989,7 +1030,7 @@ const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'],
 const SORTS: [SortKey, string][] = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified'], ['created', 'Date Created'], ['added', 'Date Added']];
 
 const viewEntries = () => VIEWS.map(([v, label]) => ({ label, checked: v === view, click: () => setView(v) }));
-const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === folderSort().key, click: () => sortBy(k) }));
+const sortEntries = () => SORTS.map(([k, label]) => ({ label, checked: k === folderSort().key, disabled: isRemote(cwd) && NOT_ON_SITES.includes(k), click: () => sortBy(k) }));
 
 // Sorts the folder shown, and only that one. Sorting by the same thing again
 // turns it around. Arranging by a column the folder doesn't show turns it on.
@@ -1004,7 +1045,8 @@ function sortBy(key: SortKey) {
 // A header's right click turns this folder's columns on and off. Name always shows.
 // key is never name, so neither is any key kept.
 const withColumn = (shown: ColumnKey[], key: string) => FILE_COLUMNS.map((c) => c.key).filter((k): k is ColumnKey => k === key || shown.includes(k as ColumnKey));
-const columnEntries = () => FILE_COLUMNS.map((c) => (c.key === 'name' ? { label: c.label, checked: true, disabled: true }
+const columnEntries = () => FILE_COLUMNS.map((c) => (c.key === 'name' || (isRemote(cwd) && NOT_ON_SITES.includes(c.key))
+  ? { label: c.label, checked: c.key === 'name', disabled: true }
   : { label: c.label, checked: folderColumns().includes(c.key), click: () => toggleColumn(c.key as ColumnKey) })); // not name here
 
 function toggleColumn(key: ColumnKey) {
@@ -1473,7 +1515,7 @@ function applyState(state: State) {
   } else if (old && JSON.stringify(old.cut) !== JSON.stringify(state.cut)) {
     showCut();
   } else if (old && (JSON.stringify(old.settings.pins) !== JSON.stringify(state.settings.pins) ||
-    JSON.stringify(old.settings.places) !== JSON.stringify(state.settings.places))) {
+    JSON.stringify(old.settings.places) !== JSON.stringify(state.settings.places) || JSON.stringify(old.sites) !== JSON.stringify(state.sites))) {
     renderPane();
     renderTree();
   }
@@ -1503,10 +1545,12 @@ window.addEventListener('DOMContentLoaded', () => {
     view = s.newWindowView !== 'last' ? s.newWindowView : s.view;
     startTabs();
     COMPUTER = state.computer;
+    siteStatus = state.siteStatus;
     TRASH = state.trash;
     RECENTS = state.recents;
     ICLOUD = state.icloud;
     setPane(state.settings.pane, { save: false });
+    if (state.sites.some((x) => x.shown)) api.checkSites();
     const params = new URLSearchParams(location.search);
     if (params.get('wait')) {
       // Two frames after the theme's stylesheet is in, its colors are on screen.
@@ -1592,6 +1636,43 @@ function pinnedBox() {
   return box('pinned', 'Pinned', rows + '<div class="hint">Drop a folder here to pin it.</div>');
 }
 
+// The sites ticked to show in the sidebar, each with a dot that's green
+// while its server answers.
+const shownSites = () => (app ? app.sites.filter((s) => s.shown) : []);
+function sitesBox() {
+  const here = siteAt(cwd);
+  return box('sites', 'Sites', shownSites().map((s) =>
+    `<div class="row${here && here.id === s.id ? ' here' : ''}" data-site="${esc(s.id)}" title="${esc(`${s.user}@${s.host}`)}"><svg><use href="#p-site"/></svg>` +
+    `<span class="lb">${esc(s.name)}</span><span class="dot${siteStatus[s.id] === false ? ' down' : siteStatus[s.id] ? ' up' : ''}"></span></div>`).join(''));
+}
+
+// Opens a site in its start folder, or the home folder on the server.
+async function openSite(id: string, { newWindow = false, inTab = false } = {}) {
+  const dir = await api.siteHome(id);
+  if (newWindow) api.openWindow(dir);
+  else if (inTab) newTab(dir);
+  else navigate(dir);
+}
+
+// Lists a site's folder again. A site that couldn't be reached was shown at
+// its top, so it opens in its start or home folder once it can be.
+async function retrySite() {
+  const at = siteAt(cwd);
+  if (!at) return;
+  const dir = at.path === '/' ? await api.siteHome(at.id) : cwd;
+  navigate(dir, { push: false });
+}
+
+api.onSiteStatus((status) => {
+  const was = siteStatus;
+  siteStatus = status;
+  renderPane();
+  // A site that couldn't be reached opens once its server answers again.
+  const at = siteAt(cwd);
+  if (at && listError === 'offline' && status[at.id] && !was[at.id]) retrySite();
+});
+window.addEventListener('online', () => api.checkSites());
+
 // The same places in the same order wherever the window is, with the one
 // it's in shown in bold.
 function placesBox() {
@@ -1641,7 +1722,7 @@ function renderPane() {
   if (pane !== 'tasks' || !app) return;
   const el = $('pane');
   let after: Element | null = null;
-  for (const [id, html] of [['pinned', pinnedBox()], ['places', placesBox()], ['details', detailsBox()]]) {
+  for (const [id, html] of [['pinned', pinnedBox()], ['sites', sitesBox()], ['places', placesBox()], ['details', detailsBox()]]) {
     let node = el.querySelector(`[data-box="${id}"]`);
     if (!node || paneDrawn[id] !== html) {
       if (node) node.remove();
@@ -1678,6 +1759,8 @@ $('pane').addEventListener('click', (e) => {
     navigate(place.dataset.place);
     return;
   }
+  const site = (e.target as HTMLElement).closest<Data<'site'>>('[data-site]');
+  if (site) openSite(site.dataset.site);
 });
 
 // Pinning by dropping a folder on the Pinned box (not on a pin, which moves
@@ -1756,8 +1839,10 @@ let treeShownFor: string | null = null; // the folder the tree last opened its w
 
 function treeRoots(): TreeRow[] {
   const pinned = pins().map((p) => ({ path: p, label: placeLabel(p), icon: specialIcon(p) || 'i-folder', leaf: true }));
+  const siteRows = shownSites().map((s) => ({ path: siteRoot(s.id), label: s.name, icon: 'p-site' }));
   return [
     ...(pinned.length ? [{ group: 'Pinned' }, ...pinned, { group: '' }] : []),
+    ...(siteRows.length ? [{ group: 'Sites' }, ...siteRows, { group: '' }] : []),
     { path: app.home, label: app.user, icon: 'p-home' },
     { path: COMPUTER, label: 'Computer', icon: 'p-computer' },
     { path: '/Applications', label: 'Applications', icon: 'p-apps' },

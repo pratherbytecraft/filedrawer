@@ -154,6 +154,9 @@ function setPlist(dest: string) {
   // Shown in macOS's prompt for Photos, which Filedrawer uses to take a
   // picture dropped from Photos as its edited version.
   set('NSPhotoLibraryUsageDescription', 'string', 'Filedrawer takes a picture or video dropped from Photos as its edited version, the way Finder does.');
+  // Shown in macOS's prompt for the local network, which SSH sites on
+  // this network need.
+  set('NSLocalNetworkUsageDescription', 'string', 'Filedrawer connects to the SSH sites you add, which can be on your local network.');
   // Folders can be opened with Filedrawer, from `filedrawer <folder>` and
   // later as the default folder viewer.
   set('CFBundleDocumentTypes', 'json', JSON.stringify([{

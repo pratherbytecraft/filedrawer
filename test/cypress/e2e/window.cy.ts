@@ -298,6 +298,52 @@ describe('file window', () => {
     cy.get('#files-other .item').should('have.length.greaterThan', 0);
   });
 
+  it('a ticked site shows in Sites with its dot and opens like a folder', () => {
+    const site = (id: string, name: string, shown: boolean) => ({
+      id, name, host: 'homelab.local', port: 22, user: 'me', from: 'config' as const, shown,
+      logon: 'agent' as const, key: '', start: '', local: '', proxy: false
+    });
+    cy.page(HOME, (state, extra) => {
+      state.sites = [site('ssh-lab', 'homelab', true), site('ssh-other', 'other', false)];
+      state.siteStatus = { 'ssh-lab': true };
+      extra.tree = {
+        '/Users/test': ['Documents/'],
+        '::site/ssh-lab/home/me': ['Media/', 'notes.md', '.profile'],
+        '::site/ssh-lab/home': ['me/']
+      };
+    });
+    cy.get('[data-box="sites"] .row').should('have.length', 1).and('contain.text', 'homelab');
+    cy.get('[data-box="sites"] .dot').should('have.class', 'up');
+    cy.get('[data-box="sites"] .row').click();
+    cy.calls('siteHome').should('deep.equal', [['ssh-lab']]);
+    cy.get('#title').should('have.text', 'me');
+    cy.get('#path').should('have.value', 'me@homelab.local:/home/me');
+    names().should('have.members', ['Media', 'notes.md']);
+    cy.get('#st3').should('have.text', 'Connected to homelab.local');
+    cy.get('[data-box="sites"] .row').should('have.class', 'here');
+    cy.get('#b-up').click();
+    cy.get('#path').should('have.value', 'me@homelab.local:/home');
+    // The server stops answering: the dot goes grey.
+    cy.fake().then((api) => api.emit('siteStatus', { 'ssh-lab': false }));
+    cy.get('[data-box="sites"] .dot').should('have.class', 'down');
+  });
+
+  it('a site that can\'t be reached says why and can be tried again', () => {
+    cy.page('window/index.html?path=::site/ssh-lab/home/me', (state) => {
+      state.sites = [{ id: 'ssh-lab', name: 'homelab', host: 'homelab.local', port: 22, user: 'me', from: 'config', shown: true, logon: 'agent', key: '', start: '', local: '', proxy: false }];
+    });
+    cy.fake().then((api) => {
+      api.list = ((dir: string) => {
+        api.calls.push(['list', dir]);
+        return Promise.resolve({ path: dir, error: 'offline', message: 'homelab.local isn\'t answering.' });
+      }) as typeof api.list;
+    });
+    cy.fake().then((api) => api.emit('command', { command: 'refresh' }));
+    cy.get('#files .note').should('contain.text', 'homelab.local isn\'t answering.');
+    cy.get('#b-retry').click();
+    cy.calls('list').its('length').should('be.greaterThan', 1);
+  });
+
   it('Move to Trash takes the item away', () => {
     cy.page(HOME);
     item('photo.jpg').click();

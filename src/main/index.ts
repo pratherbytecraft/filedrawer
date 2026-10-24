@@ -27,6 +27,8 @@ import * as finder from './finder';
 import * as welcome from './welcome';
 import * as chooser from './chooser';
 import places = require('./places');
+import * as remote from './remote';
+import * as sites from './sites';
 import * as ipc from './ipc';
 import type {
   EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
@@ -79,7 +81,9 @@ function state(): State {
     photos,
     startbar: startbarInstalled(),
     siblings: siblingsAbout(),
-    startFolder: prefs.startFolder()
+    startFolder: prefs.startFolder(),
+    sites: sites.info(),
+    siteStatus: remote.getStatus()
   };
 }
 
@@ -402,7 +406,8 @@ function watch(win: BrowserWindow, dir: string | null, slot: WatchSlot = 'main')
   if (!dir) return;
   // Computer watches the disks, the Trash its folder in Home; Recents and
   // iCloud Drive's top aren't watched.
-  if (dir === places.RECENTS || dir === places.ICLOUD) return;
+  // Folders on a site are read again when they're opened or refreshed.
+  if (dir === places.RECENTS || dir === places.ICLOUD || sites.isRemote(dir)) return;
   const target = dir === folders.COMPUTER ? '/Volumes' : dir === places.TRASH ? places.HOME_TRASH : dir;
   let watcher: fs.FSWatcher;
   try {
@@ -470,6 +475,7 @@ app.on('activate', () => {
 app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => {
+  remote.closeAll();
   helper.stop();
   finder.stop();
 });
@@ -734,6 +740,7 @@ ipc.handle('clip:paste', async (e, dest) => {
 // Dragging items out of a window, as the Mac's own drag with the first
 // item's icon under the pointer.
 ipc.on('drag:start', async (e, paths) => {
+  if (paths.some(sites.isRemote)) return;
   let icon: NativeImage | null;
   try {
     icon = await app.getFileIcon(paths[0], { size: 'normal' });
@@ -1036,7 +1043,7 @@ ipc.handle('op:alias', async (e, paths) => {
 
 // Copy Path puts the paths on the clipboard as text, one per line.
 ipc.on('clip:path', (_e, paths) => {
-  clipboard.writeText(paths.join('\n'));
+  clipboard.writeText(paths.map(sites.address).join('\n'));
   if (cut) {
     cut = null;
     pushState();
@@ -1071,7 +1078,9 @@ ipc.handle('op:trash', async (e, paths) => {
   }
   return res;
 });
-ipc.on('terminal:open', (_e, dir) => openTerminal(dir));
+ipc.on('terminal:open', (_e, dir) => {
+  if (!sites.isRemote(dir)) openTerminal(dir);
+});
 // Show in Finder from other apps: Filedrawer or Finder.
 ipc.on('search:start', (e, id, q) => search.start(e.sender, id, q));
 ipc.on('search:stop', (e) => search.stop(e.sender));
@@ -1121,7 +1130,7 @@ ipc.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
   win.setTitle(name);
-  win.setRepresentedFilename(dir);
+  win.setRepresentedFilename(sites.isRemote(dir) ? '' : dir);
 });
 // The Trash, shown in Filedrawer once it has Full Disk Access.
 ipc.on('privacy:fda', () => shell.openExternal(PRIVACY + 'AllFiles'));
@@ -1154,6 +1163,37 @@ ipc.handle('trash:delete', async (e, paths) => {
 });
 // The folder Up goes to from a folder that belongs to a place (the Trash's own folder).
 ipc.handle('folder:place', (_e, dir) => places.placeOf(dir));
+
+// ---------- SSH sites ----------
+
+ipc.handle('site:home', (_e, id) => remote.home(id));
+
+// Whether each site in the sidebar answers: every minute while a window is
+// open, and when a window says the Mac is back online.
+const SITE_CHECK = 60 * 1000;
+function checkSites() {
+  if (![...windows].some((w) => !w.isDestroyed() && w.isVisible())) return;
+  remote.check(sites.all().filter((s) => s.shown));
+}
+ipc.on('sites:check', () => checkSites());
+setInterval(checkSites, SITE_CHECK);
+remote.onStatus((status) => broadcast('sites:status', status));
+
+// A server Filedrawer hasn't connected to before: its key, and a yes or no,
+// over the window in front.
+remote.setAsk(async ({ site, type, fingerprint }) => {
+  const win = BrowserWindow.getFocusedWindow() || [...windows].find((w) => !w.isDestroyed());
+  const opts = {
+    type: 'question' as const,
+    message: `Filedrawer hasn't connected to ${site.host} before.`,
+    detail: `This is the server's key. If you weren't expecting a new server here, choose Cancel.\n\n${type} ${fingerprint}\n\nConnecting adds it to ~/.ssh/known_hosts, the same list ssh uses.`,
+    buttons: ['Connect', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1
+  };
+  const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+  return response === 0;
+});
 // macOS's own pane for folder access, for a folder Filedrawer wasn't allowed into.
 ipc.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'));
 

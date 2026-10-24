@@ -17,6 +17,25 @@ export interface FolderSort {
   dir: SortDir;
 }
 
+// How a site logs in: a key file, a saved password, a password asked each
+// time, or the keys in the SSH agent.
+export type SiteLogon = 'key' | 'password' | 'ask' | 'agent';
+
+// A site made in Site Manager. Its password, when it has one, is in the
+// Keychain, not here.
+export interface SavedSite {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  logon: SiteLogon;
+  key: string; // the key file, for logon key
+  start: string; // the folder it opens in, empty for the home folder
+  local: string; // a Mac folder for the other side in Two Panes
+  side: boolean; // shown in the sidebar
+}
+
 // Which places Other Places shows.
 export type PlaceKey = 'recents' | 'home' | 'desktop' | 'documents' | 'downloads' | 'applications' | 'icloud' | 'computer' | 'trash';
 
@@ -58,6 +77,8 @@ export interface Settings {
   openWith: Record<string, string[]>; // extension -> app paths, last picked first
   folderSorts: Record<string, FolderSort>; // folder path -> sort
   folderColumns: Record<string, ColumnKey[]>; // folder path -> Details columns after Name
+  sites: SavedSite[]; // the sites made in Site Manager
+  configShown: string[]; // hosts from ~/.ssh/config ticked to show in the sidebar
   columnWidths: Record<string, Record<string, number>>; // kind of list -> column -> points
   window: {
     width: number;
@@ -106,12 +127,15 @@ export interface Item {
 }
 
 // Why a folder couldn't be listed. fda is the Trash without Full Disk
-// Access, icloud is iCloud Drive switched off.
-export type ListError = 'missing' | 'denied' | 'other' | 'fda' | 'icloud';
+// Access, icloud is iCloud Drive switched off. offline, login and hostkey
+// are a site's server not answering, not letting Filedrawer log in, or
+// showing a different key than before.
+export type ListError = 'missing' | 'denied' | 'other' | 'fda' | 'icloud' | 'offline' | 'login' | 'hostkey';
 
+// message says what went wrong on a site, for the window to show.
 export type Listing =
   | { path: string; items: Item[]; modified?: number | null; writable?: boolean; error?: undefined }
-  | { path: string; error: ListError; items?: undefined };
+  | { path: string; error: ListError; message?: string; items?: undefined };
 
 export interface ListOptions {
   hidden?: boolean;
@@ -318,6 +342,29 @@ export interface JobUpdate {
   question: JobQuestion | null;
 }
 
+// ---------- SSH sites ----------
+
+// A site as the pages see it: one made in Site Manager, or a host from
+// ~/.ssh/config. Its folders' paths start with SITE_PREFIX and the site's
+// id, then the path on the server.
+export interface SiteInfo {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  from: 'saved' | 'config';
+  shown: boolean; // in the sidebar
+  logon: SiteLogon;
+  key: string;
+  start: string;
+  local: string;
+  proxy: boolean; // the config reaches it through another host, which Filedrawer can't
+}
+
+// Site id -> whether its server answered the last time Filedrawer checked.
+export type SiteStatus = Record<string, boolean>;
+
 // ---------- the state ----------
 
 export interface SystemLook {
@@ -382,6 +429,8 @@ export interface State {
   startbar: boolean;
   siblings: Sibling[];
   startFolder: string;
+  sites: SiteInfo[];
+  siteStatus: SiteStatus;
 }
 
 // A terminal app Open Terminal Here can use.
@@ -438,6 +487,8 @@ export interface Invokes {
   'settings:terminals': { args: []; result: TerminalApp[] };
   // A window standing in for a Finder window waits here for its folder.
   'window:waitFolder': { args: []; result: string | null };
+  // The folder a site opens in: its start folder or the home folder on the server.
+  'site:home': { args: [id: string]; result: string };
 }
 
 // Pages to main, one way: the arguments.
@@ -486,6 +537,8 @@ export interface Sends {
   'photos:ask': [];
   'photos:refresh': [];
   welcome: [what: WelcomeChoice];
+  // Check which sites answer now, after the Mac came back online.
+  'sites:check': [];
 }
 
 // Main to pages: the payload.
@@ -501,6 +554,7 @@ export interface Events {
   'props:opensWith': OpensWith | null;
   'job:update': JobUpdate;
   'settings:page': SettingsPage;
+  'sites:status': SiteStatus;
 }
 
 type Listen<T> = (fn: (payload: T) => void) => () => void;
@@ -609,4 +663,8 @@ export interface FiledrawerApi {
   photosRefresh(): void;
   // The first launch note.
   welcome(what: WelcomeChoice): void;
+  // SSH sites.
+  siteHome(id: string): Promise<string>;
+  checkSites(): void;
+  onSiteStatus: Listen<SiteStatus>;
 }

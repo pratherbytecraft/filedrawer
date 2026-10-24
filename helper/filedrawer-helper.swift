@@ -16,6 +16,9 @@
 //     -> {"id":2,"png":"<base64>"}
 //   {"id":3,"cmd":"typeIcon","ext":"pdf","size":64}
 //     -> {"id":3,"png":"<base64>"}
+//   {"id":20,"cmd":"typeKinds","exts":["yml","md"]}
+//     -> {"id":20,"kinds":{"yml":"YAML Document","md":"Markdown"}}
+//     (Finder's name for each extension's kind, for files on an SSH site)
 //   {"id":19,"cmd":"thumb","path":"/Users/you/Beach.jpg","size":96}
 //     -> {"id":19,"png":"<base64>","width":96,"height":58}, or {"id":19,"error":"no picture"}
 //     (Quick Look's picture of the file in its own shape, the way Finder's icon
@@ -304,6 +307,18 @@ func handle(_ req: [String: Any]) {
             return
         }
         reply(["id": id, "png": data])
+    case "typeKinds":
+        let exts = req["exts"] as? [String] ?? []
+        var kinds: [String: String] = [:]
+        for ext in exts {
+            // Finder's own names (Plain Text Document, YAML Document).
+            var kind: Unmanaged<CFString>?
+            if LSCopyKindStringForTypeInfo(kLSUnknownType, kLSUnknownCreator, ext as CFString, &kind) == noErr,
+               let name = kind?.takeRetainedValue() as String?, !name.isEmpty {
+                kinds[ext] = name
+            }
+        }
+        reply(["id": id, "kinds": kinds])
     case "trash":
         let paths = req["paths"] as? [String] ?? []
         let items: [[String: Any]] = paths.map { p in

@@ -61,6 +61,8 @@ function filedrawerState(): Fixture {
       { key: 'shotdrawer', name: 'Shotdrawer', desc: 'Recent screenshots.', installed: false, line: 'npm install -g shotdrawer' }
     ],
     startFolder: '/Users/test',
+    sites: [],
+    siteStatus: {},
     updateCommand: 'npm install -g filedrawer'
   };
 }

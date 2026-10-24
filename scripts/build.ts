@@ -56,6 +56,18 @@ async function build() {
     target: 'node18',
     logLevel: 'warning'
   });
+  // ssh2 in one file (see src/vendor/ssh2.ts). Its optional native parts
+  // stay out: ssh2 tries them and goes on without.
+  await esbuild.build({
+    entryPoints: entries('src/vendor', 'vendor'),
+    outdir: dist,
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    target: 'node18',
+    external: ['cpu-features', '*.node'],
+    logLevel: 'warning'
+  });
   await esbuild.build({
     entryPoints: pageScripts(),
     outdir: dist,

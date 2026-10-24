@@ -37,6 +37,7 @@ interface Replies {
   info: { items: PathInfo[] };
   icon: { png: string };
   typeIcon: { png: string };
+  typeKinds: { kinds: Record<string, string> };
   thumb: { png: string; width: number; height: number };
   // A path that didn't reach the Trash has no to, and an error.
   trash: { items: { from: string; to?: string; error?: string }[] };

@@ -18,6 +18,7 @@
   },
   "include": [
     "src/main",
+    "src/vendor",
     "src/shared",
     "src/preload.ts",
     "src/bin",

@@ -96,6 +96,8 @@ export function fakeFiledrawer(names: string[], state: State, extra: Extra = {})
     thumbs: (paths: string[]) => Object.fromEntries(paths.filter((p) => /\.(jpe?g|png|pdf)$/i.test(p)).map((p) => [p, PIXEL])),
     placeOf: () => null,
     waitFolder: () => null,
+    // A site opens in /home/me on its server.
+    siteHome: (id: string) => `::site/${id}/home/me`,
     askExtension: () => false,
     openWithApps: () => [],
     terminals: () => [{ name: 'Terminal', path: '/System/Applications/Utilities/Terminal.app', icon: '' }],

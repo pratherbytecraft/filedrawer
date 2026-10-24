@@ -7,6 +7,8 @@ import os from 'os';
 import path from 'path';
 import helper = require('./helper');
 import places = require('./places');
+import * as remote from './remote';
+import * as sites from './sites';
 import type { Completion, IconRequest, Item, Listing, ListOptions, Pictures, Resolved, VolumeInfo } from '../shared/types';
 
 export const HOME = os.homedir();
@@ -89,6 +91,23 @@ export async function addInfo(items: Item[]) {
   }
 }
 
+// Kinds for files on a site, from the Mac's name for each extension, asked
+// once per extension.
+const typeKinds = new Map<string, string>();
+async function addRemoteKinds(items: Item[]) {
+  const want = [...new Set(items.filter((it) => !it.dir && it.ext && !typeKinds.has(it.ext)).map((it) => it.ext))];
+  if (want.length) {
+    const res = await helper.request('typeKinds', { exts: want });
+    for (const ext of want) {
+      const kind = res && res.kinds && res.kinds[ext];
+      typeKinds.set(ext, typeof kind === 'string' && kind ? kind : '');
+    }
+  }
+  items.forEach((it) => {
+    it.kind = (it.ext && typeKinds.get(it.ext)) || fallbackKind(it);
+  });
+}
+
 // The volumes, for Computer: the startup disk and whatever is in /Volumes
 // (where the startup disk also has a link to itself, which is skipped).
 async function volumes(): Promise<Item[]> {
@@ -121,6 +140,11 @@ const writable = (dir: string) => fs.promises.access(dir, fs.constants.W_OK).the
 // changed itself has canAdd false.
 export async function list(dir: string, { hidden = false, extensions = false }: ListOptions = {}): Promise<Listing> {
   if (dir === COMPUTER) return { path: dir, items: await volumes() };
+  if (sites.isRemote(dir)) {
+    const res = await remote.list(dir, { hidden });
+    if (res.items) await addRemoteKinds(res.items);
+    return res;
+  }
   const listers: Record<string, typeof places.listTrash> = { [places.TRASH]: places.listTrash, [places.RECENTS]: places.listRecents, [places.ICLOUD]: places.listICloud };
   const place = listers[dir];
   if (place) {
@@ -173,6 +197,7 @@ export async function list(dir: string, { hidden = false, extensions = false }: 
 // counting would mean looking inside a folder macOS guards (see PROTECTED)
 // or a volume other than the one being looked at.
 export async function count(dir: string, cwd: string) {
+  if (sites.isRemote(dir)) return remote.count(dir);
   const inside = (root: string) => cwd === root || (cwd || '').startsWith(root + '/');
   if (PROTECTED.includes(dir) && !inside(dir)) return null;
   const vol = dir.match(/^\/Volumes\/[^/]+/);
@@ -193,12 +218,14 @@ function expand(text: string, cwd: string) {
     }
   }
   if (t === '~' || t.startsWith('~/')) t = HOME + t.slice(1);
-  return path.resolve(cwd && !isPlace(cwd) ? cwd : HOME, t);
+  return path.resolve(cwd && !isPlace(cwd) && !sites.isRemote(cwd) ? cwd : HOME, t);
 }
 
 // What an address typed into the address bar points at.
 // { type: 'dir' | 'file' | 'missing', path }
 export async function resolve(text: string, cwd: string): Promise<Resolved> {
+  const onSite = await remote.resolve(text, cwd);
+  if (onSite) return onSite;
   const names: Record<string, string> = { computer: COMPUTER, trash: places.TRASH, recents: places.RECENTS, 'icloud drive': places.ICLOUD };
   const named = names[text.trim().toLowerCase()];
   if (named) return { type: 'dir', path: named };
@@ -217,6 +244,8 @@ export async function resolve(text: string, cwd: string): Promise<Resolved> {
 // text had it) and as a full path.
 export async function complete(text: string, cwd: string): Promise<Completion[]> {
   if (!text.trim()) return [];
+  const onSite = await remote.complete(text, cwd);
+  if (onSite) return onSite;
   const tilde = text.trim().startsWith('~');
   const full = expand(text, cwd);
   const parent = text.endsWith('/') ? full : path.dirname(full);
@@ -244,6 +273,7 @@ export async function complete(text: string, cwd: string): Promise<Completion[]>
 
 // { name, free } for the volume a folder is on.
 export async function volume(dir: string): Promise<VolumeInfo | null> {
+  if (sites.isRemote(dir)) return null;
   const res = await helper.request('volume', { path: dir });
   if (res && res.name) return { name: res.name, free: res.free };
   try {
@@ -260,7 +290,8 @@ export async function volume(dir: string): Promise<VolumeInfo | null> {
 const iconCache = new Map<string, string>();
 
 async function icon(req: IconRequest, px: number) {
-  const own = req.package || !req.ext;
+  // A file on a site gets its type's icon, or a plain document's without an extension.
+  const own = !sites.isRemote(req.path) && (req.package || !req.ext);
   const key = `${own ? req.path : '.' + req.ext}@${px}`;
   // has() said it's there.
   if (iconCache.has(key)) return iconCache.get(key) as string;
@@ -300,6 +331,7 @@ const THUMB_TIMEOUT = 10000; // a long video can take Quick Look a while
 const THUMB_BATCH = 6; // asked at once, so a folder of photos doesn't flood the helper
 
 async function thumb(p: string, px: number) {
+  if (sites.isRemote(p)) return null;
   let st;
   try {
     st = await fs.promises.stat(p);

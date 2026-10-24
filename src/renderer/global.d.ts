@@ -37,6 +37,10 @@ declare global {
   type EditCommand = T.EditCommand;
   type WindowLook = T.WindowLook;
   type Listing = T.Listing;
+  type SiteInfo = T.SiteInfo;
+  type SiteStatus = T.SiteStatus;
+  type SavedSite = T.SavedSite;
+  type SiteLogon = T.SiteLogon;
 
   // The pages keep their timers in variables that start as null, and the
   // browser takes null here and does nothing.

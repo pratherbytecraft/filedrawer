@@ -113,7 +113,10 @@ const api: FiledrawerApi = {
   photosAsk: () => send('photos:ask'),
   photosRefresh: () => send('photos:refresh'),
   // The first launch note.
-  welcome: (what) => send('welcome', what)
+  welcome: (what) => send('welcome', what),
+  siteHome: (id) => invoke('site:home', id),
+  checkSites: () => send('sites:check'),
+  onSiteStatus: on('sites:status')
 };
 
 contextBridge.exposeInMainWorld('filedrawer', api);
