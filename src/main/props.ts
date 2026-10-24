@@ -11,6 +11,9 @@ import helper = require('./helper');
 import * as folders from './folders';
 import * as chooser from './chooser';
 import * as ipc from './ipc';
+import * as fsx from './fsx';
+import * as remote from './remote';
+import * as sites from './sites';
 import type { OpResult, PropsChange, PropsData, PropsSize } from '../shared/types';
 
 interface Entry {
@@ -28,6 +31,7 @@ let renameItem: ((from: string, name: string) => Promise<OpResult>) | null = nul
 // Adds up a folder's files and folders as it goes, telling onStep now and
 // then, and stops when stopped() says so.
 async function measure(p: string, total: Totals, onStep: () => void, stopped: () => boolean): Promise<void> {
+  if (sites.isRemote(p)) return measureSite(p, total, onStep, stopped);
   const st = await fs.promises.lstat(p).catch(() => null);
   if (!st || stopped()) return;
   total.bytes += st.isDirectory() ? 0 : st.size;
@@ -45,7 +49,68 @@ async function measure(p: string, total: Totals, onStep: () => void, stopped: ()
   }
 }
 
+// The same for a folder on an SSH site, over SFTP. A server doesn't say
+// how much room a file takes, so size on disk is its size.
+async function measureSite(p: string, total: Totals, onStep: () => void, stopped: () => boolean): Promise<void> {
+  const st = await fsx.lstat(p).catch(() => null);
+  if (!st || stopped()) return;
+  if (!st.dir || st.link) {
+    total.bytes += st.size;
+    total.disk += st.size;
+    total.files += 1;
+    return;
+  }
+  total.folders += 1;
+  for (const n of await fsx.readdir(p).catch((): string[] => [])) {
+    await measureSite(fsx.join(p, n), total, onStep, stopped);
+    if (stopped()) return;
+    onStep();
+  }
+}
+
+// rwxr-xr-x (755), from a mode.
+function permissions(mode: number) {
+  const bits = 'rwxrwxrwx';
+  const text = [...bits].map((c, i) => (mode & (1 << (8 - i)) ? c : '-')).join('');
+  return `${text} (${(mode & 0o777).toString(8)})`;
+}
+
+// Items on an SSH site: kind, where it is on the server, dates and permissions.
+async function describeSite(paths: string[]): Promise<PropsData> {
+  const items = await remote.itemsFor(paths).catch(() => []);
+  await folders.addRemoteKinds(items);
+  const first = items[0];
+  const st = paths.length === 1 ? await fsx.lstat(paths[0]).catch(() => null) : null;
+  // A folder gets the Mac's plain folder icon, a file its type's.
+  const icon = first ? await folders.icons([first.dir ? { key: 'i', path: '/usr', ext: '', package: true } : { key: 'i', path: first.path, ext: first.ext }], 64) : { i: null };
+  const kinds = new Set(items.map((it) => it.kind));
+  const places = new Set(paths.map(fsx.dirname));
+  return {
+    one: paths.length === 1,
+    name: paths.length === 1 ? fsx.basename(paths[0]) : `${paths.length} items`,
+    volume: null,
+    fullName: fsx.basename(paths[0]),
+    kind: kinds.size === 1 && first ? first.kind : 'Multiple kinds',
+    location: places.size === 1 ? sites.address(fsx.dirname(paths[0])) : 'More than one folder',
+    icon: icon.i,
+    folder: items.some((it) => it.dir),
+    created: null,
+    modified: st ? st.mtime * 1000 : null,
+    accessed: st ? st.atime * 1000 : null,
+    locked: null,
+    hidden: null,
+    hideExt: null,
+    version: '',
+    whereFrom: [],
+    comment: null,
+    opensWith: null,
+    onSite: true,
+    permissions: st ? permissions(st.mode) : null
+  };
+}
+
 async function describe(paths: string[]): Promise<PropsData> {
+  if (paths.some(sites.isRemote)) return describeSite(paths);
   const items = await Promise.all(paths.map(async (p) => {
     const st = await fs.promises.lstat(p).catch(() => null);
     const info = await helper.request('info', { paths: [p] });
@@ -92,7 +157,7 @@ export function show(paths: string[], near: BrowserWindow | null) {
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: paths.length === 1 ? `${path.basename(paths[0])} Properties` : 'Properties',
+    title: paths.length === 1 ? `${fsx.basename(paths[0])} Properties` : 'Properties',
     webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   };
   if (near && !near.isDestroyed()) {

@@ -8,6 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import * as folders from './folders';
 import * as ipc from './ipc';
+import * as sites from './sites';
+import * as sitesearch from './sitesearch';
 import type { Item, SearchQuery, SearchState } from '../shared/types';
 
 const MAX = 2000;
@@ -185,6 +187,11 @@ class Search {
 
 export function start(sender: WebContents, id: number, q: SearchQuery) {
   stop(sender);
+  // A folder on an SSH site is searched by its server.
+  if (sites.isRemote(q.root)) {
+    sitesearch.start(sender, id, q, folders.addRemoteKinds);
+    return;
+  }
   const s = new Search(sender, id, q);
   running.set(sender.id, s);
   s.run().finally(() => {
@@ -193,6 +200,7 @@ export function start(sender: WebContents, id: number, q: SearchQuery) {
 }
 
 export function stop(sender: WebContents) {
+  sitesearch.stop(sender);
   const s = running.get(sender.id);
   if (s) s.stop();
   running.delete(sender.id);

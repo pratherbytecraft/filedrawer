@@ -8,6 +8,7 @@ import { tempAppData } from '../support/electron';
 import * as settings from '../../src/main/settings';
 import * as sshconfig from '../../src/main/sshconfig';
 import * as sites from '../../src/main/sites';
+import { findCommand, quote } from '../../src/main/sitesearch';
 
 // A made up home folder with its own ~/.ssh, so the real one is never read.
 function fakeHome(config = '', known = '') {
@@ -166,4 +167,14 @@ test('typed addresses find their site by name, user@host, host or sftp://', () =
   assert.deepEqual(found('files.example.com:/var'), ['s1', '/var']);
   assert.deepEqual(found('sftp://me@files.example.com/var/www'), ['s1', '/var/www']);
   for (const local of ['/Users/me', '~/Documents', './a:b', 'Documents', 'nowhere:/x', 'a/b:c']) assert.equal(sites.parseAddress(local), null, local);
+});
+
+test('a search on a site becomes one find, with grep for a word, and nothing typed is read as shell', () => {
+  assert.equal(quote("it's"), `'it'\\''s'`);
+  const q = { name: '', word: '', age: '', size: '', hidden: false };
+  assert.equal(findCommand('/srv', { ...q, name: 'report' }), `find '/srv' -mindepth 1 -name '.*' -prune -o -iname '*report*' -print 2>/dev/null`);
+  assert.equal(findCommand('/srv', { ...q, name: 'a*b', hidden: true, age: 'week' }), `find '/srv' -mindepth 1 -iname '*a\\*b*' -mtime -7 -print 2>/dev/null`);
+  assert.equal(findCommand('/my files', { ...q, word: "don't $(rm)" }),
+    `find '/my files' -mindepth 1 -name '.*' -prune -o -type f -size -2048k -exec grep -lIiF -- 'don'\\''t $(rm)' '{}' + 2>/dev/null`.replace(`'{}'`, '{}'));
+  assert.match(findCommand('/srv', { ...q, size: 'large' }), /-type f -print/);
 });

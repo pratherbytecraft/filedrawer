@@ -94,7 +94,7 @@ export async function addInfo(items: Item[]) {
 // Kinds for files on a site, from the Mac's name for each extension, asked
 // once per extension.
 const typeKinds = new Map<string, string>();
-async function addRemoteKinds(items: Item[]) {
+export async function addRemoteKinds(items: Item[]) {
   const want = [...new Set(items.filter((it) => !it.dir && it.ext && !typeKinds.has(it.ext)).map((it) => it.ext))];
   if (want.length) {
     const res = await helper.request('typeKinds', { exts: want });

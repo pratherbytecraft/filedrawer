@@ -53,7 +53,11 @@ api.getProps().then((d) => {
   }
   for (const k of ['created', 'modified', 'accessed'] as const) $(k).textContent = d[k] ? fmtDate(d[k]) : '';
   $('dates').hidden = $('dates-rule').hidden = !d.one;
-  $('flags').hidden = $('flags-rule').hidden = !d.one || !!d.volume;
+  $('flags').hidden = $('flags-rule').hidden = !d.one || !!d.volume || !!d.onSite;
+  // A server doesn't say when a file was made.
+  $('created-label').hidden = $('created').hidden = !!d.onSite;
+  $('perm-label').hidden = $('perm').hidden = !d.permissions;
+  $('perm').textContent = d.permissions || '';
   $<HTMLInputElement>('locked').checked = !!d.locked;
   $<HTMLInputElement>('hidden').checked = !!d.hidden;
   $('hide-ext-box').hidden = d.hideExt === null || d.hideExt === undefined;

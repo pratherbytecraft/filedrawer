@@ -354,7 +354,7 @@ describe('file window', () => {
     });
     item('notes.md').rightclick();
     cy.get('#menu .mi').then((els) => [...els].map((e) => e.textContent)).should('include', 'Delete...')
-      .and('not.include', 'Move to Trash').and('not.include', 'Make Alias').and('not.include', 'Send To').and('not.include', 'Quick Look');
+      .and('not.include', 'Move to Trash').and('not.include', 'Make Alias').and('not.include', 'Send To').and('not.include', 'Open With');
     cy.contains('#menu .mi', 'Delete...').click();
     cy.calls('trash').should('deep.equal', [[['::site/ssh-lab/home/me/notes.md']]]);
     // Date Created and Date Added can't be picked for a site's columns.

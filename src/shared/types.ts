@@ -282,6 +282,9 @@ export interface PropsData {
   whereFrom: string[];
   comment: string | null;
   opensWith: OpensWith | null;
+  // On an SSH site: no Mac switches or comments, and the server's permissions instead.
+  onSite?: boolean;
+  permissions?: string | null; // rw-r--r-- (644)
 }
 
 // What Properties changes: the name and the switches.

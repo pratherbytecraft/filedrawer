@@ -458,6 +458,83 @@ export function drop(id: string) {
   close(id);
 }
 
+// An item on a site, from what lstat says (a link is followed for its kind and size).
+async function itemOf(c: Conn, id: string, full: string, lst: Stats): Promise<Item> {
+  const name = posix.basename(full);
+  const link = lst.isSymbolicLink();
+  const attrs = link ? await stat(c, full).catch(() => lst) : lst;
+  const isDir = attrs.isDirectory();
+  return {
+    name,
+    display: name,
+    path: sites.join(id, full),
+    dir: isDir,
+    package: false,
+    link,
+    ext: isDir ? '' : posix.extname(name).slice(1).toLowerCase(),
+    size: isDir ? null : attrs.size,
+    modified: attrs.mtime * 1000,
+    created: 0, // servers don't say
+    hidden: name.startsWith('.'),
+    kind: '',
+    canAdd: isDir
+  };
+}
+
+// Items for paths on one site, for search results. Ones that are gone are left out.
+export async function itemsFor(paths: string[]): Promise<Item[]> {
+  if (!paths.length) return [];
+  const first = site(paths[0]);
+  const c = await conn(first.site);
+  const out = await Promise.all(paths.map(async (p) => {
+    const at = sites.split(p);
+    if (!at) return null;
+    const lst = await timed(c, new Promise<Stats>((resolve, reject) => c.sftp.lstat(at.path, (err, st) => (err ? reject(err) : resolve(st))))).catch(() => null);
+    return lst ? itemOf(c, first.site.id, at.path, lst) : null;
+  }));
+  return out.filter((it): it is Item => !!it);
+}
+
+// Runs a command on a site's server, for search. Answers its output as it
+// comes, line by line, and how it ended: code null when the server
+// wouldn't run commands at all (an SFTP only login).
+export interface Running {
+  stop: () => void;
+  done: Promise<{ code: number | null; err: string }>;
+}
+
+export async function run(p: string, command: string, onLine: (line: string) => void): Promise<Running> {
+  const a = site(p);
+  const c = await conn(a.site);
+  let channel: { close: () => void } | null = null;
+  const done = new Promise<{ code: number | null; err: string }>((resolve) => {
+    c.client.exec(command, (err, stream) => {
+      if (err) return resolve({ code: null, err: err.message });
+      channel = stream;
+      let buf = '';
+      let errText = '';
+      stream.setEncoding('utf8');
+      stream.on('data', (chunk: string) => {
+        buf += chunk;
+        const parts = buf.split('\n');
+        buf = parts.pop() as string; // split gives at least one part
+        for (const line of parts) if (line) onLine(line);
+      });
+      stream.stderr.on('data', (chunk: Buffer) => { errText += chunk.toString(); });
+      stream.on('close', (code: number | null) => {
+        if (buf) onLine(buf);
+        resolve({ code: typeof code === 'number' ? code : null, err: errText });
+      });
+    });
+  });
+  return {
+    stop: () => {
+      if (channel) channel.close();
+    },
+    done
+  };
+}
+
 // The items in a folder on a site. Kinds are filled in by folders.ts.
 export async function list(dir: string, { hidden = false }: ListOptions = {}): Promise<Listing> {
   try {
@@ -466,28 +543,7 @@ export async function list(dir: string, { hidden = false }: ListOptions = {}): P
     const entries = await readdir(c, at.path);
     const items: Item[] = await Promise.all(entries
       .filter((e) => e.filename !== '.' && e.filename !== '..' && (hidden || !e.filename.startsWith('.')))
-      .map(async (e) => {
-        const full = posix.join(at.path, e.filename);
-        let attrs = e.attrs;
-        const link = attrs.isSymbolicLink();
-        if (link) attrs = await stat(c, full).catch(() => e.attrs);
-        const isDir = attrs.isDirectory();
-        return {
-          name: e.filename,
-          display: e.filename,
-          path: sites.join(at.site.id, full),
-          dir: isDir,
-          package: false,
-          link,
-          ext: isDir ? '' : posix.extname(e.filename).slice(1).toLowerCase(),
-          size: isDir ? null : attrs.size,
-          modified: attrs.mtime * 1000,
-          created: 0, // servers don't say
-          hidden: e.filename.startsWith('.'),
-          kind: '',
-          canAdd: isDir
-        };
-      }));
+      .map((e) => itemOf(c, at.site.id, posix.join(at.path, e.filename), e.attrs)));
     const self = await stat(c, at.path).catch(() => null);
     return { path: dir, items, modified: self ? self.mtime * 1000 : null, writable: true };
   } catch (err) {

@@ -78,7 +78,8 @@ function drawSearchState() {
   const found = `${n.toLocaleString('en-US')} item${n === 1 ? '' : 's'} found`;
   const text = {
     searching: n ? `Searching... ${found} so far.` : 'Searching...',
-    walking: n ? `Looking through the folders... ${found} so far.` : 'Spotlight has nothing here, looking through the folders...',
+    walking: n ? `Looking through the folders... ${found} so far.` : isRemote(cwd) ? 'This site can\'t run a search, looking through the folders...'
+      : 'Spotlight has nothing here, looking through the folders...',
     stopped: `Stopped. ${found}.`,
     done: search.capped ? `${found}. That's as many as one search shows, try narrowing it down.` : n ? `Done. ${found}.` : 'Nothing was found.'
   }[search.state];
@@ -132,5 +133,6 @@ for (const id of ['q-name', 'q-word']) {
 // The folder a result is in, short: ~ for the home folder.
 function shortFolder(p: string) {
   const dir = dirname(p);
+  if (isRemote(dir)) return shownPath(dir);
   return dir === app.home || dir.startsWith(app.home + '/') ? '~' + dir.slice(app.home.length) : dir;
 }

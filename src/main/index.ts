@@ -32,6 +32,7 @@ import * as sites from './sites';
 import * as sitemanager from './sitemanager';
 import * as siteops from './siteops';
 import * as fsx from './fsx';
+import * as siteopen from './siteopen';
 import * as ipc from './ipc';
 import type {
   EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
@@ -479,6 +480,7 @@ app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => {
   remote.closeAll();
+  siteopen.cleanUp();
   helper.stop();
   finder.stop();
 });
@@ -707,7 +709,13 @@ ipc.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
 ipc.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
 ipc.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
 ipc.handle('settings:update', (_e, patch) => settings.update(patch));
-ipc.on('open', (_e, p) => (Array.isArray(p) ? execFile('open', p, () => {}) : shell.openPath(p)));
+ipc.on('open', (e, p) => {
+  const list = Array.isArray(p) ? p : [p];
+  // Files on a site open from a copy on the Mac, which goes back to the site when saved.
+  if (list.some(sites.isRemote)) siteopen.open(list.filter(sites.isRemote), BrowserWindow.fromWebContents(e.sender));
+  else if (Array.isArray(p)) execFile('open', p, () => {});
+  else shell.openPath(p);
+});
 
 // A file operation's answer. A failure is shown on the window that asked,
 // as a sheet, before the answer goes back.
@@ -1035,9 +1043,7 @@ ipc.handle('ask:extension', async (e, was, now) => {
 });
 
 // Properties, Open With and Quick Look.
-ipc.on('props:open', (e, paths) => {
-  if (!paths.some(sites.isRemote)) props.show(paths, BrowserWindow.fromWebContents(e.sender));
-});
+ipc.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
 ipc.handle('openWith:apps', (_e, p) => chooser.appsFor(p));
 ipc.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
 ipc.on('openWith:choose', (e, paths) => chooser.show({ paths, mode: 'choose', near: BrowserWindow.fromWebContents(e.sender) }));
@@ -1046,10 +1052,12 @@ const previewing = new WeakMap(); // window -> the path in Quick Look
 ipc.on('quicklook', (e, p) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
-  if (p && sites.isRemote(p)) return;
   if (!p || previewing.get(win) === p) {
     win.closeFilePreview();
     previewing.delete(win);
+  } else if (sites.isRemote(p)) {
+    previewing.set(win, p);
+    siteopen.preview(p, win);
   } else {
     win.previewFile(p, path.basename(p));
     previewing.set(win, p);
@@ -1191,7 +1199,8 @@ ipc.handle('op:trash', async (e, paths) => {
   return res;
 });
 ipc.on('terminal:open', (_e, dir) => {
-  if (!sites.isRemote(dir)) openTerminal(dir);
+  if (sites.isRemote(dir)) siteopen.terminal(dir, settings.get().terminal || 'Terminal');
+  else openTerminal(dir);
 });
 // Show in Finder from other apps: Filedrawer or Finder.
 ipc.on('search:start', (e, id, q) => search.start(e.sender, id, q));
