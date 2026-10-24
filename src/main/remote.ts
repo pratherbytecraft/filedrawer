@@ -541,26 +541,26 @@ export async function list(dir: string, { hidden = false }: ListOptions = {}): P
     const at = site(dir);
     const c = await conn(at.site);
     const entries = await readdir(c, at.path);
-    const items: Item[] = await Promise.all(entries
-      .filter((e) => e.filename !== '.' && e.filename !== '..' && (hidden || !e.filename.startsWith('.')))
-      .map((e) => itemOf(c, at.site.id, posix.join(at.path, e.filename), e.attrs)));
+    const named = entries.filter((e) => e.filename !== '.' && e.filename !== '..');
+    const shown = named.filter((e) => hidden || !e.filename.startsWith('.'));
+    const items: Item[] = await Promise.all(shown.map((e) => itemOf(c, at.site.id, posix.join(at.path, e.filename), e.attrs)));
     const self = await stat(c, at.path).catch(() => null);
-    return { path: dir, items, modified: self ? self.mtime * 1000 : null, writable: true };
+    return { path: dir, items, modified: self ? self.mtime * 1000 : null, writable: true, hiddenCount: named.length - shown.length };
   } catch (err) {
     const error = errorOf(err);
     return { path: dir, error, message: err instanceof SiteError ? err.message : undefined };
   }
 }
 
-// The folder a site opens in: its start folder, else the home folder on the
-// server. The site's top when it can't be reached, so the window can say why.
+// The folder a site opens in: its start folder (~ for the home folder on
+// the server), else the top of the server. The site's top when it can't be reached, so the window can say why.
 export async function home(id: string): Promise<string> {
   const s = sites.byId(id);
   if (!s) return sites.join(id, '/');
   try {
     const c = await conn(s);
     if (s.start) return sites.join(id, s.start.startsWith('/') ? s.start : posix.join(c.home, s.start.replace(/^~\/?/, '')));
-    return sites.join(id, c.home);
+    return sites.join(id, '/');
   } catch {
     return sites.join(id, s.start.startsWith('/') ? s.start : '/');
   }

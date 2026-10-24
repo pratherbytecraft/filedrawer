@@ -182,7 +182,9 @@ export async function list(dir: string, { hidden = false, extensions = false }: 
       if (it.link && it.package && it.ext === 'app') it.hidden = it.name.startsWith('.');
     });
   }
+  const all = items.length;
   if (!hidden) items = items.filter((it) => !it.hidden);
+  const hiddenCount = all - items.length; // left out, for the note on a folder that looks empty
   if (extensions) items.forEach((it) => { it.display = it.name; });
   const canWrite = new Map();
   for (const d of new Set(items.map((it) => path.dirname(it.path)).concat(dir))) canWrite.set(d, await writable(d));
@@ -190,7 +192,7 @@ export async function list(dir: string, { hidden = false, extensions = false }: 
   // Folders say whether things can be pasted or dropped into them.
   await Promise.all(items.filter((it) => it.dir && !it.package).map(async (it) => { it.canAdd = await writable(it.path); }));
   const self = await fs.promises.stat(dir).catch(() => null);
-  return { path: dir, items, modified: self ? self.mtimeMs : null, writable: canWrite.get(dir) };
+  return { path: dir, items, modified: self ? self.mtimeMs : null, writable: canWrite.get(dir), hiddenCount };
 }
 
 // The number of items in a folder, for the Details box, or null when

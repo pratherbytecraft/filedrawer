@@ -364,6 +364,16 @@ describe('file window', () => {
     cy.contains('#menu .mi', 'Date Added').should('have.class', 'disabled');
   });
 
+  it('a folder with only hidden items says so and can show them', () => {
+    cy.page('window/index.html?path=/Users/test/dots', (_state, extra) => {
+      extra.tree = { '/Users/test/dots': ['.bashrc', '.ssh/'] };
+    });
+    cy.get('#files .note').should('contain.text', 'Everything in this folder is hidden (2 items).');
+    cy.get('#b-show-hidden').click();
+    cy.calls('updateSettings').should('deep.include', [{ showHidden: true }]);
+    cy.get('#files .item').should('have.length', 2);
+  });
+
   it('Move to Trash takes the item away', () => {
     cy.page(HOME);
     item('photo.jpg').click();

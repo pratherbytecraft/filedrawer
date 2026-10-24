@@ -65,7 +65,8 @@ function drawForm() {
       ${logon === 'agent' ? '<div class="note">Uses the keys loaded in your SSH agent, then your usual keys in ~/.ssh.</div>' : ''}
       ${logon === 'key' && !v.key ? '<div class="note">Empty, Filedrawer tries your usual keys in ~/.ssh.</div>' : ''}
       <div class="hr"></div>
-      ${field('Start folder', 'start', v.start, ' class="wide" placeholder="Home folder"')}
+      ${field('Start folder', 'start', v.start, ' class="wide" placeholder="/ (the top of the server)"')}
+      <div class="note">Type ~ for your home folder on the server.</div>
       <label for="f-local">Local folder</label><input type="text" id="f-local" data-f="local" value="${esc(v.local)}" placeholder="None" spellcheck="false"${ro}><button id="b-local"${ro}>Browse...</button>
       <div class="note">Opens on the other side when Two Panes is on.</div>
       <label class="chk"><input type="checkbox" id="f-side"${(s ? s.side : shown.has(c!.name)) ? ' checked' : ''}> Show in the sidebar</label>

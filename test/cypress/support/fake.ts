@@ -73,8 +73,9 @@ export function fakeFiledrawer(names: string[], state: State, extra: Extra = {})
     getState: () => copy(state),
     list: (dir: string, opts: ListOptions = {}) => {
       if (!tree[dir]) return { path: dir, error: 'missing' };
-      const items = tree[dir].map((e) => item(dir, e)).filter((it) => opts.hidden || !it.hidden);
-      return { path: dir, items, modified: Date.UTC(2026, 9, 1), writable: true };
+      const all = tree[dir].map((e) => item(dir, e));
+      const items = all.filter((it) => opts.hidden || !it.hidden);
+      return { path: dir, items, modified: Date.UTC(2026, 9, 1), writable: true, hiddenCount: all.length - items.length };
     },
     resolve: (text: string, cwd: string) => {
       let p = text.trim().replace(/^~(?=\/|$)/, state.home);

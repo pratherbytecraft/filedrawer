@@ -134,7 +134,7 @@ export type ListError = 'missing' | 'denied' | 'other' | 'fda' | 'icloud' | 'off
 
 // message says what went wrong on a site, for the window to show.
 export type Listing =
-  | { path: string; items: Item[]; modified?: number | null; writable?: boolean; error?: undefined }
+  | { path: string; items: Item[]; modified?: number | null; writable?: boolean; hiddenCount?: number; error?: undefined }
   | { path: string; error: ListError; message?: string; items?: undefined };
 
 export interface ListOptions {

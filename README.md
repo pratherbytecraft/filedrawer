@@ -68,7 +68,7 @@ The Trash shows where each item came from and when it was deleted. Empty Trash i
 
 Site Manager, on the File menu and the Sites box's right click, saves the servers you reach over SSH. Each site has a host, port and user, and logs in with a key file, a saved password, a password asked each time, or your SSH agent. Saved passwords are locked with your Keychain. The hosts in your `~/.ssh/config` are listed there too, and show up in the sidebar once you tick Show in the sidebar.
 
-A site opens like any folder, with every view, tabs, the Folders tree and the address bar, which shows `user@host:/path` and takes one typed in. The dot next to a site is green while its server answers. The first time Filedrawer connects to a server it shows the server's key and asks, then adds it to `~/.ssh/known_hosts` the same way ssh does.
+A site opens at the top of the server, or at its Start folder (`~` is your home folder there), and works like any folder, with every view, tabs, the Folders tree and the address bar, which shows `user@host:/path` and takes one typed in. The dot next to a site is green while its server answers. The first time Filedrawer connects to a server it shows the server's key and asks, then adds it to `~/.ssh/known_hosts` the same way ssh does.
 
 Copy, move, paste and drag work between your Mac and a site, and Rename, New Folder and Delete work on the site. A server has no Trash, so Delete asks first and the item is gone for good. A site's Local folder opens on the other side when you turn on Two Panes.
 

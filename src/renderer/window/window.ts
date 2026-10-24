@@ -60,6 +60,7 @@ let hIndex = 0;
 let items: Item[] = []; // the folder's items, sorted
 let listError: ListError | null = null;
 let listMessage = ''; // what went wrong on a site, in the main process's words
+let hiddenCount = 0; // items the open folder has that are left out as hidden
 let sel = new Set<string>(); // selected paths
 let anchor: string | null = null; // where a Shift click or Shift arrow starts from
 let cursor: string | null = null; // the item the arrow keys move from
@@ -561,6 +562,10 @@ function render() {
       $('b-fda').addEventListener('click', () => api.openFullDiskAccess());
       $('b-finder-trash').addEventListener('click', () => api.openTrash());
     }
+  } else if (!items.length && hiddenCount && !searchOn() && !app.settings.showHidden) {
+    // Everything here is hidden, so the folder isn't really empty.
+    f.innerHTML = `<div class="note">Everything in this folder is hidden (${hiddenCount} item${hiddenCount === 1 ? '' : 's'}).<br><button id="b-show-hidden">Show Hidden Files</button></div>`;
+    $('b-show-hidden').addEventListener('click', () => api.updateSettings({ showHidden: true }));
   } else {
     f.innerHTML = RENDER[view]();
     fitList();
@@ -713,6 +718,7 @@ async function navigate(dir: string, { push = true, select = null, selectMany = 
   listMessage = (res.error && res.message) || '';
   // A listing that failed has neither, which reads the same as missing ones.
   folderModified = (res as FolderListing).modified || null;
+  hiddenCount = (res as FolderListing).hiddenCount || 0;
   cwdWritable = (res as FolderListing).writable !== false;
   items = res.error ? [] : sortItems(res.items);
   const paths = new Set(items.map((it) => it.path));
