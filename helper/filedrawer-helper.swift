@@ -477,9 +477,82 @@ func handle(_ req: [String: Any]) {
         }
     case "volume":
         reply(["id": id].merging(volume(req["path"] as? String ?? "/")) { a, _ in a })
+    case "outline":
+        let cut = outline(req["frame"] as? [String: Double], inset: req["inset"] as? Double ?? 0, below: req["below"] as? Int ?? 0)
+        reply(["id": id, "cut": cut])
     default:
         reply(["id": id, "error": "unknown command"])
     }
+}
+
+// ---------- outline: where a dragged window will land ----------
+
+// On macOS 27.2 Filedrawer moves its own windows, and a window dragged
+// against a screen's left or right edge takes that half. This frosted
+// outline shows the half while the pointer is there, just under the window.
+// It lives here, not in Filedrawer, because the helper isn't a regular app:
+// Startbar and the app switcher leave it alone.
+var outlinePanel: NSPanel?
+
+func makeOutline() -> NSPanel {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = false
+    panel.ignoresMouseEvents = true
+    panel.hidesOnDeactivate = false
+    panel.isReleasedWhenClosed = false
+    panel.level = .normal
+    panel.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+    let blur = NSVisualEffectView()
+    blur.material = .popover
+    blur.blendingMode = .behindWindow
+    blur.state = .active
+    blur.wantsLayer = true
+    blur.layer?.cornerRadius = 10
+    blur.layer?.masksToBounds = true
+    blur.layer?.borderWidth = 1
+    blur.layer?.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+    panel.contentView = blur
+    return panel
+}
+
+// How much of a frame's bottom Startbar's bar covers. Startbar keeps
+// windows off its bar, so the outline and the window stop above it.
+func barCut(_ frame: CGRect) -> Double {
+    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return 0 }
+    var cut = 0.0
+    for info in list where info[kCGWindowOwnerName as String] as? String == "Startbar" {
+        guard let dict = info[kCGWindowBounds as String] as? NSDictionary, let bar = CGRect(dictionaryRepresentation: dict),
+              bar.height < 120, bar.width >= frame.width, bar.intersects(frame), bar.maxY >= frame.maxY - 1 else { continue }
+        cut = max(cut, frame.maxY - bar.minY)
+    }
+    return cut
+}
+
+// frame is the half the window will take, in Filedrawer's screen points
+// (top left of the main screen is 0,0); none hides the outline. The outline
+// sits inset inside it, under the window numbered below. Answers how much
+// of the half Startbar covers.
+func outline(_ frame: [String: Double]?, inset: Double, below: Int) -> Double {
+    guard let f = frame, let x = f["x"], let y = f["y"], let w = f["width"], let h = f["height"], w > 0, h > 0 else {
+        outlinePanel?.orderOut(nil)
+        return 0
+    }
+    let cut = barCut(CGRect(x: x, y: y, width: w, height: h))
+    let shown = CGRect(x: x + inset, y: y + inset, width: w - inset * 2, height: h - cut - inset * 2)
+    guard shown.width > 0, shown.height > 0 else { return cut }
+    let panel = outlinePanel ?? makeOutline()
+    outlinePanel = panel
+    let top = NSScreen.screens.first?.frame.maxY ?? 0
+    panel.setFrame(NSRect(x: shown.minX, y: top - shown.maxY, width: shown.width, height: shown.height), display: true)
+    if below > 0 {
+        panel.order(.below, relativeTo: below)
+    } else {
+        panel.orderFrontRegardless()
+    }
+    return cut
 }
 
 // Requests come in on a background thread and run on the main thread, with

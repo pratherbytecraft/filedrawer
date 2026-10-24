@@ -59,6 +59,8 @@ interface Replies {
   viewer: { fileViewer: string };
   setViewer: { ok: true };
   volume: VolumeReply;
+  // How much of the frame's bottom Startbar's bar covers, in points.
+  outline: { cut: number };
 }
 
 interface Failure {
