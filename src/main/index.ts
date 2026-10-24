@@ -30,6 +30,8 @@ import places = require('./places');
 import * as remote from './remote';
 import * as sites from './sites';
 import * as sitemanager from './sitemanager';
+import * as siteops from './siteops';
+import * as fsx from './fsx';
 import * as ipc from './ipc';
 import type {
   EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
@@ -732,7 +734,21 @@ ipc.on('edit:text', (e, which) => {
 // Files go on the Mac's clipboard the way Finder puts them there, so either
 // app can paste them. Cut is remembered here: a paste moves the files as
 // long as the clipboard still holds what was cut.
+// Items on a site aren't files on the Mac, so they're kept here while the
+// clipboard holds their addresses as text, until something else is copied.
+let siteClip: { paths: string[]; change: number } | null = null;
+
 async function putOnClipboard(paths: string[], isCut: boolean) {
+  if (paths.some(sites.isRemote)) {
+    clipboard.writeText(paths.map(sites.address).join('\n'));
+    const read = await helper.request('clipRead');
+    const change = read ? read.change : -1;
+    siteClip = { paths, change };
+    cut = isCut ? { paths, change } : null;
+    pushState();
+    return;
+  }
+  siteClip = null;
   const res = await helper.request('clipWrite', { paths });
   cut = isCut && res ? { paths, change: res.change } : null;
   pushState();
@@ -743,9 +759,11 @@ ipc.handle('clip:cut', (_e, paths) => putOnClipboard(paths, true));
 // { paths } of what was pasted, for the window to select.
 ipc.handle('clip:paste', async (e, dest) => {
   const clip = await helper.request('clipRead');
-  if (!clip || !clip.paths.length) return { paths: [] };
+  if (!clip) return { paths: [] };
+  const from = siteClip && clip.change === siteClip.change ? siteClip.paths : clip.paths;
+  if (!from.length) return { paths: [] };
   const move = !!cut && clip.change === cut.change;
-  const res = await moveOrCopy(e, move ? 'move' : 'copy', clip.paths, dest);
+  const res = await moveOrCopy(e, move ? 'move' : 'copy', from, dest);
   if (move && res.done.length) {
     cut = null;
     await helper.request('clipWrite', { paths: [] }); // the cut files have gone, like the old windows
@@ -777,6 +795,21 @@ ipc.on('drag:start', async (e, paths) => {
 // A drop moves items that are on the same disk as the folder and copies
 // the rest, or copies everything with Option held.
 ipc.handle('op:drop', async (e, paths, dest, copy) => {
+  // To or from a site: a move on the same site, a copy otherwise.
+  if (sites.isRemote(dest) || paths.some(sites.isRemote)) {
+    const destDev = (await fsx.stat(dest).catch(() => null))?.dev;
+    if (!destDev) return { paths: [] };
+    const moves: string[] = [];
+    const copies: string[] = [];
+    for (const p of paths) {
+      const st = await fsx.lstat(p).catch(() => null);
+      if (st) (!copy && st.dev === destDev ? moves : copies).push(p);
+    }
+    const done: copier.Done[] = [];
+    if (moves.length) done.push(...(await moveOrCopy(e, 'move', moves, dest)).done);
+    if (copies.length) done.push(...(await moveOrCopy(e, 'copy', copies, dest)).done);
+    return { paths: done.map((d) => d.to) };
+  }
   const destDev = (await fs.promises.stat(dest)).dev;
   const names = await dragNames();
   const moves: copier.Pair[] = [];
@@ -883,9 +916,19 @@ async function moveOrCopy(e: IpcMainEvent | IpcMainInvokeEvent, mode: 'copy' | '
   const near = BrowserWindow.fromWebContents(e.sender);
   const pairs = sources.map((s) => (typeof s === 'string' ? { src: s, target: null } : s));
   const res = await copier.start({ mode, pairs, dest, near });
+  // Folders on a site aren't watched, so the windows showing them are told.
+  const onSite = sites.isRemote(dest) || pairs.some((p) => sites.isRemote(p.src));
+  if (onSite) siteChanged(dest, ...(mode === 'move' ? pairs.map((p) => fsx.dirname(p.src)) : []));
   if (res.error) await answer(e, { error: res.error });
-  if (res.done.length) undo.push(mode === 'copy' ? copyStep(res, label) : moveStep(res));
+  // Changes on a site can't be undone: there's no Trash to take them back from.
+  if (res.done.length && !onSite) undo.push(mode === 'copy' ? copyStep(res, label) : moveStep(res));
   return res;
+}
+
+// Windows showing these folders on a site list them again, the way a
+// watched folder on the Mac does by itself.
+function siteChanged(...dirs: string[]) {
+  for (const d of new Set(dirs.filter(sites.isRemote))) broadcast('folder:changed', d);
 }
 
 // Undoing a copy puts the copies in the Trash and brings back anything they replaced.
@@ -946,6 +989,27 @@ ipc.handle('op:undo', (e, which) => runUndo(which, e));
 
 // Renames and puts it on the Undo list. Used by the window and Properties.
 async function renameWithUndo(from: string, name: string): Promise<OpResult> {
+  if (sites.isRemote(from)) {
+    const res = await siteops.rename(from, name);
+    if (res.path) {
+      const to = res.path;
+      siteChanged(fsx.dirname(from));
+      undo.push({
+        label: 'Rename',
+        undo: async () => {
+          const back = await siteops.rename(to, fsx.basename(from));
+          siteChanged(fsx.dirname(from));
+          return back;
+        },
+        redo: async () => {
+          const again = await siteops.rename(from, fsx.basename(to));
+          siteChanged(fsx.dirname(from));
+          return again;
+        }
+      });
+    }
+    return res;
+  }
   const res = await ops.rename(from, name);
   if (res.path && res.path !== from) {
     const to = res.path;
@@ -971,7 +1035,9 @@ ipc.handle('ask:extension', async (e, was, now) => {
 });
 
 // Properties, Open With and Quick Look.
-ipc.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
+ipc.on('props:open', (e, paths) => {
+  if (!paths.some(sites.isRemote)) props.show(paths, BrowserWindow.fromWebContents(e.sender));
+});
 ipc.handle('openWith:apps', (_e, p) => chooser.appsFor(p));
 ipc.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
 ipc.on('openWith:choose', (e, paths) => chooser.show({ paths, mode: 'choose', near: BrowserWindow.fromWebContents(e.sender) }));
@@ -980,6 +1046,7 @@ const previewing = new WeakMap(); // window -> the path in Quick Look
 ipc.on('quicklook', (e, p) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
+  if (p && sites.isRemote(p)) return;
   if (!p || previewing.get(win) === p) {
     win.closeFilePreview();
     previewing.delete(win);
@@ -1003,11 +1070,13 @@ function newItemStep(label: string, p: string): undo.Step {
   };
 }
 ipc.handle('op:newFolder', async (e, dir) => {
+  if (sites.isRemote(dir)) return answer(e, await siteops.newFolder(dir));
   const res = await answer(e, await ops.newFolder(dir));
   if (res.path) undo.push(newItemStep('New Folder', res.path));
   return res;
 });
 ipc.handle('op:newText', async (e, dir) => {
+  if (sites.isRemote(dir)) return answer(e, await siteops.newTextFile(dir));
   const res = await answer(e, await ops.newTextFile(dir));
   if (res.path) undo.push(newItemStep('New Text Document', res.path));
   return res;
@@ -1015,12 +1084,15 @@ ipc.handle('op:newText', async (e, dir) => {
 
 // Send To: a zip next to the items, aliases on the Desktop, a new mail
 // with them attached, or copies in a pinned folder.
+const NOT_ON_SITES = { error: 'That only works with files on this Mac.' };
 ipc.handle('send:zip', async (e, paths) => {
+  if (paths.some(sites.isRemote)) return answer(e, NOT_ON_SITES);
   const res = await answer(e, await ops.compress(paths));
   if (res.path) undo.push(newItemStep('Compress', res.path));
   return res;
 });
 ipc.handle('send:desktop', async (e, paths) => {
+  if (paths.some(sites.isRemote)) return answer(e, NOT_ON_SITES);
   const desktop = path.join(folders.HOME, 'Desktop');
   for (const p of paths) {
     const res = await answer(e, await ops.alias(p, desktop));
@@ -1029,7 +1101,9 @@ ipc.handle('send:desktop', async (e, paths) => {
   }
   return {};
 });
-ipc.on('send:mail', (_e, paths) => execFile('open', ['-a', 'Mail', ...paths], () => {}));
+ipc.on('send:mail', (_e, paths) => {
+  if (!paths.some(sites.isRemote)) execFile('open', ['-a', 'Mail', ...paths], () => {});
+});
 ipc.handle('send:copy', async (e, paths, dest) => {
   const res = await moveOrCopy(e, 'copy', paths, dest);
   return { paths: res.done.map((d) => d.to) };
@@ -1040,7 +1114,7 @@ ipc.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
 // same folder ("Copy of X"). Search results can come from several folders.
 ipc.handle('op:duplicate', async (e, paths) => {
   const byDir = new Map<string, string[]>();
-  for (const p of paths) byDir.set(path.dirname(p), [...(byDir.get(path.dirname(p)) || []), p]);
+  for (const p of paths) byDir.set(fsx.dirname(p), [...(byDir.get(fsx.dirname(p)) || []), p]);
   const done: copier.Done[] = [];
   for (const [dir, list] of byDir) done.push(...(await moveOrCopy(e, 'copy', list, dir, 'Duplicate')).done);
   return { paths: done.map((d) => d.to) };
@@ -1049,6 +1123,7 @@ ipc.handle('op:duplicate', async (e, paths) => {
 // Make Alias puts "X alias" next to each item.
 ipc.handle('op:alias', async (e, paths) => {
   const made: string[] = [];
+  if (paths.some(sites.isRemote)) return { paths: made };
   for (const p of paths) {
     const res = await answer(e, await ops.alias(p, path.dirname(p)));
     if (res.error) break;
@@ -1069,6 +1144,25 @@ ipc.on('clip:path', (_e, paths) => {
 });
 
 ipc.handle('op:trash', async (e, paths) => {
+  // A server has no Trash, so items on a site are deleted, always after asking.
+  if (paths.some(sites.isRemote)) {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const what = paths.length === 1 ? `"${fsx.basename(paths[0])}"` : `these ${paths.length} items`;
+    const opts: MessageBoxOptions = {
+      type: 'warning',
+      message: `Delete ${what}?`,
+      detail: `The server has no Trash, so you can't get ${paths.length === 1 ? 'it' : 'them'} back.`,
+      buttons: ['Delete', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (response !== 0) return { items: [] };
+    const res = await siteops.remove(paths);
+    siteChanged(...paths.map(fsx.dirname));
+    if (res.error) await answer(e, { error: res.error });
+    return { items: res.removed.map((p) => ({ from: p, to: '' })), error: res.error };
+  }
   if (settings.get().confirmTrash) {
     const win = BrowserWindow.fromWebContents(e.sender);
     const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `these ${paths.length} items`;

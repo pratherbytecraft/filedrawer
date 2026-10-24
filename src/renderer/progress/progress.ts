@@ -20,6 +20,8 @@ api.onJob((u) => {
   $('job').hidden = !!q;
   if (q) {
     $('q').textContent = `There's already an item named "${q.name}" in "${q.folder}". Do you want to replace it?`;
+    $('q-sub').textContent = q.onSite ? 'The item that\'s there now is deleted for good if you replace it, since the server has no Trash.'
+      : 'The item that\'s there now goes to the Trash if you replace it.';
     $('all-row').hidden = !q.more;
     $('all-text').textContent = `Do this for the other ${q.more === 1 ? 'item' : `${q.more} items`} too`;
     $('replace').focus();

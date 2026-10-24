@@ -4,12 +4,16 @@
 // a moment, or when it has a question.
 //
 // Copies are APFS clones where the disk allows, which take no time or room.
-// A move on the same disk is a rename. A move to another disk copies, then
-// removes the original once the copy is whole.
+// A move on the same disk (or the same SSH site) is a rename. A move to
+// another disk copies, then removes the original once the copy is whole.
+// Files on SSH sites go through fsx.ts like any other; an item replaced on
+// a site is gone for good, since a server has no Trash.
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import ops = require('./ops');
+import * as fsx from './fsx';
+import * as sites from './sites';
 import * as ipc from './ipc';
 import type { JobChoice, JobQuestion, TrashedItem } from '../shared/types';
 
@@ -59,17 +63,24 @@ const isInside = (child: string, parent: string) => child === parent || child.st
 async function copyName(dir: string, name: string) {
   for (let n = 1; ; n++) {
     const candidate = n === 1 ? `Copy of ${name}` : `Copy (${n}) of ${name}`;
-    if (!(await ops.exists(path.join(dir, candidate)))) return candidate;
+    if (!(await fsx.exists(fsx.join(dir, candidate)))) return candidate;
   }
 }
 
+// A folder's name for the progress window: a site's top is the site's name.
+function label(p: string) {
+  const at = sites.split(p);
+  if (at && at.path === '/') return (sites.byId(at.id) || { name: p }).name;
+  return fsx.basename(p) || p;
+}
+
 async function count(p: string): Promise<Count> {
-  const st = await fs.promises.lstat(p);
-  if (!st.isDirectory()) return { files: 1, bytes: st.size };
+  const st = await fsx.lstat(p);
+  if (!st.dir || st.link) return { files: 1, bytes: st.size };
   let files = 0;
   let bytes = 0;
-  for (const name of await fs.promises.readdir(p)) {
-    const c = await count(path.join(p, name));
+  for (const name of await fsx.readdir(p)) {
+    const c = await count(fsx.join(p, name));
     files += c.files;
     bytes += c.bytes;
   }
@@ -175,9 +186,9 @@ class Job {
     const verb = this.mode === 'copy' ? 'Copying' : 'Moving';
     const n = this.pairs.length;
     ipc.send(this.win.webContents, 'job:update', {
-      title: `${verb} ${n === 1 ? `"${path.basename(this.pairs[0].src)}"` : `${n} items`}`,
-      line: this.dest ? `to "${path.basename(this.dest) || this.dest}"` : '',
-      current: this.current ? path.basename(this.current) : '',
+      title: `${verb} ${n === 1 ? `"${fsx.basename(this.pairs[0].src)}"` : `${n} items`}`,
+      line: this.dest ? `to "${label(this.dest)}"` : '',
+      current: this.current ? fsx.basename(this.current) : '',
       fraction,
       left: elapsed > 1 && fraction > 0.02 ? timeLeft((elapsed / fraction) * (1 - fraction)) : '',
       question: this.question || null
@@ -191,11 +202,11 @@ class Job {
   }
 
   // replace | keep | skip | cancel, asked in the job's window.
-  ask(name: string, folder: string, more: number): Promise<JobChoice> {
+  ask(name: string, folder: string, more: number, onSite = false): Promise<JobChoice> {
     if (this.forAll) return Promise.resolve(this.forAll);
     clearTimeout(this.showTimer);
     this.show();
-    this.question = { name, folder, more };
+    this.question = { name, folder, more, onSite };
     this.send(true);
     return new Promise((resolve) => {
       this.answer = (choice, all) => {
@@ -210,24 +221,25 @@ class Job {
 
   async copyTree(src: string, dst: string): Promise<void> {
     if (this.cancelled) throw CANCELLED;
-    const st = await fs.promises.lstat(src);
-    if (st.isSymbolicLink()) {
-      await fs.promises.symlink(await fs.promises.readlink(src), dst);
+    const st = await fsx.lstat(src);
+    if (st.link) {
+      await fsx.symlink(await fsx.readlink(src), dst);
       this.tick(1, 0);
       return;
     }
-    if (st.isDirectory()) {
-      await fs.promises.mkdir(dst);
+    if (st.dir) {
+      await fsx.mkdir(dst);
       this.tick(1, 0);
-      for (const name of await fs.promises.readdir(src)) await this.copyTree(path.join(src, name), path.join(dst, name));
-      await fs.promises.chmod(dst, st.mode & 0o7777).catch(() => {});
-      await fs.promises.utimes(dst, st.atime, st.mtime).catch(() => {});
+      for (const name of await fsx.readdir(src)) await this.copyTree(fsx.join(src, name), fsx.join(dst, name));
+      await fsx.keepLook(dst, st);
       return;
     }
     this.current = src;
     this.send();
-    // How far into a big file the copy is, from its size on the other side.
-    const watch = st.size > 8 * 1024 * 1024 ? setInterval(() => {
+    // How far into a big file a copy on the Mac is, from its size on the
+    // other side. Copies to and from a site say so themselves.
+    const local = !sites.isRemote(src) && !sites.isRemote(dst);
+    const watch = local && st.size > 8 * 1024 * 1024 ? setInterval(() => {
       fs.stat(dst, (err, d) => {
         if (err || this.current !== src) return;
         this.partial = Math.min(d.size, st.size);
@@ -235,12 +247,15 @@ class Job {
       });
     }, 250) : undefined;
     try {
-      // A clone where the disk can, a full copy with the file's dates and extras otherwise.
-      await fs.promises.copyFile(src, dst, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);
+      await fsx.copyFile(src, dst, (bytes) => {
+        this.partial = Math.min(bytes, st.size);
+        this.send();
+      }, () => this.cancelled);
     } finally {
       clearInterval(watch);
       this.partial = 0;
     }
+    if (!local) await fsx.keepLook(dst, st);
     this.tick(1, st.size);
   }
 
@@ -250,7 +265,8 @@ class Job {
     try {
       await this.work();
     } catch (err) {
-      if (err !== CANCELLED) this.error = this.error || (err as Error).message;
+      // A cancelled transfer to or from a site ends with the connection's own error.
+      if (err !== CANCELLED && !this.cancelled) this.error = this.error || (err as Error).message;
     }
     this.finished = true;
     clearTimeout(this.showTimer);
@@ -263,12 +279,12 @@ class Job {
   }
 
   async work() {
-    const destDev = this.dest ? (await fs.promises.stat(this.dest)).dev : null;
+    const destDev = this.dest ? (await fsx.stat(this.dest)).dev : null;
     const plan: (Pair & { rename: boolean; size: Count })[] = [];
     for (const pair of this.pairs) {
-      const st = await fs.promises.lstat(pair.src);
-      const toDir = pair.target ? path.dirname(pair.target) : this.dest;
-      const sameDisk = (pair.target ? (await fs.promises.stat(toDir as string)).dev : destDev) === st.dev; // toDir is the target's folder here
+      const st = await fsx.lstat(pair.src);
+      const toDir = pair.target ? fsx.dirname(pair.target) : this.dest;
+      const sameDisk = (pair.target ? (await fsx.stat(toDir as string)).dev : destDev) === st.dev; // toDir is the target's folder here
       const rename = this.mode === 'move' && sameDisk;
       const c = rename ? { files: 1, bytes: 0 } : await count(pair.src);
       this.total.files += c.files;
@@ -280,12 +296,12 @@ class Job {
     for (let i = 0; i < plan.length; i++) {
       if (this.cancelled) return;
       const { src, rename } = plan[i];
-      const name = plan[i].name || path.basename(src);
+      const name = plan[i].name || fsx.basename(src);
       let target = plan[i].target;
       let replacedHere = null; // what this item pushed into the Trash
       if (!target) {
         const dest = this.dest as string; // a pair without a target goes into dest
-        if (this.mode === 'move' && path.dirname(src) === dest) {
+        if (this.mode === 'move' && fsx.dirname(src) === dest) {
           this.tick(plan[i].size.files, plan[i].size.bytes);
           continue; // already here
         }
@@ -293,11 +309,11 @@ class Job {
           this.error = `"${name}" can't be ${this.mode === 'copy' ? 'copied' : 'moved'} into itself.`;
           continue;
         }
-        target = path.join(dest, name);
-        if (this.mode === 'copy' && path.dirname(src) === dest) {
-          target = path.join(dest, await copyName(dest, name));
-        } else if (await ops.exists(target)) {
-          const choice = await this.ask(name, path.basename(dest), plan.length - i - 1);
+        target = fsx.join(dest, name);
+        if (this.mode === 'copy' && fsx.dirname(src) === dest) {
+          target = fsx.join(dest, await copyName(dest, name));
+        } else if (await fsx.exists(target)) {
+          const choice = await this.ask(name, label(dest), plan.length - i - 1, sites.isRemote(dest));
           if (choice === 'cancel') {
             this.cancelled = true;
             return;
@@ -307,7 +323,10 @@ class Job {
             continue;
           }
           if (choice === 'keep') {
-            target = path.join(dest, await ops.freeName(dest, name));
+            target = fsx.join(dest, await fsx.freeName(dest, name));
+          } else if (sites.isRemote(target)) {
+            // No Trash on a server: the old one goes for good.
+            await fsx.rmTree(target);
           } else {
             // Replaced items go to the Trash, so Undo can bring them back.
             const res = await ops.trash([target]);
@@ -318,24 +337,24 @@ class Job {
             replacedHere = res.items;
           }
         }
-      } else if (await ops.exists(target)) {
-        this.error = `There's already an item named "${path.basename(target)}" in "${path.basename(path.dirname(target))}".`;
+      } else if (await fsx.exists(target)) {
+        this.error = `There's already an item named "${fsx.basename(target)}" in "${label(fsx.dirname(target))}".`;
         continue;
       }
 
       if (rename) {
-        await fs.promises.rename(src, target);
+        await fsx.rename(src, target);
         this.tick(1, 0);
       } else {
         try {
           await this.copyTree(src, target);
         } catch (err) {
           // A half made copy is taken away again, and what it was replacing comes back.
-          await fs.promises.rm(target, { recursive: true, force: true }).catch(() => {});
+          await fsx.rmTree(target).catch(() => {});
           if (replacedHere) await ops.untrash(replacedHere);
           throw err;
         }
-        if (this.mode === 'move') await fs.promises.rm(src, { recursive: true, force: true });
+        if (this.mode === 'move') await fsx.rmTree(src);
       }
       if (replacedHere) this.replaced.push(...replacedHere);
       this.done.push({ from: src, to: target });

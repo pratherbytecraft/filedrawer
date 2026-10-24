@@ -347,6 +347,22 @@ describe('file window', () => {
     cy.calls('list').its('length').should('be.greaterThan', 1);
   });
 
+  it('on a site, a file\'s menu says Delete, leaves out what needs the Mac, and Delete asks the main process', () => {
+    cy.page('window/index.html?path=::site/ssh-lab/home/me', (state, extra) => {
+      state.sites = [{ id: 'ssh-lab', name: 'homelab', host: 'homelab.local', port: 22, user: 'me', from: 'config', shown: true, logon: 'agent', key: '', start: '', local: '', proxy: false }];
+      extra.tree = { '::site/ssh-lab/home/me': ['notes.md', 'Media/'] };
+    });
+    item('notes.md').rightclick();
+    cy.get('#menu .mi').then((els) => [...els].map((e) => e.textContent)).should('include', 'Delete...')
+      .and('not.include', 'Move to Trash').and('not.include', 'Make Alias').and('not.include', 'Send To').and('not.include', 'Quick Look');
+    cy.contains('#menu .mi', 'Delete...').click();
+    cy.calls('trash').should('deep.equal', [[['::site/ssh-lab/home/me/notes.md']]]);
+    // Date Created and Date Added can't be picked for a site's columns.
+    cy.get('#files th[data-col="name"]').rightclick();
+    cy.contains('#menu .mi', 'Date Created').should('have.class', 'disabled');
+    cy.contains('#menu .mi', 'Date Added').should('have.class', 'disabled');
+  });
+
   it('Move to Trash takes the item away', () => {
     cy.page(HOME);
     item('photo.jpg').click();

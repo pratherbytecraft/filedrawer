@@ -212,6 +212,7 @@ async function duplicateSelected() {
 }
 
 async function aliasSelected() {
+  if (isRemote(cwd)) return;
   const picked = workItems();
   if (!picked.length) return;
   const res = await api.makeAlias(picked.map((it) => it.path));
@@ -264,8 +265,10 @@ function showCut() {
 $('files').addEventListener('dragstart', (e) => {
   const el = (e.target as HTMLElement).closest<Row>('.item');
   if (!el) return;
-  e.preventDefault();
-  if (renaming) return;
+  if (renaming) {
+    e.preventDefault();
+    return;
+  }
   const it = items[el.dataset.i];
   if (!sel.has(it.path)) {
     sel = new Set([it.path]);
@@ -273,8 +276,24 @@ $('files').addEventListener('dragstart', (e) => {
     showSelection();
   }
   const paths = selectedItems().filter((x) => !x.volume).map((x) => x.path);
+  if (siteDrag(e, paths)) return;
+  e.preventDefault();
   if (paths.length) api.startDrag(paths);
 });
+
+// Items on a site aren't files on the Mac, so they can't ride the Mac's own
+// drag. They go as a drag inside Filedrawer instead, which its windows,
+// panes and folders take; Finder and other apps don't.
+const SITE_DRAG = 'application/x-filedrawer-site';
+function siteDrag(e: DragEvent, paths: string[]) {
+  if (!paths.length || !paths.some(isRemote)) return false;
+  // A drag event always has its dataTransfer.
+  e.dataTransfer!.setData(SITE_DRAG, JSON.stringify(paths));
+  e.dataTransfer!.setData('text/plain', paths.map(shownPath).join('\n'));
+  e.dataTransfer!.effectAllowed = 'copyMove';
+  return true;
+}
+const isSiteDrag = (e: DragEvent) => [...e.dataTransfer!.types].includes(SITE_DRAG);
 
 // A folder or the Trash, and the element marked while a drag is over it.
 type DropTarget = { dir: string; trash?: undefined; el: HTMLElement | null } | { trash: true; dir?: undefined; el: HTMLElement | null };
@@ -314,14 +333,14 @@ let ownDrag = false;
 api.onDragOwn((own) => { ownDrag = own; });
 function dropCopies(e: DragEvent) {
   if (e.altKey) return true;
-  if (ownDrag) return false;
+  if (ownDrag || isSiteDrag(e)) return false;
   // A drag event always has its dataTransfer.
   const allowed = e.dataTransfer!.effectAllowed;
   return !(allowed === 'all' || allowed === 'uninitialized' || /move/i.test(allowed));
 }
 
 document.addEventListener('dragover', (e) => {
-  if (e.defaultPrevented || ![...e.dataTransfer!.types].includes('Files')) return;
+  if (e.defaultPrevented || (![...e.dataTransfer!.types].includes('Files') && !isSiteDrag(e))) return;
   const t = dropTarget(e);
   clearDropMarks();
   if (!t) return;
@@ -340,7 +359,8 @@ document.addEventListener('drop', async (e) => {
   clearDropMarks();
   if (!t) return;
   e.preventDefault();
-  const paths = [...e.dataTransfer!.files].map((f) => api.pathForFile(f)).filter(Boolean);
+  const paths: string[] = isSiteDrag(e) ? JSON.parse(e.dataTransfer!.getData(SITE_DRAG))
+    : [...e.dataTransfer!.files].map((f) => api.pathForFile(f)).filter(Boolean);
   if (!paths.length) return;
   if (t.trash) {
     api.trash(paths);

@@ -1137,7 +1137,9 @@ $('files').addEventListener('contextmenu', async (e) => {
   }
   // Apps and other bundles open like files, and can be looked inside too.
   if (picked.length === 1 && it.package && !it.volume) groups[0].push({ label: 'Show Package Contents', click: () => navigate(it.path) });
-  if (!picked.some(isFolder)) {
+  // Files on a site have no app list or preview to show.
+  const site = isRemote(cwd);
+  if (!picked.some(isFolder) && !site) {
     groups[0].push({ label: 'Open With', sub: await openWithEntries(picked.map((x) => x.path)) });
     groups[0].push({ label: 'Quick Look', click: () => api.quickLook(it.path) });
   }
@@ -1152,7 +1154,7 @@ $('files').addEventListener('contextmenu', async (e) => {
   if (cwd !== COMPUTER && !it.volume) {
     // Items in a folder that can't be changed can still be copied, not moved or renamed.
     const fixed = picked.some((x) => x.fixed);
-    groups[1].push({ label: 'Send To', sub: sendToEntries(picked.map((x) => x.path)) });
+    if (!site) groups[1].push({ label: 'Send To', sub: sendToEntries(picked.map((x) => x.path)) });
     groups.splice(2, 0, [
       ...(fixed ? [] : [{ label: 'Cut', click: () => clipCommand('cut') }]),
       { label: 'Copy', icon: 'p-copy', click: () => clipCommand('copy') },
@@ -1168,9 +1170,10 @@ $('files').addEventListener('contextmenu', async (e) => {
       ]);
     }
     if (!fixed) {
-      groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
+      if (!site) groups[3].push({ label: 'Make Alias', click: () => aliasSelected() });
       if (picked.length === 1) groups[3].push({ label: 'Rename', icon: 'p-rename', click: () => startRename(it.path) });
-      groups[3].push({ label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
+      // A server has no Trash: Delete asks, then the items are gone.
+      groups[3].push(site ? { label: 'Delete...', click: () => trashSelected() } : { label: 'Move to Trash', icon: 'p-trash', click: () => trashSelected() });
     }
   }
   groups.push([{ label: 'Properties', icon: 'p-props', click: () => showProps() }]);

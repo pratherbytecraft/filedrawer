@@ -136,6 +136,13 @@ function setSplit(on: boolean) {
     document.body.classList.add('split');
     $('side-r').hidden = false;
     $('divider').hidden = false;
+    // A site with a local folder opens it on the new side, like FileZilla's two halves.
+    const at = siteAt(cwd);
+    const local = at && at.site && at.site.local ? at.site.local.replace(/^~(?=\/|$)/, app.home) : null;
+    if (local) {
+      Object.assign(split.other, { cwd: local, history: [local], hIndex: 0, items: [], listError: null, folderModified: null, cwdWritable: true, volumeName: '' });
+      refreshOther();
+    }
     drawOther();
     api.watch(split.other.cwd, 'other');
   } else {
@@ -205,12 +212,14 @@ document.addEventListener('mouseup', async (e) => {
 $('files-other').addEventListener('dragstart', (e) => {
   const el = (e.target as HTMLElement).closest<Row>('.item');
   pending = null;
-  e.preventDefault();
-  if (!el || !split) return;
-  const it = split.other.items[el.dataset.i];
-  if (!it || it.volume) return;
-  // split is set, checked above.
+  const it = el && split ? split.other.items[el.dataset.i] : null;
+  if (!it || it.volume || !split) {
+    e.preventDefault();
+    return;
+  }
   const paths = split.other.sel.has(it.path) ? split.other.items.filter((x) => (split as Split).other.sel.has(x.path)).map((x) => x.path) : [it.path];
+  if (siteDrag(e, paths)) return;
+  e.preventDefault();
   api.startDrag(paths);
 });
 

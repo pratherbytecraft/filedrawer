@@ -438,6 +438,26 @@ const site = (p: string) => {
   return { site: s, path: at.path };
 };
 
+// A path on a site with its connection, for the file layer (fsx.ts).
+export interface At {
+  sftp: SFTPWrapper;
+  path: string; // on the server
+  id: string; // the site's
+  host: string;
+  run: <T>(work: Promise<T>) => Promise<T>; // a request with the usual time limit
+}
+
+export async function at(p: string): Promise<At> {
+  const a = site(p);
+  const c = await conn(a.site);
+  return { sftp: c.sftp, path: a.path, id: a.site.id, host: a.site.host, run: (work) => timed(c, work) };
+}
+
+// Drops a site's connection, which stops a transfer that's going on.
+export function drop(id: string) {
+  close(id);
+}
+
 // The items in a folder on a site. Kinds are filled in by folders.ts.
 export async function list(dir: string, { hidden = false }: ListOptions = {}): Promise<Listing> {
   try {

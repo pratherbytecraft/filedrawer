@@ -331,6 +331,7 @@ export interface JobQuestion {
   name: string;
   folder: string;
   more: number;
+  onSite?: boolean; // the folder is on an SSH site, where a replaced item is gone for good
 }
 
 export interface JobUpdate {
