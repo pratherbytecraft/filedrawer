@@ -123,6 +123,16 @@ test('trash logs where things came from and names what failed', async (t) => {
   assert.deepEqual(logged, [{ from: '/x/a.txt', to: '/t/a.txt' }]);
 });
 
+test('an item moved to the Trash without its new path is no failure', async (t) => {
+  const realLog = places.logTrashed;
+  places.logTrashed = () => {};
+  t.after(() => { places.logTrashed = realLog; });
+  answer(t, () => ({ items: [{ from: '/x/a.txt', to: '' }] }));
+  const res = await ops.trash(['/x/a.txt']);
+  assert.equal(res.error, undefined);
+  assert.deepEqual(res.items, []);
+});
+
 test('trash with no helper says the items stayed', async (t) => {
   answer(t, () => null);
   const res = await ops.trash(['/x/a.txt']);

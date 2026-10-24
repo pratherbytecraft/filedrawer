@@ -85,7 +85,9 @@ async function trash(paths: string[]): Promise<TrashResult> {
   const res = await helper.request('trash', { paths });
   if (!res) return { error: 'The items couldn\'t be moved to the Trash.', items: [] };
   const moved = res.items.filter((it): it is TrashedItem => !!it.to);
-  const failed = res.items.filter((it) => !it.to);
+  // Only an item with an error failed. One macOS moved without saying where
+  // it went is in the Trash all the same, it just can't be put back from here.
+  const failed = res.items.filter((it) => !!it.error);
   places.logTrashed(moved); // so Put Back knows where they came from
   if (!failed.length) return { items: moved };
   const name = path.basename(failed[0].from);
