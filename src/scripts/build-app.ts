@@ -119,7 +119,7 @@ function writeStub(dest: string) {
   fs.writeFileSync(path.join(stubDir, 'package.json'), JSON.stringify(stubPkg, null, 2) + '\n');
   fs.writeFileSync(
     path.join(stubDir, 'index.js'),
-    `// Written by filedrawer/scripts/build-app.ts. Loads Filedrawer from the installed package.
+    `// Written by filedrawer/src/scripts/build-app.ts. Loads Filedrawer from the installed package.
 const fs = require('fs');
 const target = ${JSON.stringify(mainScript)};
 if (fs.existsSync(target)) {

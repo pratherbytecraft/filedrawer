@@ -8,7 +8,7 @@ import path from 'path';
 import type { Readable, Writable } from 'stream';
 import type { AppChoice, PhotosStatus, TrashedItem } from '../shared/types';
 
-// Built at install time by scripts/build-helper.
+// Built at install time by src/scripts/build-helper.
 const HELPER = path.join(__dirname, '..', '..', 'helper', 'filedrawer-helper');
 const helperPath = () => (fs.existsSync(HELPER) ? HELPER : null);
 

@@ -47,8 +47,8 @@ async function build() {
       ...entries('src/main', 'main'),
       // The preload, the only file directly in src.
       ...entries('src', ''),
-      ...entries('bin', 'bin'),
-      ...entries('scripts', 'scripts', ['build.ts'])
+      ...entries('src/bin', 'bin'),
+      ...entries('src/scripts', 'scripts')
     ],
     outdir: dist,
     platform: 'node',

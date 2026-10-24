@@ -6,7 +6,7 @@
 import { spawn, type ChildProcessByStdio } from 'child_process';
 import readline from 'readline';
 import type { Readable, Writable } from 'stream';
-import { helperPath } from '../../scripts/build-helper';
+import { helperPath } from '../scripts/build-helper';
 import type { FinderPermission } from '../shared/types';
 
 // The watch's events, one per line.
