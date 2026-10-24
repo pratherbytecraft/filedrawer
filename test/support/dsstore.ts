@@ -2,8 +2,14 @@
 // holding a B-tree of records), for testing Put Back's reader without a real
 // Trash. records are [name, code, type, value]; types ustr, bool, long and
 // blob. With split, the records go in two leaves under one inner node.
-function record([name, code, type, value]) {
-  const parts = [u32(name.length), utf16(name), Buffer.from(code, 'latin1'), Buffer.from(type, 'latin1')];
+export type DsRecord =
+  | [name: string, code: string, type: 'ustr', value: string]
+  | [name: string, code: string, type: 'bool', value: boolean]
+  | [name: string, code: string, type: 'long', value: number]
+  | [name: string, code: string, type: 'blob', value: Buffer];
+
+function record([name, code, type, value]: DsRecord) {
+  const parts: Buffer[] = [u32(name.length), utf16(name), Buffer.from(code, 'latin1'), Buffer.from(type, 'latin1')];
   if (type === 'ustr') parts.push(u32(value.length), utf16(value));
   else if (type === 'bool') parts.push(Buffer.from([value ? 1 : 0]));
   else if (type === 'long') parts.push(u32(value));
@@ -11,19 +17,19 @@ function record([name, code, type, value]) {
   return Buffer.concat(parts);
 }
 
-function u32(n) {
+function u32(n: number) {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n);
   return b;
 }
 
-function utf16(text) {
+function utf16(text: string) {
   return Buffer.from(text, 'utf16le').swap16();
 }
 
-function dsStore(records, { split = false } = {}) {
+export function dsStore(records: DsRecord[], { split = false } = {}) {
   // Blocks by id, each at a 32 byte aligned offset (counted from byte 4).
-  const blocks = [];
+  const blocks: Buffer[] = [];
   if (split) {
     const half = Math.ceil(records.length / 2);
     const left = records.slice(0, half - 1);
@@ -37,7 +43,7 @@ function dsStore(records, { split = false } = {}) {
     blocks[2] = Buffer.concat([u32(0), u32(records.length), ...records.map(record)]);
     blocks[1] = Buffer.concat([u32(2), u32(0), u32(records.length), u32(1), u32(4096)]);
   }
-  const offsets = [];
+  const offsets: number[] = [];
   let at = 64;
   for (let id = 1; id < blocks.length; id++) {
     offsets[id] = at;
@@ -60,4 +66,3 @@ function dsStore(records, { split = false } = {}) {
   return out;
 }
 
-module.exports = { dsStore };

@@ -1,12 +1,12 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-const { app, tempAppData, tempDir } = require('../support/electron');
-const { dsStore } = require('../support/dsstore');
-const places = require('../../src/main/places');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import path from 'path';
+import { app, tempAppData, tempDir } from '../support/electron';
+import { dsStore } from '../support/dsstore';
+import places = require('../../src/main/places');
 
-const records = (map) => Object.fromEntries(map);
+const records = (map: Map<string, unknown>) => Object.fromEntries(map);
 
 test('Put Back reads where Finder trashed things from', () => {
   const buf = dsStore([
@@ -29,7 +29,8 @@ test('Put Back reads a tree with more than one block, and names with accents', (
   const buf = dsStore(names.map((n) => [n, 'ptbL', 'ustr', `Users/me/${n}-dir/`]), { split: true });
   const got = places.putBackRecords(buf);
   assert.deepEqual([...got.keys()], names);
-  assert.equal(got.get('Café.txt').ptbL, 'Users/me/Café.txt-dir/');
+  // Café.txt is one of the names written above.
+  assert.equal(got.get('Café.txt')!.ptbL, 'Users/me/Café.txt-dir/');
 });
 
 test('a file that is not a .DS_Store, or is cut short, gives what it can', () => {
@@ -56,7 +57,7 @@ test('moving back and forth for Undo makes missing folders', async () => {
   assert.deepEqual(await places.moveAll([{ from: path.join(dir, 'a.txt'), to }]), {});
   assert.equal(fs.readFileSync(to, 'utf8'), 'a');
   const res = await places.moveAll([{ from: path.join(dir, 'missing.txt'), to }]);
-  assert.match(res.error, /"missing.txt" couldn't be moved/);
+  assert.match(res.error!, /"missing.txt" couldn't be moved/);
 });
 
 test('Delete Immediately removes files and folders', async () => {
@@ -66,7 +67,7 @@ test('Delete Immediately removes files and folders', async () => {
   fs.writeFileSync(path.join(dir, 'b'), 'b');
   assert.deepEqual(await places.deleteNow([path.join(dir, 'F'), path.join(dir, 'b')]), {});
   assert.deepEqual(fs.readdirSync(dir), []);
-  assert.match((await places.deleteNow([path.join(dir, 'gone')])).error, /"gone" couldn't be deleted/);
+  assert.match((await places.deleteNow([path.join(dir, 'gone')])).error!, /"gone" couldn't be deleted/);
 });
 
 test('inTrash knows the Trash folder', () => {

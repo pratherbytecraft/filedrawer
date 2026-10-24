@@ -1,14 +1,14 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 
 // undo keeps one list for the whole app, so each test loads it fresh.
 function fresh() {
   delete require.cache[require.resolve('../../src/main/undo')];
-  return require('../../src/main/undo');
+  return require('../../src/main/undo') as typeof import('../../src/main/undo');
 }
 
 // A step that notes what ran, failing when told to.
-function step(label, log, { failUndo = false } = {}) {
+function step(label: string, log: string[], { failUndo = false } = {}) {
   return {
     label,
     undo: async () => (failUndo ? { error: `can't undo ${label}` } : (log.push(`undo ${label}`), {})),
@@ -25,7 +25,7 @@ test('nothing to undo or redo at first', async () => {
 
 test('undo and redo go back and forth, newest first', async () => {
   const undo = fresh();
-  const log = [];
+  const log: string[] = [];
   undo.push(step('Rename', log));
   undo.push(step('New Folder', log));
   assert.deepEqual(undo.labels(), { undo: 'Undo New Folder', redo: null });
@@ -39,7 +39,7 @@ test('undo and redo go back and forth, newest first', async () => {
 
 test('a new step clears what could be redone', async () => {
   const undo = fresh();
-  const log = [];
+  const log: string[] = [];
   undo.push(step('A', log));
   await undo.undo();
   undo.push(step('B', log));

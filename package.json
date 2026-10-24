@@ -33,13 +33,13 @@
   "scripts": {
     "start": "npm run build && node dist/bin/filedrawer.js --foreground",
     "build": "tsx scripts/build.ts",
-    "typecheck": "tsc -p . && tsc -p src/renderer/window && tsc -p src/renderer/settings && tsc -p src/renderer/props && tsc -p src/renderer/chooser && tsc -p src/renderer/progress && tsc -p src/renderer/welcome",
+    "typecheck": "tsc -p . && tsc -p src/renderer/window && tsc -p src/renderer/settings && tsc -p src/renderer/props && tsc -p src/renderer/chooser && tsc -p src/renderer/progress && tsc -p src/renderer/welcome && tsc -p test/cypress",
     "prepack": "npm run typecheck && npm run build",
     "postinstall": "node dist/scripts/fix-electron.js && node dist/scripts/build-helper.js && node dist/scripts/build-app.js",
     "build-app": "node dist/scripts/build-app.js",
-    "test": "node --import tsx --test test/unit/*.test.js",
-    "test:helper": "npm run build && node dist/scripts/build-helper.js && node --import tsx --test test/helper/*.test.js",
-    "test:pages": "npm run build && cypress run --config-file test/cypress/cypress.config.js"
+    "test": "node --import tsx --test test/unit/*.test.ts",
+    "test:helper": "npm run build && node dist/scripts/build-helper.js && node --import tsx --test test/helper/*.test.ts",
+    "test:pages": "npm run build && cypress run --config-file test/cypress/cypress.config.ts"
   },
   "dependencies": {
     "electron": "^33.2.1"

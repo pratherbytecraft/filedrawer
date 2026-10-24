@@ -1,5 +1,7 @@
 // The settings window, with every setting at its default unless a test says.
-const open = (title) => cy.contains('#nav a', title).click();
+export {};
+
+const open = (title: string) => cy.contains('#nav a', title).click();
 
 describe('settings window', () => {
   it('draws every page from the sidebar', () => {

@@ -119,7 +119,7 @@ function writeStub(dest: string) {
   fs.writeFileSync(path.join(stubDir, 'package.json'), JSON.stringify(stubPkg, null, 2) + '\n');
   fs.writeFileSync(
     path.join(stubDir, 'index.js'),
-    `// Written by filedrawer/scripts/build-app.js. Loads Filedrawer from the installed package.
+    `// Written by filedrawer/scripts/build-app.ts. Loads Filedrawer from the installed package.
 const fs = require('fs');
 const target = ${JSON.stringify(mainScript)};
 if (fs.existsSync(target)) {
@@ -202,6 +202,6 @@ export function build({ quiet = false } = {}) {
   }
 }
 
-// Without Electron yet (see fix-electron.js), the first run builds the app.
+// Without Electron yet (see fix-electron.ts), the first run builds the app.
 if (require.main === module && !process.env.ELECTRON_SKIP_BINARY_DOWNLOAD) build();
 

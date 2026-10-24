@@ -1,8 +1,13 @@
-// The file window on a made up home folder (support/fake.js).
+// The file window on a made up home folder (support/fake.ts).
+import type { Settings } from '../../../src/shared/types';
+
+// The column widths a settings change carries, when it has them.
+type WidthsPatch = { columnWidths?: Settings['columnWidths'] };
+
 const HOME = 'window/index.html?path=/Users/test';
 const names = () => cy.get('#files .item .nm').then((els) => [...els].map((e) => e.textContent));
-const item = (name) => cy.contains('#files .item', name);
-const command = (name, arg) => cy.fake().then((api) => api.emit('command', { command: name, arg }));
+const item = (name: string) => cy.contains('#files .item', name);
+const command = (name: string, arg?: string) => cy.fake().then((api) => api.emit('command', { command: name, arg }));
 
 describe('file window', () => {
   it('lists the folder without its hidden items', () => {
@@ -194,7 +199,8 @@ describe('file window', () => {
       cy.document().trigger('mousemove', { clientX: r.right + 58, clientY: r.top + 5 });
       cy.document().trigger('mouseup');
       cy.calls('updateSettings').should((calls) => {
-        const saved = calls.map(([p]) => p.columnWidths).find(Boolean);
+        // Until a call with widths comes in, saved! throws and should() tries again, as before.
+        const saved = calls.map(([p]) => (p as WidthsPatch).columnWidths).find(Boolean)!;
         expect(saved.files.name).to.be.closeTo(r.width + 60, 1);
         expect(Object.keys(saved.files)).to.deep.equal(['name', 'size', 'kind', 'modified']);
       });
@@ -208,7 +214,8 @@ describe('file window', () => {
       const before = $th[0].getBoundingClientRect().width;
       cy.get('#files th[data-col="name"] .rz').dblclick();
       cy.calls('updateSettings').should((calls) => {
-        const saved = calls.map(([p]) => p.columnWidths).filter(Boolean).pop();
+        // As above, saved! throws until a call with widths comes in.
+        const saved = calls.map(([p]) => (p as WidthsPatch).columnWidths).filter(Boolean).pop()!;
         expect(saved.files.name).to.be.within(60, before - 1);
       });
     });

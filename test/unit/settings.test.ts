@@ -1,12 +1,13 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-const { tempAppData } = require('../support/electron');
-const settings = require('../../src/main/settings');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import path from 'path';
+import { tempAppData } from '../support/electron';
+import * as settings from '../../src/main/settings';
+import type { SettingsPatch } from '../../src/shared/types';
 
 // A fresh settings folder, with settings.json holding saved when given.
-function start(saved) {
+function start(saved?: unknown) {
   const dir = path.join(tempAppData(), 'Filedrawer');
   if (saved !== undefined) {
     fs.mkdirSync(dir, { recursive: true });
@@ -44,7 +45,8 @@ test('folder views and open with lists take any folder or extension', () => {
 
 test('an update is cleaned, merged and saved', () => {
   const file = start();
-  settings.update({ window: { height: 700 }, showHidden: 'yes' });
+  // showHidden of the wrong kind on purpose, to see it dropped.
+  settings.update({ window: { height: 700 }, showHidden: 'yes' } as unknown as SettingsPatch);
   assert.deepEqual(settings.get().window, { width: 960, height: 700 });
   assert.equal(settings.get().showHidden, false);
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).window.height, 700);

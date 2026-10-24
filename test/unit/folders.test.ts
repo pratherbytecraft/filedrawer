@@ -1,17 +1,20 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { tempDir } = require('../support/electron');
-const places = require('../../src/main/places');
-const folders = require('../../src/main/folders');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { tempDir } from '../support/electron';
+import places = require('../../src/main/places');
+import * as folders from '../../src/main/folders';
+import type { Item, Listing } from '../../src/shared/types';
+
+type FolderListing = Extract<Listing, { error?: undefined }>;
 
 // The helper isn't started in the tests, so kinds and names come from
 // Filedrawer's own fallbacks, as they do when the helper is missing.
 
 // A temp folder with these files (name -> text) and folders (name ending in /).
-function folder(entries = []) {
+function folder(entries: string[] = []) {
   const dir = tempDir();
   for (const e of entries) {
     if (e.endsWith('/')) fs.mkdirSync(path.join(dir, e), { recursive: true });
@@ -20,11 +23,12 @@ function folder(entries = []) {
   return dir;
 }
 
-const byName = (items) => Object.fromEntries(items.map((it) => [it.name, it]));
+const byName = (items: Item[]) => Object.fromEntries(items.map((it) => [it.name, it]));
 
 test('a folder lists its items with kinds, sizes and folder flags', async () => {
   const dir = folder(['notes.txt', 'photo.JPG', 'data.xyz', 'README', 'Sub/', 'Tool.app/']);
-  const res = await folders.list(dir);
+  // A folder that lists has no error, so it's the listing half of the type.
+  const res = (await folders.list(dir)) as FolderListing;
   assert.equal(res.path, dir);
   assert.equal(res.writable, true);
   const it = byName(res.items);
@@ -46,14 +50,15 @@ test('a folder lists its items with kinds, sizes and folder flags', async () => 
 
 test('hidden items show only when asked', async () => {
   const dir = folder(['.secret', 'shown.txt']);
-  assert.deepEqual((await folders.list(dir)).items.map((i) => i.name), ['shown.txt']);
-  assert.deepEqual((await folders.list(dir, { hidden: true })).items.map((i) => i.name).sort(), ['.secret', 'shown.txt']);
+  // These folders list, so items is there.
+  assert.deepEqual((await folders.list(dir)).items!.map((i) => i.name), ['shown.txt']);
+  assert.deepEqual((await folders.list(dir, { hidden: true })).items!.map((i) => i.name).sort(), ['.secret', 'shown.txt']);
 });
 
 test('a link to a folder lists as a folder', async () => {
   const dir = folder(['Real/']);
   fs.symlinkSync(path.join(dir, 'Real'), path.join(dir, 'Link'));
-  const it = byName((await folders.list(dir)).items);
+  const it = byName((await folders.list(dir)).items!); // the folder lists
   assert.equal(it.Link.link, true);
   assert.equal(it.Link.dir, true);
 });
@@ -66,7 +71,8 @@ test('a missing folder answers missing', async () => {
 test('count leaves out hidden items and skips guarded folders', async () => {
   const dir = folder(['a', 'b', '.c', 'D/']);
   assert.equal(await folders.count(dir, os.tmpdir()), 3);
-  assert.equal(await folders.count(path.join(dir, 'gone')), null);
+  // count reads a missing cwd as none; its type asks for one.
+  assert.equal(await (folders.count as (dir: string, cwd?: string) => Promise<number | null>)(path.join(dir, 'gone')), null);
   const desktop = path.join(os.homedir(), 'Desktop');
   assert.equal(await folders.count(desktop, os.homedir()), null, 'not counted from outside');
 });

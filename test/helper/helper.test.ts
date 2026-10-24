@@ -1,18 +1,18 @@
 // Filedrawer's helper, asked the same questions the app asks, on temp files.
 // The clipboard and the Trash are put back the way they were.
-const { test, after } = require('node:test');
-const assert = require('node:assert/strict');
-const { execFileSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const { tempDir } = require('../support/electron');
-const { serve } = require('../support/helper');
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { tempDir } from '../support/electron';
+import { serve } from '../support/helper';
 
 const helper = serve();
 after(() => helper.stop());
 
 // A temp folder with these files and folders (name ending in /).
-function folder(entries = []) {
+function folder(entries: string[] = []) {
   const dir = tempDir();
   for (const e of entries) {
     if (e.endsWith('/')) fs.mkdirSync(path.join(dir, e), { recursive: true });
@@ -21,7 +21,7 @@ function folder(entries = []) {
   return dir;
 }
 
-const isPng = (b64) => Buffer.from(b64, 'base64').subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+const isPng = (b64: string) => Buffer.from(b64, 'base64').subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
 
 test('info gives names, kinds, hidden and package flags', async () => {
   const dir = folder(['notes.txt', '.secret', 'Sub/', 'Tool.app/']);
@@ -83,7 +83,8 @@ test('an alias points back at its item', async () => {
   const out = path.join(dir, 'a.txt alias');
   assert.equal((await helper.request('alias', { path: path.join(dir, 'a.txt'), to: out })).ok, true);
   const [info] = (await helper.request('info', { paths: [out] })).items;
-  assert.equal(fs.realpathSync(info.alias), fs.realpathSync(path.join(dir, 'a.txt')));
+  // An alias always has alias set; the type allows it missing for other items.
+  assert.equal(fs.realpathSync(info.alias!), fs.realpathSync(path.join(dir, 'a.txt')));
   assert.equal(info.aliasDir, false);
   await helper.request('alias', { path: path.join(dir, 'Sub'), to: path.join(dir, 'Sub alias') });
   assert.equal((await helper.request('info', { paths: [path.join(dir, 'Sub alias')] })).items[0].aliasDir, true);
@@ -152,7 +153,8 @@ test('an item goes to the Trash and comes back out', async () => {
   fs.writeFileSync(file, 'trash me');
   const { items } = await helper.request('trash', { paths: [file, path.join(dir, 'gone.txt')] });
   assert.equal(items[0].from, file);
-  assert.match(items[0].to, /\/\.Trash(es)?\//);
+  // A path that reached the Trash has to; the type allows it missing for a failure.
+  assert.match(items[0].to!, /\/\.Trash(es)?\//);
   assert.ok(items[1].error, 'a missing item says why');
   assert.equal(fs.existsSync(file), false);
   assert.equal((await helper.request('move', { from: items[0].to, to: file })).ok, true);

@@ -1,14 +1,23 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-const { ipcMain, BrowserWindow, tempDir } = require('../support/electron');
-const ops = require('../../src/main/ops');
-const copier = require('../../src/main/copier');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import path from 'path';
+import { ipcMain, BrowserWindow, tempDir } from '../support/electron';
+import ops = require('../../src/main/ops');
+import * as realCopier from '../../src/main/copier';
+import type { JobOptions, Pair } from '../../src/main/copier';
+import type { JobChoice, JobQuestion, JobUpdate } from '../../src/shared/types';
+
+// The tests leave target out of a pair that goes into dest, which the job
+// reads the same as target null.
+type LoosePair = Omit<Pair, 'target'> & { target?: string | null };
+const copier = {
+  start: (opts: Omit<JobOptions, 'pairs'> & { pairs: LoosePair[] }) => realCopier.start(opts as JobOptions)
+};
 
 // A temp folder with these files (name -> its name as text) and folders
 // (name ending in /).
-function folder(entries = []) {
+function folder(entries: string[] = []) {
   const dir = tempDir();
   for (const e of entries) {
     if (e.endsWith('/')) fs.mkdirSync(path.join(dir, e), { recursive: true });
@@ -17,23 +26,26 @@ function folder(entries = []) {
   return dir;
 }
 
-const names = (dir) => fs.readdirSync(dir).sort();
-const text = (p) => fs.readFileSync(p, 'utf8');
+const names = (dir: string) => fs.readdirSync(dir).sort();
+const text = (p: string) => fs.readFileSync(p, 'utf8');
 
 // Answers each question the job asks, in order, from its progress window,
 // as [choice, forAll]. Resolves with the questions asked.
-function answering(answers) {
-  const asked = [];
+function answering(answers: [JobChoice, boolean?][]) {
+  const asked: JobQuestion[] = [];
+  // The progress window is only ever sent job updates.
+  const question = (s: { payload: unknown }) => (s.payload as JobUpdate).question;
   const before = BrowserWindow.made.length;
   const timer = setInterval(() => {
     const win = BrowserWindow.made[before];
     if (!win) return;
-    const last = win.sent.filter((s) => s.payload.question).length;
+    const last = win.sent.filter((s) => question(s)).length;
     if (last > asked.length) {
-      const q = win.sent.filter((s) => s.payload.question)[asked.length].payload.question;
+      const q = question(win.sent.filter((s) => question(s))[asked.length]) as JobQuestion;
       asked.push(q);
       const [choice, all] = answers.shift() || ['cancel'];
-      ipcMain.handlers['job:answer'](null, win.query.id, choice, all);
+      // loadFile always sets query, and the job loads its window first.
+      ipcMain.handlers['job:answer'](null, win.query!.id, choice, all);
     }
   }, 5);
   return { asked, stop: () => clearInterval(timer) };

@@ -1,6 +1,8 @@
 // The progress window of a copy or move, fed updates like the copier sends.
+import type { JobUpdate } from '../../../src/shared/types';
+
 const PAGE = 'progress/index.html?id=7';
-const update = (u) => cy.fake().then((api) => api.emit('job', { title: 'Copying 3 items', line: 'to "Backup"', current: '', fraction: 0, left: '', question: null, ...u }));
+const update = (u: Partial<JobUpdate>) => cy.fake().then((api) => api.emit('job', { title: 'Copying 3 items', line: 'to "Backup"', current: '', fraction: 0, left: '', question: null, ...u }));
 
 describe('progress window', () => {
   it('shows what is being copied, how far along and the time left', () => {

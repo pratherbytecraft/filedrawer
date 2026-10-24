@@ -1,7 +1,12 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-require('../support/electron');
-const { spotlightQuery } = require('../../src/main/search');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import '../support/electron';
+import { spotlightQuery as realQuery } from '../../src/main/search';
+
+// The tests give only the fields they set, which the query reads the same
+// as empty ones.
+type Query = Parameters<typeof realQuery>[0];
+const spotlightQuery = (q: Partial<Query>) => realQuery(q as Query);
 
 test('an empty search finds everything', () => {
   assert.equal(spotlightQuery({}), 'kMDItemFSName == "*"');
