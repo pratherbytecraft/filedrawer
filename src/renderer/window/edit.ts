@@ -416,7 +416,19 @@ function placeEntries(p: string) {
   return entries;
 }
 
+// A site in the Sites box: open it, or change it in Site Manager.
+function siteEntries(id: string): MenuItem[] {
+  return [{ label: 'Open', bold: true, click: () => openSite(id) }, { label: 'Open in New Window', click: () => openSite(id, { newWindow: true }) },
+    { label: 'Open in New Tab', click: () => openSite(id, { inTab: true }) }, 'sep', { label: 'Edit in Site Manager...', click: () => api.openSiteManager(id) }];
+}
+
 $('pane').addEventListener('contextmenu', (e) => {
+  const site = (e.target as HTMLElement).closest<Data<'site'>>('[data-site]');
+  if (site) {
+    e.preventDefault();
+    openMenu(siteEntries(site.dataset.site), e.clientX, e.clientY);
+    return;
+  }
   const place = (e.target as HTMLElement).closest<Data<'place'>>('[data-place]');
   if (!place) return;
   e.preventDefault();

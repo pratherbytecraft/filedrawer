@@ -29,6 +29,7 @@ import * as chooser from './chooser';
 import places = require('./places');
 import * as remote from './remote';
 import * as sites from './sites';
+import * as sitemanager from './sitemanager';
 import * as ipc from './ipc';
 import type {
   EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
@@ -137,7 +138,7 @@ function siblingsAbout(): Sibling[] {
 // Every window that shows settings: the folder windows and the settings window.
 function broadcast<K extends keyof Events>(channel: K, ...payload: ipc.Payload<K>) {
   for (const win of windows) if (!win.isDestroyed()) ipc.send(win.webContents, channel, ...payload);
-  for (const w of [prefs.window(), welcome.window()]) if (w && !w.isDestroyed()) ipc.send(w.webContents, channel, ...payload);
+  for (const w of [prefs.window(), welcome.window(), sitemanager.window()]) if (w && !w.isDestroyed()) ipc.send(w.webContents, channel, ...payload);
 }
 
 function pushState() {
@@ -561,6 +562,13 @@ function buildMenu() {
         cmd('Open', 'open', 'CmdOrCtrl+Down'),
         cmd('Open Terminal Here', 'terminal', 'CmdOrCtrl+Alt+T'),
         cmd('Find...', 'find', 'CmdOrCtrl+F'),
+        {
+          label: 'Site Manager...',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            sitemanager.show(win && windows.has(win) ? win : null);
+          }
+        },
         { type: 'separator' },
         cmd('New Folder', 'newFolder', 'CmdOrCtrl+Shift+N'),
         cmd('New Text Document', 'newText', null),
@@ -594,7 +602,16 @@ function buildMenu() {
         { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => editOrFiles('copy') },
         { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => editOrFiles('paste') },
         cmd('Copy Path', 'copyPath', 'Alt+CmdOrCtrl+C'),
-        cmd('Select All', 'selectAll', 'CmdOrCtrl+A')
+        {
+          label: 'Select All',
+          accelerator: 'CmdOrCtrl+A',
+          enabled: hasWindow,
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && windows.has(win)) send('selectAll');
+            else if (win) win.webContents.selectAll();
+          }
+        }
       ]
     },
     {
@@ -914,6 +931,7 @@ function moveStep(res: copier.JobResult): undo.Step {
 function undoOrType(which: UndoWhich) {
   const win = BrowserWindow.getFocusedWindow();
   if (win && windows.has(win)) ipc.send(win.webContents, 'command', { command: which });
+  else if (win && sitemanager.typesText(win)) win.webContents[which]();
   else runUndo(which);
 }
 
@@ -1168,6 +1186,20 @@ ipc.handle('folder:place', (_e, dir) => places.placeOf(dir));
 
 ipc.handle('site:home', (_e, id) => remote.home(id));
 
+// Connect in Site Manager opens the site in the window it was opened from,
+// or in a new window.
+sitemanager.init({
+  onConnect: (id, win) => {
+    if (win && windows.has(win) && !win.isDestroyed()) {
+      ipc.send(win.webContents, 'command', { command: 'openSite', arg: id });
+      win.focus();
+    } else {
+      remote.home(id).then((dir) => openWindow(dir));
+    }
+  }
+});
+remote.setAskSecret(sitemanager.askSecret);
+
 // Whether each site in the sidebar answers: every minute while a window is
 // open, and when a window says the Mac is back online.
 const SITE_CHECK = 60 * 1000;
@@ -1175,7 +1207,7 @@ function checkSites() {
   if (![...windows].some((w) => !w.isDestroyed() && w.isVisible())) return;
   remote.check(sites.all().filter((s) => s.shown));
 }
-ipc.on('sites:check', () => checkSites());
+ipc.on('sites:check', () => remote.check(sites.all().filter((s) => s.shown)));
 setInterval(checkSites, SITE_CHECK);
 remote.onStatus((status) => broadcast('sites:status', status));
 

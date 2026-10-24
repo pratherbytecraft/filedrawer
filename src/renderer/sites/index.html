@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>Site Manager</title>
+<link rel="stylesheet" href="sites.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="g-drive" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e9e9"/><stop offset="1" stop-color="#a9a9a9"/></linearGradient>
+    <linearGradient id="g-manila" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde79a"/><stop offset="1" stop-color="#f1c447"/></linearGradient>
+    <symbol id="p-site" viewBox="0 0 16 16"><rect x="2" y="1.5" width="12" height="5.5" rx="1" fill="url(#g-drive)" stroke="#6b6b6b" stroke-width=".7"/><rect x="2" y="8.5" width="12" height="5.5" rx="1" fill="url(#g-drive)" stroke="#6b6b6b" stroke-width=".7"/><circle cx="11.5" cy="4.25" r=".9" fill="#45d045"/><circle cx="11.5" cy="11.25" r=".9" fill="#45d045"/><path d="M4 4.25h4M4 11.25h4" stroke="#6b6b6b" stroke-width=".8"/></symbol>
+    <symbol id="p-folder" viewBox="0 0 16 16"><path d="M1 3.5A.75.75 0 0 1 1.75 2.75h4l1.25 1.5h7.25A.75.75 0 0 1 15 5v8a.75.75 0 0 1-.75.75H1.75A.75.75 0 0 1 1 13z" fill="url(#g-manila)" stroke="#b9821b" stroke-width=".6"/></symbol>
+    <symbol id="p-key" viewBox="0 0 16 16"><circle cx="5" cy="8" r="3.2" fill="#e2b33b" stroke="#946b0f" stroke-width=".8"/><circle cx="4.3" cy="8" r=".9" fill="#946b0f"/><path d="M8 7.2h6.5v1.6H13v1.6h-1.6V8.8H8z" fill="#e2b33b" stroke="#946b0f" stroke-width=".6"/></symbol>
+  </defs>
+</svg>
+<div class="panes">
+  <div class="left">
+    <div class="list" id="list" tabindex="0"></div>
+    <div class="btns">
+      <button id="b-new">New Site</button><button id="b-dup">Duplicate</button>
+      <button id="b-ren">Rename</button><button id="b-del">Delete</button>
+    </div>
+  </div>
+  <div class="right" id="form"></div>
+</div>
+<div class="foot"><span class="err" id="err"></span><span class="sp"></span><button id="b-cancel">Cancel</button><button id="b-save">Save</button><button id="b-connect" class="main">Connect</button></div>
+<script src="../shared/theme.js"></script>
+<script src="sites.js"></script>
+</body>
+</html>

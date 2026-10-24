@@ -312,20 +312,23 @@ describe('file window', () => {
         '::site/ssh-lab/home': ['me/']
       };
     });
-    cy.get('[data-box="sites"] .row').should('have.length', 1).and('contain.text', 'homelab');
+    cy.get('[data-box="sites"] [data-site]').should('have.length', 1).and('contain.text', 'homelab');
+    cy.get('[data-box="sites"] [data-sitemanager]').should('contain.text', 'Site Manager');
     cy.get('[data-box="sites"] .dot').should('have.class', 'up');
-    cy.get('[data-box="sites"] .row').click();
+    cy.get('[data-box="sites"] [data-site]').click();
     cy.calls('siteHome').should('deep.equal', [['ssh-lab']]);
     cy.get('#title').should('have.text', 'me');
     cy.get('#path').should('have.value', 'me@homelab.local:/home/me');
     names().should('have.members', ['Media', 'notes.md']);
     cy.get('#st3').should('have.text', 'Connected to homelab.local');
-    cy.get('[data-box="sites"] .row').should('have.class', 'here');
+    cy.get('[data-box="sites"] [data-site]').should('have.class', 'here');
     cy.get('#b-up').click();
     cy.get('#path').should('have.value', 'me@homelab.local:/home');
     // The server stops answering: the dot goes grey.
     cy.fake().then((api) => api.emit('siteStatus', { 'ssh-lab': false }));
     cy.get('[data-box="sites"] .dot').should('have.class', 'down');
+    cy.get('[data-box="sites"] [data-sitemanager]').click();
+    cy.calls('openSiteManager').should('have.length', 1);
   });
 
   it('a site that can\'t be reached says why and can be tried again', () => {

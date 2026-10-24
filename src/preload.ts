@@ -116,7 +116,17 @@ const api: FiledrawerApi = {
   welcome: (what) => send('welcome', what),
   siteHome: (id) => invoke('site:home', id),
   checkSites: () => send('sites:check'),
-  onSiteStatus: on('sites:status')
+  onSiteStatus: on('sites:status'),
+  openSiteManager: (select) => send('sites:open', select),
+  sitesGet: () => invoke('sites:get'),
+  sitesSave: (change) => invoke('sites:save', change),
+  browseKey: (current) => invoke('sites:browseKey', current),
+  browseLocal: (current) => invoke('sites:browseLocal', current),
+  connectSite: (id) => send('sites:connect', id),
+  closeSiteManager: () => send('sites:close'),
+  onSitesSelect: on('sites:select'),
+  secretGet: () => invoke('secret:get'),
+  secretDone: (answer) => send('secret:done', answer)
 };
 
 contextBridge.exposeInMainWorld('filedrawer', api);

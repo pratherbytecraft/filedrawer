@@ -9,6 +9,8 @@ import path from 'path';
 import { Client, utils, type AnyAuthMethod, type SFTPWrapper, type Stats } from '../vendor/ssh2';
 import * as sites from './sites';
 import * as sshconfig from './sshconfig';
+import * as secrets from './secrets';
+import type { SecretAnswer, SecretAsk } from '../shared/types';
 import type { Completion, Item, Listing, ListError, ListOptions, Resolved, SiteStatus } from '../shared/types';
 
 type Site = sites.Site;
@@ -17,14 +19,20 @@ const IDLE = 5 * 60 * 1000; // a connection nobody used for this long is closed
 const REACH_TIMEOUT = 8000; // ms to wait for the server to answer at all
 const PROBE_TIMEOUT = 4000; // ms for the online check
 const CALL_TIMEOUT = 15000; // ms a server gets to answer one request before its connection is dropped
+const LOGIN_TIMEOUT = 30000; // ms the login itself may take, once the server's key is settled
 const posix = path.posix;
 
-// Why a site couldn't be used, with a sentence for the window.
+// Why a site couldn't be used, with a sentence for the window. locked is
+// a key that has a passphrase, when that may be why the login failed.
 export class SiteError extends Error {
   kind: ListError;
-  constructor(kind: ListError, message: string) {
+  locked: string | null;
+  declined: boolean; // the user said no
+  constructor(kind: ListError, message: string, locked: string | null = null, declined = false) {
     super(message);
     this.kind = kind;
+    this.locked = locked;
+    this.declined = declined;
   }
 }
 
@@ -40,6 +48,12 @@ export interface HostQuestion {
 let ask: (q: HostQuestion) => Promise<boolean> = async () => false;
 export function setAsk(fn: (q: HostQuestion) => Promise<boolean>) {
   ask = fn;
+}
+
+// Set by the main process: the sheet that asks for a password or passphrase.
+let askSecret: (a: SecretAsk) => Promise<SecretAnswer | null> = async () => null;
+export function setAskSecret(fn: (a: SecretAsk) => Promise<SecretAnswer | null>) {
+  askSecret = fn;
 }
 
 // ---------- whether a site's server answers ----------
@@ -105,10 +119,10 @@ const conns = new Map<string, Promise<Conn>>();
 // What a connection depends on: when any of it changes, a new one is made.
 const signature = (s: Site) => JSON.stringify([s.host, s.port, s.user, s.logon, s.keys]);
 
-// Keys ssh2 can use: readable, and not locked with a passphrase (those
-// work through the SSH agent). Says which ones were locked.
-function usableKeys(files: string[]) {
-  const keys: Buffer[] = [];
+// Keys ssh2 can use: readable, and not locked with a passphrase unless
+// it was given. Says which ones are still locked.
+function usableKeys(files: string[], passphrase?: string) {
+  const keys: { key: Buffer; passphrase?: string }[] = [];
   const locked: string[] = [];
   for (const f of files) {
     let data: Buffer;
@@ -119,12 +133,20 @@ function usableKeys(files: string[]) {
     }
     const parsed = utils.parseKey(data);
     if (parsed instanceof Error) {
-      if (/passphrase|encrypted/i.test(parsed.message)) locked.push(f);
+      if (!/passphrase|encrypted/i.test(parsed.message)) continue;
+      if (passphrase !== undefined && !(utils.parseKey(data, passphrase) instanceof Error)) keys.push({ key: data, passphrase });
+      else locked.push(f);
       continue;
     }
-    keys.push(data);
+    keys.push({ key: data });
   }
   return { keys, locked };
+}
+
+// What a login uses besides keys and the agent.
+interface Creds {
+  password?: string;
+  passphrase?: string;
 }
 
 // ssh2's names for the key types known_hosts can hold.
@@ -138,7 +160,7 @@ const HOST_KEY_ALGOS: Record<string, string[]> = {
 
 const shortPath = (f: string) => f.replace(sshconfig.sshDir(), '~/.ssh');
 
-async function connect(site: Site): Promise<Conn> {
+async function connect(site: Site, creds: Creds = {}): Promise<Conn> {
   if (site.proxy) throw new SiteError('other', `${site.name} is reached through another host in your SSH config, which Filedrawer can't do yet.`);
   let sock: net.Socket;
   try {
@@ -148,20 +170,57 @@ async function connect(site: Site): Promise<Conn> {
     throw new SiteError('offline', `${site.host} isn't answering. The site opens as soon as the server is back on the network.`);
   }
   setStatus(site.id, true);
-  const { keys, locked } = usableKeys(site.keys);
+  const usesPassword = site.logon === 'password' || site.logon === 'ask';
+  const { keys, locked } = usesPassword ? { keys: [], locked: [] } : usableKeys(site.keys, creds.passphrase);
   const agent = process.env.SSH_AUTH_SOCK;
   const methods: AnyAuthMethod[] = [];
-  const keyMethods: AnyAuthMethod[] = keys.map((key) => ({ type: 'publickey', username: site.user, key }));
+  const keyMethods: AnyAuthMethod[] = keys.map((k) => ({ type: 'publickey', username: site.user, key: k.key, passphrase: k.passphrase }));
   const agentMethods: AnyAuthMethod[] = agent ? [{ type: 'agent', username: site.user, agent }] : [];
-  if (site.logon === 'agent') methods.push(...agentMethods, ...keyMethods);
-  else methods.push(...keyMethods, ...agentMethods);
+  const pw = creds.password || '';
+  if (usesPassword) {
+    // Servers take a password one of two ways. Only one is tried: macOS's
+    // own server never answers a wrong password given the second way.
+    methods.push({ type: 'password', username: site.user, password: pw },
+      { type: 'keyboard-interactive', username: site.user, prompt: (_n, _i, _l, prompts, finish) => finish(prompts.map(() => pw)) });
+  } else if (site.logon === 'agent') {
+    methods.push(...agentMethods, ...keyMethods);
+  } else {
+    methods.push(...keyMethods, ...agentMethods);
+  }
   if (!methods.length) {
     sock.destroy();
     throw new SiteError('login', locked.length
-      ? `The key ${shortPath(locked[0])} has a passphrase. Add it to your SSH agent with ssh-add, then try again.`
-      : `Filedrawer couldn't find a key to log in to ${site.host} with. Pick a key file in Site Manager.`);
+      ? `The key ${shortPath(locked[0])} has a passphrase.`
+      : `Filedrawer couldn't find a key to log in to ${site.host} with. Pick a key file in Site Manager.`, locked[0] || null);
   }
   let refused: 'changed' | 'declined' | null = null;
+  // The methods in order, each tried when the server allows it. A password
+  // site asks the server what it allows first, with none.
+  const queue = methods.slice();
+  let askedNone = false;
+  let triedPassword = false;
+  let loginTimer: NodeJS.Timeout | undefined;
+  let loginLate = false;
+  const authHandler = (left: string[] | null, _partial: boolean, next: (m: AnyAuthMethod | false) => void) => {
+    if (!loginTimer) {
+      loginTimer = setTimeout(() => {
+        loginLate = true;
+        client.end();
+      }, LOGIN_TIMEOUT);
+    }
+    if (usesPassword && !askedNone && !left) {
+      askedNone = true;
+      return next({ type: 'none', username: site.user });
+    }
+    while (queue.length) {
+      const m = queue.shift() as AnyAuthMethod;
+      if (m.type === 'keyboard-interactive' && triedPassword) continue;
+      if (left && !left.includes(m.type === 'agent' ? 'publickey' : m.type)) continue;
+      if (m.type === 'password') triedPassword = true;
+      return next(m);
+    }
+    next(false);
+  };
   const known = sshconfig.knownTypes(site.host, site.port).flatMap((t) => HOST_KEY_ALGOS[t] || []);
   const client = new Client();
   const ready = new Promise<void>((resolve, reject) => {
@@ -175,7 +234,7 @@ async function connect(site: Site): Promise<Conn> {
     readyTimeout: 10 * 60 * 1000, // the key question can sit open; the server answered already
     keepaliveInterval: 15 * 1000,
     keepaliveCountMax: 2,
-    authHandler: methods,
+    authHandler: authHandler as never,
     algorithms: known.length ? { serverHostKey: { prepend: known as never[] } as never } : undefined,
     hostVerifier: (key: Buffer, verify: (ok: boolean) => void) => {
       const seen = sshconfig.checkKey(site.host, site.port, key);
@@ -200,17 +259,20 @@ async function connect(site: Site): Promise<Conn> {
   });
   try {
     await ready;
+    clearTimeout(loginTimer);
   } catch (err) {
+    clearTimeout(loginTimer);
     client.end();
+    if (loginLate) throw new SiteError('login', `${site.host} didn't finish the login. Check the user and ${usesPassword ? 'password' : 'key'} in Site Manager.`);
     if (refused === 'changed') {
       throw new SiteError('hostkey', `The key ${site.host} sent isn't the one in ~/.ssh/known_hosts, so Filedrawer didn't connect. If you know why it changed, remove its old line from that file and try again.`);
     }
-    if (refused === 'declined') throw new SiteError('hostkey', `Filedrawer didn't connect to ${site.host}.`);
+    if (refused === 'declined') throw new SiteError('hostkey', `Filedrawer didn't connect to ${site.host}.`, null, true);
     const level = (err as { level?: string }).level;
     if (level === 'client-authentication') {
-      throw new SiteError('login', locked.length
-        ? `Filedrawer couldn't log in to ${site.user}@${site.host}. The key ${shortPath(locked[0])} has a passphrase, add it to your SSH agent with ssh-add and try again.`
-        : `Filedrawer couldn't log in to ${site.user}@${site.host}. Check the user and key in Site Manager.`);
+      throw new SiteError('login', usesPassword
+        ? `Filedrawer couldn't log in to ${site.user}@${site.host}. Check the user and password in Site Manager.`
+        : `Filedrawer couldn't log in to ${site.user}@${site.host}. Check the user and key in Site Manager.`, locked[0] || null);
     }
     throw new SiteError('other', `Filedrawer couldn't connect to ${site.host}: ${(err as Error).message}`);
   }
@@ -241,7 +303,7 @@ async function conn(site: Site): Promise<Conn> {
     }
   }
   if (!p) {
-    const made = connect(site);
+    const made = logIn(site);
     conns.set(site.id, made);
     made.then((c) => {
       c.client.on('close', () => {
@@ -257,6 +319,81 @@ async function conn(site: Site): Promise<Conn> {
   clearTimeout(c.timer);
   c.timer = setTimeout(() => close(site.id), IDLE);
   return c;
+}
+
+// Passwords typed for Ask for password sites, kept until Filedrawer quits
+// so a connection made again after a quiet spell doesn't ask again.
+const typed = new Map<string, string>();
+
+// Connects, asking for a password or a key's passphrase when the site
+// needs one, and again when one doesn't work.
+// A no to a password, passphrase or new server key holds for a moment, so
+// the window's next request right after it doesn't ask again.
+const saidNo = new Map<string, { at: number; err: SiteError }>();
+const NO_HOLDS = 5000;
+
+async function logIn(site: Site): Promise<Conn> {
+  const no = saidNo.get(site.id);
+  if (no && Date.now() - no.at < NO_HOLDS) throw no.err;
+  try {
+    return await logInAsking(site);
+  } catch (err) {
+    if (err instanceof SiteError && err.declined) saidNo.set(site.id, { at: Date.now(), err });
+    throw err;
+  }
+}
+
+async function logInAsking(site: Site): Promise<Conn> {
+  const creds: Creds = {};
+  let note = '';
+  let fromSheet: SecretAnswer | null = null;
+  if (site.logon === 'password') creds.password = secrets.get(site.id) ?? undefined;
+  if (site.logon === 'ask') creds.password = typed.get(site.id);
+  for (let tries = 0; tries < 4; tries++) {
+    if ((site.logon === 'password' || site.logon === 'ask') && creds.password === undefined) {
+      fromSheet = await askSecret({
+        title: `Log in to ${site.name}`,
+        detail: note || `Password for ${site.user}@${site.host}`,
+        label: 'Password',
+        canSave: site.logon === 'password' && site.from === 'saved'
+      });
+      if (!fromSheet) throw new SiteError('login', `Filedrawer didn't log in to ${site.user}@${site.host}.`, null, true);
+      creds.password = fromSheet.value;
+    }
+    try {
+      const c = await connect(site, creds);
+      if (fromSheet && fromSheet.save) secrets.set(site.id, fromSheet.value);
+      if (site.logon === 'ask') typed.set(site.id, creds.password || '');
+      return c;
+    } catch (err) {
+      if (!(err instanceof SiteError) || err.kind !== 'login') throw err;
+      if (site.logon === 'password' || site.logon === 'ask') {
+        creds.password = undefined;
+        typed.delete(site.id);
+        note = `That password didn't work for ${site.user}@${site.host}. Try again.`;
+        continue;
+      }
+      if (err.locked) {
+        const a = await askSecret({
+          title: `Unlock ${shortPath(err.locked)}`,
+          detail: creds.passphrase === undefined ? `The key ${shortPath(err.locked)} has a passphrase.` : `That passphrase didn't unlock ${shortPath(err.locked)}. Try again.`,
+          label: 'Passphrase',
+          canSave: false
+        });
+        if (!a) throw new SiteError('login', `Filedrawer didn't log in to ${site.user}@${site.host}.`, null, true);
+        creds.passphrase = a.value;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new SiteError('login', `Filedrawer couldn't log in to ${site.user}@${site.host}.`);
+}
+
+// Forgets the connection and typed password of a site, after its settings change.
+export function forget(id: string) {
+  typed.delete(id);
+  close(id);
 }
 
 export function closeAll() {

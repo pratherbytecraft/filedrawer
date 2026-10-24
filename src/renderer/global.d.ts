@@ -41,6 +41,10 @@ declare global {
   type SiteStatus = T.SiteStatus;
   type SavedSite = T.SavedSite;
   type SiteLogon = T.SiteLogon;
+  type SiteManagerData = T.SiteManagerData;
+  type SitesChange = T.SitesChange;
+  type SecretAsk = T.SecretAsk;
+  type SecretAnswer = T.SecretAnswer;
 
   // The pages keep their timers in variables that start as null, and the
   // browser takes null here and does nothing.

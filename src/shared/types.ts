@@ -365,6 +365,37 @@ export interface SiteInfo {
 // Site id -> whether its server answered the last time Filedrawer checked.
 export type SiteStatus = Record<string, boolean>;
 
+// What Site Manager edits: the saved sites, the config hosts (read only
+// but for their sidebar tick), and which sites have a saved password.
+export interface SiteManagerData {
+  saved: SavedSite[];
+  config: SiteInfo[];
+  configShown: string[];
+  passwords: string[]; // site ids
+  select: string | null;
+}
+
+// Save in Site Manager. passwords: a new password for a site, or null to
+// forget the saved one; sites left out keep theirs.
+export interface SitesChange {
+  saved: SavedSite[];
+  configShown: string[];
+  passwords: Record<string, string | null>;
+}
+
+// The password and passphrase sheet.
+export interface SecretAsk {
+  title: string;
+  detail: string;
+  label: string; // Password or Passphrase
+  canSave: boolean;
+}
+
+export interface SecretAnswer {
+  value: string;
+  save: boolean;
+}
+
 // ---------- the state ----------
 
 export interface SystemLook {
@@ -489,6 +520,12 @@ export interface Invokes {
   'window:waitFolder': { args: []; result: string | null };
   // The folder a site opens in: its start folder or the home folder on the server.
   'site:home': { args: [id: string]; result: string };
+  'sites:get': { args: []; result: SiteManagerData | null };
+  'sites:save': { args: [change: SitesChange]; result: { error?: string } };
+  // A key file, or a Mac folder for Two Panes, from the Mac's open panel.
+  'sites:browseKey': { args: [current: string]; result: string | null };
+  'sites:browseLocal': { args: [current: string]; result: string | null };
+  'secret:get': { args: []; result: SecretAsk | null };
 }
 
 // Pages to main, one way: the arguments.
@@ -539,6 +576,13 @@ export interface Sends {
   welcome: [what: WelcomeChoice];
   // Check which sites answer now, after the Mac came back online.
   'sites:check': [];
+  // Site Manager, with a site picked.
+  'sites:open': [select?: string];
+  // Opens a site in the window Site Manager was opened from.
+  'sites:connect': [id: string];
+  'sites:close': [];
+  // null for Cancel.
+  'secret:done': [answer: SecretAnswer | null];
 }
 
 // Main to pages: the payload.
@@ -555,6 +599,8 @@ export interface Events {
   'job:update': JobUpdate;
   'settings:page': SettingsPage;
   'sites:status': SiteStatus;
+  // Site Manager, already open, picks this site.
+  'sites:select': string;
 }
 
 type Listen<T> = (fn: (payload: T) => void) => () => void;
@@ -667,4 +713,16 @@ export interface FiledrawerApi {
   siteHome(id: string): Promise<string>;
   checkSites(): void;
   onSiteStatus: Listen<SiteStatus>;
+  // Site Manager.
+  openSiteManager(select?: string): void;
+  sitesGet(): Promise<SiteManagerData | null>;
+  sitesSave(change: SitesChange): Promise<{ error?: string }>;
+  browseKey(current: string): Promise<string | null>;
+  browseLocal(current: string): Promise<string | null>;
+  connectSite(id: string): void;
+  closeSiteManager(): void;
+  onSitesSelect: Listen<string>;
+  // The password sheet.
+  secretGet(): Promise<SecretAsk | null>;
+  secretDone(answer: SecretAnswer | null): void;
 }

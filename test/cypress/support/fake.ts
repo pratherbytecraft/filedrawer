@@ -98,6 +98,18 @@ export function fakeFiledrawer(names: string[], state: State, extra: Extra = {})
     waitFolder: () => null,
     // A site opens in /home/me on its server.
     siteHome: (id: string) => `::site/${id}/home/me`,
+    // Site Manager: one saved site with a password, and two config hosts, one ticked.
+    sitesGet: () => ({
+      saved: [{ id: 's1', name: 'Work', host: 'files.example.com', port: 22, user: 'me', logon: 'password', key: '', start: '', local: '', side: true }],
+      config: ['homelab', 'storage'].map((name) => ({
+        id: `ssh-${name}`, name, host: 'homelab.local', port: 22, user: name, from: 'config', shown: name === 'storage',
+        logon: 'agent', key: '', start: '', local: '', proxy: false
+      })),
+      configShown: ['storage'],
+      passwords: ['s1'],
+      select: null
+    }),
+    sitesSave: () => ({}),
     askExtension: () => false,
     openWithApps: () => [],
     terminals: () => [{ name: 'Terminal', path: '/System/Applications/Utilities/Terminal.app', icon: '' }],
