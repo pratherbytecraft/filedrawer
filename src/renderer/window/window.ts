@@ -1647,15 +1647,15 @@ function pinnedBox() {
 // The sites ticked to show in the sidebar, each with a dot that's green
 // while its server answers.
 const shownSites = () => (app ? app.sites.filter((s) => s.shown) : []);
-// The box shows once there's any site, saved or in ~/.ssh/config, and
-// ends with Site Manager.
+// The box shows once there's any site, saved or in ~/.ssh/config. Its
+// right click opens Site Manager; with no site ticked yet it says so.
 function sitesBox() {
   if (!app || !app.sites.length) return '';
   const here = siteAt(cwd);
-  return box('sites', 'Sites', shownSites().map((s) =>
+  const rows = shownSites().map((s) =>
     `<div class="row${here && here.id === s.id ? ' here' : ''}" data-site="${esc(s.id)}" title="${esc(`${s.user}@${s.host}`)}"><svg><use href="#p-site"/></svg>` +
-    `<span class="lb">${esc(s.name)}</span><span class="dot${siteStatus[s.id] === false ? ' down' : siteStatus[s.id] ? ' up' : ''}"></span></div>`).join('') +
-    '<div class="row" data-sitemanager="1"><svg><use href="#p-props"/></svg><span class="lb">Site Manager...</span></div>');
+    `<span class="lb">${esc(s.name)}</span><span class="dot${siteStatus[s.id] === false ? ' down' : siteStatus[s.id] ? ' up' : ''}"></span></div>`).join('');
+  return box('sites', 'Sites', rows || '<div class="hint">Right click here for Site Manager.</div>');
 }
 
 // Opens a site in its start folder, or the home folder on the server.
@@ -1773,7 +1773,6 @@ $('pane').addEventListener('click', (e) => {
   }
   const site = (e.target as HTMLElement).closest<Data<'site'>>('[data-site]');
   if (site) openSite(site.dataset.site);
-  if ((e.target as HTMLElement).closest('[data-sitemanager]')) api.openSiteManager();
 });
 
 // Pinning by dropping a folder on the Pinned box (not on a pin, which moves

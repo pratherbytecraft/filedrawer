@@ -439,7 +439,8 @@ function placeEntries(p: string) {
 // A site in the Sites box: open it, or change it in Site Manager.
 function siteEntries(id: string): MenuItem[] {
   return [{ label: 'Open', bold: true, click: () => openSite(id) }, { label: 'Open in New Window', click: () => openSite(id, { newWindow: true }) },
-    { label: 'Open in New Tab', click: () => openSite(id, { inTab: true }) }, 'sep', { label: 'Edit in Site Manager...', click: () => api.openSiteManager(id) }];
+    { label: 'Open in New Tab', click: () => openSite(id, { inTab: true }) }, 'sep', { label: 'Edit in Site Manager...', click: () => api.openSiteManager(id) },
+    { label: 'Site Manager...', click: () => api.openSiteManager() }];
 }
 
 $('pane').addEventListener('contextmenu', (e) => {
@@ -447,6 +448,12 @@ $('pane').addEventListener('contextmenu', (e) => {
   if (site) {
     e.preventDefault();
     openMenu(siteEntries(site.dataset.site), e.clientX, e.clientY);
+    return;
+  }
+  // Anywhere else in the Sites box, its heading too: Site Manager.
+  if ((e.target as HTMLElement).closest('[data-box="sites"]')) {
+    e.preventDefault();
+    openMenu([{ label: 'Site Manager...', bold: true, click: () => api.openSiteManager() }], e.clientX, e.clientY);
     return;
   }
   const place = (e.target as HTMLElement).closest<Data<'place'>>('[data-place]');

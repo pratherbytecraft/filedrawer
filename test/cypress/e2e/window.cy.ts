@@ -313,7 +313,6 @@ describe('file window', () => {
       };
     });
     cy.get('[data-box="sites"] [data-site]').should('have.length', 1).and('contain.text', 'homelab');
-    cy.get('[data-box="sites"] [data-sitemanager]').should('contain.text', 'Site Manager');
     cy.get('[data-box="sites"] .dot').should('have.class', 'up');
     cy.get('[data-box="sites"] [data-site]').click();
     cy.calls('siteHome').should('deep.equal', [['ssh-lab']]);
@@ -327,8 +326,10 @@ describe('file window', () => {
     // The server stops answering: the dot goes grey.
     cy.fake().then((api) => api.emit('siteStatus', { 'ssh-lab': false }));
     cy.get('[data-box="sites"] .dot').should('have.class', 'down');
-    cy.get('[data-box="sites"] [data-sitemanager]').click();
-    cy.calls('openSiteManager').should('have.length', 1);
+    cy.get('[data-box="sites"] h3').rightclick();
+    cy.get('#menu .mi').then((els) => [...els].map((e) => e.textContent)).should('deep.equal', ['Site Manager...']);
+    cy.contains('#menu .mi', 'Site Manager...').click();
+    cy.calls('openSiteManager').should('deep.equal', [[]]);
   });
 
   it('a site that can\'t be reached says why and can be tried again', () => {
