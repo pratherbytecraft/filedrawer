@@ -1135,7 +1135,13 @@ app.whenReady().then(() => {
     if (at) execFile('open', ['-a', at], (err) => err && console.log(`Filedrawer: ${key} didn't open: ${err.message}`));
   });
   ipcMain.on('link', (_e, name) => {
-    const links = { kofi: 'https://ko-fi.com/prathercc', issues: PKG.bugs.url, github: PKG.homepage };
+    const links = {
+      website: 'https://pratherbytecraft.com',
+      github: PKG.homepage,
+      community: 'https://www.reddit.com/r/pratherbytecraft/',
+      kofi: 'https://ko-fi.com/prathercc',
+      issues: PKG.bugs.url
+    };
     if (links[name]) shell.openExternal(links[name]);
   });
   app.setAboutPanelOptions({

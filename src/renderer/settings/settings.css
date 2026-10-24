@@ -86,11 +86,17 @@
   .apps .app img { width: 34px; height: 34px; }
   .apps .app i { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 13px; color: #fff; }
   .foot-note { font-size: 11px; color: var(--muted); margin: 8px 2px 0; line-height: 1.45; }
-  .about { text-align: center; padding: 14px 0 6px; }
-  .about .icon { width: 84px; height: 84px; margin: 0 auto 10px; }
-  .about h1 { font-size: 20px; margin: 0; }
-  .about p { color: var(--muted); margin: 4px 0; font-size: 12px; }
-  .about .links { display: flex; gap: 8px; justify-content: center; margin: 14px 0 6px; }
+  /* About, the same as Shotdrawer's and Startbar's */
+  .about { text-align: center; padding: 26px 20px 14px; }
+  .about .icon { width: 84px; height: 84px; display: block; margin: 0 auto; }
+  .about .name { font-size: 22px; font-weight: 700; margin-top: 8px; }
+  .about .by { font-weight: 500; margin-top: 2px; background: linear-gradient(90deg, #9fa8ff, #5865F2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .about .ver { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .about .links { display: flex; justify-content: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .about .pill { padding: 5px 12px; border-radius: 14px; background: rgba(128, 128, 128, .18); font-size: 12px; font-weight: 500; cursor: default; }
+  .about .pill:hover { background: rgba(128, 128, 128, .28); }
+  .about-copy { text-align: center; font-size: 11px; color: var(--muted); margin: 22px 0 6px; }
+  .searching .about-copy { display: none; }
   .sib .sib-icon { width: 36px; height: 36px; flex: none; }
   .sib .sib-icon svg { width: 100%; height: 100%; display: block; }
   .sib .lbl { font-weight: 600; }

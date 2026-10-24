@@ -25,6 +25,16 @@ describe('settings window', () => {
     cy.calls('updateSettings').should('deep.include', [{ theme: 'classic-1995' }]);
   });
 
+  it('About has the icon, version and the four links', () => {
+    cy.page('settings/index.html');
+    open('About');
+    cy.get('#about-version').should('have.text', 'Version 9.9.9');
+    cy.get('.about .by').should('have.text', 'by Prather Bytecraft');
+    for (const name of ['Website', 'GitHub', 'Community', 'Ko-fi']) cy.contains('.about .pill', name).click();
+    cy.calls('openLink').should('deep.equal', [['website'], ['github'], ['community'], ['kofi']]);
+    cy.contains('.about-copy', 'All rights reserved.');
+  });
+
   it('About lists the other apps, Open for one that\'s installed and its install line for one that isn\'t', () => {
     cy.page('settings/index.html');
     open('About');

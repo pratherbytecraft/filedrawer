@@ -289,8 +289,10 @@ $('copy-cmd').addEventListener('click', () => {
 $('export').addEventListener('click', () => api.exportSettings());
 $('import').addEventListener('click', () => api.importSettings());
 $('reset').addEventListener('click', () => api.resetSettings());
-$('kofi').addEventListener('click', () => api.openLink('kofi'));
-$('issues').addEventListener('click', () => api.openLink('issues'));
+document.querySelector('.about .links').addEventListener('click', (e) => {
+  const pill = e.target.closest('[data-link]');
+  if (pill) api.openLink(pill.dataset.link);
+});
 
 // ---------- start ----------
 
