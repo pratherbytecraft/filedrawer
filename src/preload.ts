@@ -130,3 +130,31 @@ const api: FiledrawerApi = {
 };
 
 contextBridge.exposeInMainWorld('filedrawer', api);
+
+// On macOS 27.2 and later the drag areas stop being the Mac's own, and a
+// press on one has main move the window until the button comes up (see
+// src/main/windowdrag.ts). The pages' CSS marks drag areas with --region.
+invoke('window:codeDrag').then((on) => {
+  if (!on) return;
+  let dragging = false;
+  const start = () => {
+    document.documentElement.style.setProperty('--drag-region', 'no-drag');
+    document.addEventListener('mousedown', (e) => {
+      const at = e.target instanceof Element ? getComputedStyle(e.target).getPropertyValue('--region').trim() : '';
+      if (e.button !== 0 || e.ctrlKey || at !== 'drag') return;
+      e.preventDefault(); // no focus change or text selection, as with the Mac's drag
+      if (e.detail === 2) return send('window:titleDouble');
+      dragging = true;
+      send('window:dragStart', e.clientX, e.clientY);
+    }, true);
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      send('window:dragEnd');
+    };
+    window.addEventListener('mouseup', end, true);
+    window.addEventListener('blur', end);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+}, () => {});

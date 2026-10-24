@@ -9,16 +9,18 @@ body {
 svg { display: block; }
 
 /* The window can be dragged by the title bar and the empty toolbar. The
-   Mac's window buttons sit in the title bar's left end. */
-.titlebar { flex: none; display: flex; align-items: center; gap: 5px; padding: 0 80px; -webkit-app-region: drag; }
+   Mac's window buttons sit in the title bar's left end. --region says which
+   parts drag, for macOS 27.2 and later, where the preload sets
+   --drag-region to no-drag and moves the window itself. */
+.titlebar { flex: none; display: flex; align-items: center; gap: 5px; padding: 0 80px; --region: drag; -webkit-app-region: var(--drag-region, drag); }
 .titlebar .t-icon { width: 16px; height: 16px; flex: none; }
 .titlebar .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.toolbar { flex: none; display: flex; align-items: center; -webkit-app-region: drag; }
+.toolbar { flex: none; display: flex; align-items: center; --region: drag; -webkit-app-region: var(--drag-region, drag); }
 
 /* Tabs: the strip under the title bar, one tab for each folder the window keeps. */
-.tabstrip { flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 4px 6px 0; min-height: 28px; -webkit-app-region: drag; }
-.tabstrip > * { -webkit-app-region: no-drag; }
+.tabstrip { flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 4px 6px 0; min-height: 28px; --region: drag; -webkit-app-region: var(--drag-region, drag); }
+.tabstrip > * { --region: no-drag; -webkit-app-region: no-drag; }
 .tab { position: relative; flex: 0 1 200px; min-width: 60px; display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 22px 0 8px; white-space: nowrap; cursor: default; }
 .tab svg { width: 16px; height: 16px; flex: none; }
 .tab .tl { overflow: hidden; text-overflow: ellipsis; }
@@ -26,7 +28,7 @@ svg { display: block; }
 .tab:hover .tx, .tab.on .tx { opacity: .7; }
 .tab .tx:hover { opacity: 1; background: rgba(127,127,127,.3); }
 .tab-add { width: 24px; height: 24px; display: grid; place-items: center; font-size: 16px; flex: none; cursor: default; }
-.toolbar > *, .addrrow > * { -webkit-app-region: no-drag; }
+.toolbar > *, .addrrow > * { --region: no-drag; -webkit-app-region: no-drag; }
 .tb { display: flex; align-items: center; white-space: nowrap; }
 .tb .ic { width: var(--tb-icon); height: var(--tb-icon); flex: none; }
 .tb .tb-drop { display: grid; place-items: center; align-self: stretch; padding: 0 1px; }

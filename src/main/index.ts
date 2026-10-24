@@ -34,6 +34,7 @@ import * as siteops from './siteops';
 import * as fsx from './fsx';
 import * as siteopen from './siteopen';
 import * as ipc from './ipc';
+import * as windowdrag from './windowdrag';
 import type {
   EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
 } from '../shared/types';
@@ -1377,6 +1378,7 @@ ipc.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:com.a
 
 app.whenReady().then(() => {
   settings.init();
+  windowdrag.init();
   helper.start();
   props.init({ rename: renameWithUndo });
   prefs.init({ version: VERSION, onChange: pushState });
