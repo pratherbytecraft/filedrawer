@@ -8,7 +8,7 @@ import { tempAppData } from '../support/electron';
 import * as settings from '../../src/main/settings';
 import * as sshconfig from '../../src/main/sshconfig';
 import * as sites from '../../src/main/sites';
-import { findCommand, quote } from '../../src/main/sitesearch';
+import { findCommand, isFound, quote } from '../../src/main/sitesearch';
 
 // A made up home folder with its own ~/.ssh, so the real one is never read.
 function fakeHome(config = '', known = '') {
@@ -177,6 +177,14 @@ test('a search on a site becomes one find, with grep for a word, and nothing typ
   assert.equal(findCommand('/my files', { ...q, word: "don't $(rm)" }),
     `find '/my files' -mindepth 1 -name '.*' -prune -o -type f -size -2048k -exec grep -lIiF -- 'don'\\''t $(rm)' '{}' + 2>/dev/null`.replace(`'{}'`, '{}'));
   assert.match(findCommand('/srv', { ...q, size: 'large' }), /-type f -print/);
+});
+
+test("an SFTP only server's answer to find isn't taken for a path", () => {
+  assert.equal(isFound('/srv', '/srv/report.txt'), true);
+  assert.equal(isFound('/', '/backup/a'), true);
+  assert.equal(isFound('/srv/', '/srv/a'), true);
+  assert.equal(isFound('/srv', '/srv2/a'), false);
+  assert.equal(isFound('/', 'This service allows sftp connections only.'), false);
 });
 
 test('sftp:// links split into user, host, port and path, and find their site by all three', () => {

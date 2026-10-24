@@ -38,6 +38,14 @@ export function findCommand(root: string, q: Pick<SearchQuery, 'name' | 'word' |
   return `${parts.join(' ')} ${tests.join(' ')} 2>/dev/null`;
 }
 
+// Whether a line of find's output is a path under the folder searched. An
+// SFTP only server answers a command with a line of its own on the same
+// output ("This service allows sftp connections only."), which isn't one.
+export function isFound(root: string, line: string) {
+  const under = root.endsWith('/') ? root : root + '/';
+  return line.startsWith(under);
+}
+
 class SiteSearch {
   declare sender: WebContents;
   declare id: number;
@@ -106,8 +114,13 @@ class SiteSearch {
   async onServer(kinds: (items: Item[]) => Promise<void>) {
     const at = sites.split(this.q.root);
     if (!at) return true;
+    let said = '';
     try {
       this.running = await remote.run(this.q.root, findCommand(at.path, this.q), (line) => {
+        if (!isFound(at.path, line)) {
+          said += line + '\n';
+          return;
+        }
         this.lines.push(sites.join(at.id, line));
         this.drain(kinds);
       });
@@ -118,7 +131,7 @@ class SiteSearch {
     this.running = null;
     await this.drain(kinds);
     // No shell: the exec was refused, or the server says SFTP only.
-    if (code === null || ((code === 127 || /sftp|not allowed|only/i.test(err)) && !this.count)) return this.stopped;
+    if (code === null || ((code === 127 || /sftp|not allowed|only/i.test(err + said)) && !this.count)) return this.stopped;
     return true;
   }
 
