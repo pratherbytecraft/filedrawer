@@ -8,9 +8,9 @@
 // npm runs Filedrawer's install script alongside Electron's, not after it,
 // so first this waits for Electron's own install to finish. Unzipping over
 // an install that's still going breaks both.
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 const EXECUTABLE = 'Electron.app/Contents/MacOS/Electron';
 
@@ -18,7 +18,7 @@ function electronDir() {
   return path.dirname(require.resolve('electron/package.json', { paths: [path.join(__dirname, '..', '..')] }));
 }
 
-function isWhole(dir) {
+function isWhole(dir: string) {
   try {
     const { version } = require(path.join(dir, 'package.json'));
     return fs.readFileSync(path.join(dir, 'path.txt'), 'utf8') === EXECUTABLE &&
@@ -31,7 +31,7 @@ function isWhole(dir) {
 
 // Whether Electron's own install script (node install.js, run in its
 // folder) is still going.
-function installRunning(dir) {
+function installRunning(dir: string) {
   const ps = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
   if (ps.status !== 0) return false;
   for (const line of ps.stdout.split('\n')) {
@@ -45,7 +45,7 @@ function installRunning(dir) {
 
 // Electron's script can start a moment after this one, so it gets a few
 // seconds to show up before it counts as not running.
-async function waitForInstall(dir) {
+async function waitForInstall(dir: string) {
   const start = Date.now();
   const until = start + 5 * 60 * 1000;
   while (!isWhole(dir) && Date.now() < until) {
@@ -54,9 +54,9 @@ async function waitForInstall(dir) {
   }
 }
 
-async function fix({ quiet = false } = {}) {
+export async function fix({ quiet = false } = {}) {
   if (process.platform !== 'darwin') return true;
-  const log = (msg) => quiet || console.log(msg);
+  const log = (msg: string) => quiet || console.log(msg);
   let dir;
   try {
     dir = electronDir();
@@ -88,7 +88,7 @@ async function fix({ quiet = false } = {}) {
     log('Filedrawer: finished installing Electron.');
     return true;
   } catch (err) {
-    log(`Filedrawer: Electron did not install completely.\n${err.message}`);
+    log(`Filedrawer: Electron did not install completely.\n${(err as Error).message}`);
     return false;
   }
 }
@@ -101,4 +101,3 @@ if (require.main === module) {
   else fix();
 }
 
-module.exports = { fix };

@@ -1,8 +1,9 @@
 // What the Mac looks like right now: light or dark, and the accent color.
 // The System theme follows both. Changes are pushed to every window.
-const { nativeTheme, systemPreferences } = require('electron');
+import { nativeTheme, systemPreferences } from 'electron';
+import type { SystemLook } from '../shared/types';
 
-const listeners = new Set();
+const listeners = new Set<(look: SystemLook) => void>();
 
 function accentHex() {
   try {
@@ -14,7 +15,7 @@ function accentHex() {
   return nativeTheme.shouldUseDarkColors ? '#0a84ff' : '#007aff';
 }
 
-function snapshot() {
+export function snapshot(): SystemLook {
   return {
     appearance: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     accent: accentHex()
@@ -26,7 +27,7 @@ function emit() {
   for (const fn of listeners) fn(s);
 }
 
-function watch(fn) {
+export function watch(fn: (look: SystemLook) => void) {
   listeners.add(fn);
   if (listeners.size === 1) {
     nativeTheme.on('updated', emit);
@@ -40,4 +41,3 @@ function watch(fn) {
   return () => listeners.delete(fn);
 }
 
-module.exports = { snapshot, watch };

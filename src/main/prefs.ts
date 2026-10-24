@@ -1,17 +1,19 @@
 // The settings window, and what its pages need from the Mac: the terminal
 // apps on this Mac, open at login, and export, import and reset.
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const settings = require('./settings');
-const folders = require('./folders');
+import { app, BrowserWindow, dialog } from 'electron';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import * as settings from './settings';
+import * as folders from './folders';
+import * as ipc from './ipc';
+import type { LoginItem, SettingsPage, TerminalApp } from '../shared/types';
 
-let win = null;
+let win: BrowserWindow | null = null;
 let version = '';
 
 // The terminal apps Open Terminal Here can use, the ones on this Mac only.
-const TERMINALS = [
+const TERMINALS: [string, string[]][] = [
   ['Terminal', ['/System/Applications/Utilities/Terminal.app', '/Applications/Utilities/Terminal.app']],
   ['iTerm', ['/Applications/iTerm.app']],
   ['Ghostty', ['/Applications/Ghostty.app']],
@@ -21,9 +23,9 @@ const TERMINALS = [
   ['WezTerm', ['/Applications/WezTerm.app']]
 ];
 
-async function terminals() {
+async function terminals(): Promise<TerminalApp[]> {
   const user = path.join(os.homedir(), 'Applications');
-  const found = [];
+  const found: { name: string; path: string }[] = [];
   for (const [name, places] of TERMINALS) {
     const at = [...places, path.join(user, path.basename(places[0]))].find((p) => fs.existsSync(p));
     if (at) found.push({ name, path: at });
@@ -37,7 +39,7 @@ async function terminals() {
   return found.map((t) => ({ ...t, icon: icons[t.path] || null }));
 }
 
-function loginItem() {
+export function loginItem(): LoginItem {
   try {
     const { status } = app.getLoginItemSettings({ type: 'mainAppService' });
     return { on: status === 'enabled' || status === 'requires-approval', needsApproval: status === 'requires-approval' };
@@ -46,17 +48,17 @@ function loginItem() {
   }
 }
 
-function setLoginItem(on) {
+export function setLoginItem(on: boolean) {
   try {
     app.setLoginItemSettings({ openAtLogin: !!on, type: 'mainAppService' });
   } catch (err) {
-    console.log(`Filedrawer: the login item couldn't be changed: ${err.message}`);
+    console.log(`Filedrawer: the login item couldn't be changed: ${(err as Error).message}`);
   }
 }
 
-function show(page) {
+export function show(page?: SettingsPage) {
   if (win && !win.isDestroyed()) {
-    if (page) win.webContents.send('settings:page', page);
+    if (page) ipc.send(win.webContents, 'settings:page', page);
     win.show();
     win.focus();
     return win;
@@ -74,7 +76,8 @@ function show(page) {
     webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'settings', 'index.html'), page ? { query: { page } } : undefined);
-  win.once('ready-to-show', () => win.show());
+  // Still open: closed only comes after ready-to-show.
+  win.once('ready-to-show', () => win!.show());
   win.on('closed', () => {
     win = null;
   });
@@ -101,7 +104,7 @@ async function importSettings() {
     filters: [{ name: 'Filedrawer settings', extensions: ['json'] }]
   });
   if (canceled || !filePaths.length) return;
-  let data = null;
+  let data: { settings?: unknown } | null = null;
   try {
     data = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
   } catch {
@@ -164,26 +167,26 @@ async function chooseTerminal() {
 }
 
 // The folder a new window starts at.
-function startFolder() {
+export function startFolder() {
   const s = settings.get();
   const home = folders.HOME;
-  const picks = { home, documents: path.join(home, 'Documents'), desktop: path.join(home, 'Desktop'), computer: folders.COMPUTER };
+  const picks: Record<string, string> = { home, documents: path.join(home, 'Documents'), desktop: path.join(home, 'Desktop'), computer: folders.COMPUTER };
   if (s.startFolder === 'custom' && s.startPath && fs.existsSync(s.startPath)) return s.startPath;
   return picks[s.startFolder] || home;
 }
 
-function init({ version: v, onChange }) {
+export function init({ version: v, onChange }: { version: string; onChange: () => void }) {
   version = v;
-  ipcMain.handle('settings:terminals', () => terminals());
-  ipcMain.on('settings:login', (_e, on) => {
+  ipc.handle('settings:terminals', () => terminals());
+  ipc.on('settings:login', (_e, on) => {
     setLoginItem(on);
     onChange();
   });
-  ipcMain.on('settings:export', () => exportSettings());
-  ipcMain.on('settings:import', () => importSettings());
-  ipcMain.on('settings:reset', () => resetSettings());
-  ipcMain.on('settings:startFolder', () => chooseStartFolder());
-  ipcMain.on('settings:terminal', () => chooseTerminal());
+  ipc.on('settings:export', () => exportSettings());
+  ipc.on('settings:import', () => importSettings());
+  ipc.on('settings:reset', () => resetSettings());
+  ipc.on('settings:startFolder', () => chooseStartFolder());
+  ipc.on('settings:terminal', () => chooseTerminal());
 }
 
-module.exports = { init, show, loginItem, setLoginItem, startFolder, get window() { return win; } };
+export const window = () => win;

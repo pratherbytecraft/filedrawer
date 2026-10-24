@@ -1,11 +1,12 @@
 // Settings live in ~/Library/Application Support/Filedrawer/settings.json.
 // Missing keys fall back to the defaults, so a settings file from an older
 // version keeps working after an update.
-const { app } = require('electron');
-const fs = require('fs');
-const path = require('path');
+import { app } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import type { Settings, SettingsPatch } from '../shared/types';
 
-const DEFAULTS = Object.freeze({
+export const DEFAULTS: Readonly<Settings> = Object.freeze({
   theme: 'system', // system | classic-2009 | classic-2001 | classic-1995
   // Each classic theme's color scheme, kept apart so switching themes back keeps it.
   schemes: {
@@ -61,17 +62,21 @@ const DEFAULTS = Object.freeze({
 const SORT_KEYS = ['name', 'size', 'kind', 'modified', 'created', 'added', 'deleted', 'from', 'used'];
 const COLUMN_KEYS = ['size', 'kind', 'modified', 'created', 'added'];
 
-let dir;
-let file;
-let current;
-const listeners = new Set();
+let dir: string;
+let file: string;
+let current: Settings;
+const listeners = new Set<(settings: Settings) => void>();
 
-function merge(base, over) {
+// merge and clean walk JSON of any shape, so they work on plain records.
+type Json = Record<string, any>;
+
+function merge(base: Json, over: unknown): Json {
   if (!over || typeof over !== 'object' || Array.isArray(over)) return base;
   const out = { ...base };
   for (const key of Object.keys(over)) {
     const b = base[key];
-    out[key] = b && typeof b === 'object' && !Array.isArray(b) ? merge(b, over[key]) : over[key];
+    const o = (over as Json)[key];
+    out[key] = b && typeof b === 'object' && !Array.isArray(b) ? merge(b, o) : o;
   }
   return out;
 }
@@ -79,24 +84,24 @@ function merge(base, over) {
 // Only the keys Filedrawer knows, each with the same kind of value as its
 // default. A value of the wrong kind, from a hand-edited file say, falls
 // back to the default instead of being taken as it is.
-function clean(saved, base) {
-  const out = {};
+function clean(saved: unknown, base: Json): Json {
+  const out: Json = {};
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out;
   for (const key of Object.keys(base)) {
     const b = base[key];
-    const v = saved[key];
+    const v = (saved as Json)[key];
     if (v === undefined) continue;
     if (base === DEFAULTS && key === 'folderViews') {
       // Any folder can be in here, so only the values are checked.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.folderViews = {};
-        for (const [k, view] of Object.entries(v)) if (typeof view === 'string') out.folderViews[k] = view;
+        for (const [k, view] of Object.entries(v as Json)) if (typeof view === 'string') out.folderViews[k] = view;
       }
     } else if (base === DEFAULTS && key === 'folderSorts') {
       // Any folder can be in here, each with a known key and a direction.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.folderSorts = {};
-        for (const [k, sort] of Object.entries(v)) {
+        for (const [k, sort] of Object.entries(v as Json)) {
           if (sort && SORT_KEYS.includes(sort.key) && (sort.dir === 'asc' || sort.dir === 'desc')) out.folderSorts[k] = { key: sort.key, dir: sort.dir };
         }
       }
@@ -104,7 +109,7 @@ function clean(saved, base) {
       // Any folder can be in here, each with the known columns it shows.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.folderColumns = {};
-        for (const [k, cols] of Object.entries(v)) {
+        for (const [k, cols] of Object.entries(v as Json)) {
           if (Array.isArray(cols)) out.folderColumns[k] = COLUMN_KEYS.filter((c) => cols.includes(c));
         }
       }
@@ -112,9 +117,9 @@ function clean(saved, base) {
       // Each kind of list with its columns' widths, whole points above zero.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.columnWidths = {};
-        for (const [set, cols] of Object.entries(v)) {
+        for (const [set, cols] of Object.entries(v as Json)) {
           if (!cols || typeof cols !== 'object' || Array.isArray(cols)) continue;
-          const kept = Object.entries(cols).filter(([, w]) => Number.isFinite(w) && w > 0);
+          const kept = Object.entries(cols as Json).filter(([, w]) => Number.isFinite(w) && w > 0);
           if (kept.length) out.columnWidths[set] = Object.fromEntries(kept.map(([c, w]) => [c, Math.round(w)]));
         }
       }
@@ -122,7 +127,7 @@ function clean(saved, base) {
       // Any extension can be in here, each with a list of app paths.
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         out.openWith = {};
-        for (const [k, apps] of Object.entries(v)) if (Array.isArray(apps)) out.openWith[k] = apps.filter((x) => typeof x === 'string');
+        for (const [k, apps] of Object.entries(v as Json)) if (Array.isArray(apps)) out.openWith[k] = apps.filter((x) => typeof x === 'string');
       }
     } else if (Array.isArray(b)) {
       if (Array.isArray(v)) out[key] = v.filter((x) => typeof x === 'string');
@@ -135,21 +140,25 @@ function clean(saved, base) {
   return out;
 }
 
-function init() {
+// Every key of the defaults, each cleaned to the kind of its default, so
+// the merge is whole Settings.
+const fromDefaults = (saved: unknown) => merge(DEFAULTS, clean(saved, DEFAULTS)) as Settings;
+
+export function init() {
   dir = path.join(app.getPath('appData'), 'Filedrawer');
   file = path.join(dir, 'settings.json');
   fs.mkdirSync(dir, { recursive: true });
-  let saved = {};
+  let saved: unknown = {};
   try {
     saved = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     saved = {};
   }
-  current = merge(DEFAULTS, clean(saved, DEFAULTS));
+  current = fromDefaults(saved);
   return current;
 }
 
-function get() {
+export function get() {
   return current;
 }
 
@@ -159,28 +168,27 @@ function save() {
   return current;
 }
 
-function update(patch) {
+export function update(patch: SettingsPatch) {
   const next = clean(patch, DEFAULTS);
-  current = merge(current, next);
+  current = merge(current, next) as Settings; // the current settings with cleaned keys over them
   // A folder's view, sort or columns, and the column widths, are replaced,
   // not merged, so one can be taken out.
-  for (const key of ['folderViews', 'folderSorts', 'folderColumns', 'columnWidths']) if (next[key]) current = { ...current, [key]: next[key] };
+  for (const key of ['folderViews', 'folderSorts', 'folderColumns', 'columnWidths'] as const) if (next[key]) current = { ...current, [key]: next[key] };
   return save();
 }
 
 // Everything from saved, the rest from the defaults, for an import or a reset.
-function replace(saved) {
-  current = merge(DEFAULTS, clean(saved, DEFAULTS));
+export function replace(saved: unknown) {
+  current = fromDefaults(saved);
   return save();
 }
 
-function reset() {
+export function reset() {
   return replace({});
 }
 
-function onChange(fn) {
+export function onChange(fn: (settings: Settings) => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-module.exports = { DEFAULTS, init, get, update, replace, reset, onChange };

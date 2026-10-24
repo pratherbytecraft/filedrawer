@@ -1,34 +1,41 @@
 // Filedrawer main process. Owns the windows, the menus, the settings and
 // everything that touches the disk. Renderers only draw.
-const { app, ipcMain, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog, clipboard } = require('electron');
+import {
+  app, shell, Menu, BrowserWindow, nativeTheme, nativeImage, dialog, clipboard,
+  type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions, type MessageBoxOptions, type NativeImage, type Rectangle
+} from 'electron';
 
 // Electron reads .asar files as folders. Filedrawer doesn't use any, and
 // the ones inside other apps are plain files to list, measure and copy.
 process.noAsar = true;
-const { execFile, execFileSync } = require('child_process');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const settings = require('./settings');
-const system = require('./system');
-const helper = require('./helper');
-const folders = require('./folders');
-const ops = require('./ops');
-const undo = require('./undo');
-const copier = require('./copier');
-const props = require('./props');
-const prefs = require('./prefs');
-const search = require('./search');
-const updates = require('./updates');
-const finder = require('./finder');
-const welcome = require('./welcome');
-const chooser = require('./chooser');
-const places = require('./places');
+import { execFile, execFileSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import * as settings from './settings';
+import * as system from './system';
+import helper = require('./helper');
+import * as folders from './folders';
+import ops = require('./ops');
+import * as undo from './undo';
+import * as copier from './copier';
+import * as props from './props';
+import * as prefs from './prefs';
+import * as search from './search';
+import * as updates from './updates';
+import * as finder from './finder';
+import * as welcome from './welcome';
+import * as chooser from './chooser';
+import places = require('./places');
+import * as ipc from './ipc';
+import type {
+  EditCommand, Events, LinkKey, OpResult, PhotosStatus, Settings, Sibling, SiblingKey, State, Theme, TrashedItem, UndoWhich, WatchSlot, WindowLook
+} from '../shared/types';
 
 // From the package, not app.getVersion(): Filedrawer.app carries no version
 // so it stays the same across updates (see scripts/build-app.js).
-const PKG = require('../../package.json');
-const { BUNDLE_ID } = require('../../scripts/build-app');
+import PKG from '../../package.json';
+import { BUNDLE_ID } from '../../scripts/build-app';
 const VERSION = PKG.version;
 
 if (!app.requestSingleInstanceLock()) {
@@ -42,12 +49,16 @@ app.setName('Filedrawer');
 const BREW = /\/Cellar\/filedrawer\//.test(fs.realpathSync(__dirname));
 const UPDATE_COMMAND = BREW ? 'brew upgrade filedrawer' : 'npm install -g filedrawer';
 
-const windows = new Set();
-let cut = null; // { paths, change } after Cut, until a paste moves them or the clipboard changes
-let ready = false;
-const queued = []; // folders handed over before the app was ready
+// A folder window, with what Filedrawer notes on it: when it was last
+// placed over a Finder window, and whether its page has drawn.
+type FolderWindow = BrowserWindow & { placedAt?: number; drawn?: boolean };
 
-function state() {
+const windows = new Set<FolderWindow>();
+let cut: { paths: string[]; change: number } | null = null; // { paths, change } after Cut, until a paste moves them or the clipboard changes
+let ready = false;
+const queued: [string, string | null][] = []; // folders handed over before the app was ready
+
+function state(): State {
   return {
     settings: settings.get(),
     system: system.snapshot(),
@@ -75,17 +86,17 @@ function state() {
 // Prather Bytecraft's other apps, Startbar (the taskbar) and Shotdrawer
 // (recent screenshots), when they're installed. Each is found by its bundle
 // id, looked up now and then, not on every redraw.
-const SIBLINGS = {
+const SIBLINGS: Record<SiblingKey, { id: string; name: string }> = {
   startbar: { id: 'com.pratherbytecraft.startbar', name: 'Startbar.app' },
   shotdrawer: { id: 'com.pratherbytecraft.shotdrawer', name: 'Shotdrawer.app' }
 };
-const siblingSeen = {};
+const siblingSeen: Partial<Record<SiblingKey, { at: number; path: string | null }>> = {};
 
-function siblingApp(key) {
+function siblingApp(key: SiblingKey) {
   const sib = SIBLINGS[key];
   const seen = siblingSeen[key];
   if (seen && Date.now() - seen.at < 30 * 1000) return seen.path;
-  let found = null;
+  let found: string | null = null;
   for (const p of [path.join(os.homedir(), 'Applications', sib.name), path.join('/Applications', sib.name)]) {
     try {
       const id = execFileSync('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', path.join(p, 'Contents', 'Info.plist')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -106,12 +117,12 @@ const startbarInstalled = () => !!siblingApp('startbar');
 
 // The About page's Also from Prather Bytecraft group: each app, whether it's
 // installed, and the line that installs it the same way this copy was.
-const ABOUT = [
+const ABOUT: { key: SiblingKey; name: string; desc: string }[] = [
   { key: 'startbar', name: 'Startbar', desc: 'A taskbar along the bottom of the screen, with a Start menu and a button for every window.' },
   { key: 'shotdrawer', name: 'Shotdrawer', desc: 'Your recent screenshots in the menu bar. Click one to copy its path.' }
 ];
 
-function siblingsAbout() {
+function siblingsAbout(): Sibling[] {
   return ABOUT.map((a) => ({
     ...a,
     installed: !!siblingApp(a.key),
@@ -120,9 +131,9 @@ function siblingsAbout() {
 }
 
 // Every window that shows settings: the folder windows and the settings window.
-function broadcast(channel, payload) {
-  for (const win of windows) if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  for (const w of [prefs.window, welcome.window]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+function broadcast<K extends keyof Events>(channel: K, ...payload: ipc.Payload<K>) {
+  for (const win of windows) if (!win.isDestroyed()) ipc.send(win.webContents, channel, ...payload);
+  for (const w of [prefs.window(), welcome.window()]) if (w && !w.isDestroyed()) ipc.send(w.webContents, channel, ...payload);
 }
 
 function pushState() {
@@ -143,8 +154,10 @@ function placeFor() {
 // A window with wait set opens before its folder is known, at the frame of
 // the Finder window it stands in for, and asks for the folder once loaded.
 // A spare one loads the same way but stays hidden until it's needed.
-function openWindow(dir, select, { wait = false, spare = false, bounds = null, title = null } = {}) {
-  const win = new BrowserWindow({
+function openWindow(dir: string, select?: string | null, { wait = false, spare = false, bounds = null, title = null }: {
+  wait?: boolean; spare?: boolean; bounds?: Rectangle | null; title?: string | null;
+} = {}) {
+  const win: FolderWindow = new BrowserWindow({
     ...(bounds || placeFor()),
     minWidth: 560,
     minHeight: 360,
@@ -161,7 +174,7 @@ function openWindow(dir, select, { wait = false, spare = false, bounds = null, t
     }
   });
   windows.add(win);
-  const query = { path: dir };
+  const query: Record<string, string> = { path: dir };
   if (select) query.select = select;
   if (wait) query.wait = '1';
   win.loadFile(path.join(__dirname, '..', 'renderer', 'window', 'index.html'), { query });
@@ -175,7 +188,7 @@ function openWindow(dir, select, { wait = false, spare = false, bounds = null, t
     });
   }
   // The size of the last window moved or resized is the size of the next one.
-  let sizeTimer = null;
+  let sizeTimer: NodeJS.Timeout | undefined;
   win.on('resize', () => {
     if (Date.now() - (win.placedAt || 0) < 1000) return; // sized to a Finder window, not by the user
     clearTimeout(sizeTimer);
@@ -199,13 +212,18 @@ function openWindow(dir, select, { wait = false, spare = false, bounds = null, t
 
 // Filedrawer windows standing in for a Finder window, by the helper's token,
 // and the folder each is waiting for.
-const standIns = new Map(); // token -> window
-const waiting = new Map(); // window -> { path, resolve }
+interface Waiting {
+  path?: string;
+  resolve?: (dir: string) => void;
+}
+
+const standIns = new Map<number, FolderWindow>(); // token -> window
+const waiting = new Map<BrowserWindow, Waiting>(); // window -> { path, resolve }
 
 // One window is kept loaded and hidden while the takeover is on, so it can
 // cover Finder's window within a few frames. A fresh one takes about a
 // second to draw.
-let spare = null;
+let spare: FolderWindow | null = null;
 
 function makeSpare() {
   if (spare && !spare.isDestroyed()) return;
@@ -217,25 +235,26 @@ function dropSpare() {
   spare = null;
 }
 
-function whenDrawn(win, fn) {
+function whenDrawn(win: FolderWindow, fn: () => void) {
   if (win.drawn) fn();
-  else win.once('drawn', fn);
+  // drawn is Filedrawer's own event, which BrowserWindow's typed events don't list.
+  else (win as NodeJS.EventEmitter).once('drawn', fn);
 }
 
-function showStandIn(win) {
+function showStandIn(win: BrowserWindow) {
   if (win.isDestroyed()) return;
   app.focus({ steal: true });
   win.show();
 }
 
-function standIn(bounds, title) {
+function standIn(bounds: Rectangle, title: string) {
   const win = spare && !spare.isDestroyed() ? spare : null;
   spare = null;
   if (!win) return openWindow(folders.HOME, null, { wait: true, bounds, title });
   win.placedAt = Date.now();
   win.setBounds(bounds);
   win.setTitle(title);
-  win.webContents.send('command', { command: 'waitTitle', arg: title });
+  ipc.send(win.webContents, 'command', { command: 'waitTitle', arg: title });
   // Still loading when Finder opened the window: it shows once it's drawn.
   whenDrawn(win, () => showStandIn(win));
   // The next one starts loading now, so folders opened one after another
@@ -244,13 +263,13 @@ function standIn(bounds, title) {
   return win;
 }
 
-function folderFor(win, dir) {
-  const w = waiting.get(win) || {};
+function folderFor(win: BrowserWindow, dir: string) {
+  const w: Waiting = waiting.get(win) || {};
   if (w.resolve) w.resolve(dir);
   waiting.set(win, { path: dir });
 }
 
-const finderEvents = {
+const finderEvents: finder.Handlers = {
   window({ token, frame: [x, y, width, height], title }) {
     standIns.set(token, standIn({ x, y, width, height }, title));
   },
@@ -274,12 +293,12 @@ const finderEvents = {
 const PRIVACY = 'x-apple.systempreferences:com.apple.preference.security?Privacy_';
 
 // Show in Finder from other apps (NSFileViewer) follows the same switch.
-async function setFileViewer(on) {
+async function setFileViewer(on: boolean) {
   const res = await helper.request('viewer');
   if (res && (res.fileViewer === BUNDLE_ID) !== on) await helper.request('setViewer', { bundleId: on ? BUNDLE_ID : '' });
 }
 
-let takingOver = null;
+let takingOver: boolean | null = null;
 
 function watchFinder() {
   const on = settings.get().takeOverFinder;
@@ -327,22 +346,23 @@ function askAutomation() {
   else finder.askAutomation();
 }
 
-ipcMain.on('finder:accessibility', () => shell.openExternal(PRIVACY + 'Accessibility'));
-ipcMain.on('finder:automation', () => askAutomation());
+ipc.on('finder:accessibility', () => shell.openExternal(PRIVACY + 'Accessibility'));
+ipc.on('finder:automation', () => askAutomation());
 
-ipcMain.on('window:drawn', (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
+ipc.on('window:drawn', (e) => {
+  const win: FolderWindow | null = BrowserWindow.fromWebContents(e.sender);
   if (!win || win.drawn) return;
   win.drawn = true;
   win.emit('drawn');
 });
 
 // A waiting window asks for its folder once its page is up. Null closes it.
-ipcMain.handle('window:waitFolder', (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
+ipc.handle('window:waitFolder', (e) => {
+  // The page asking is a folder window's.
+  const win = BrowserWindow.fromWebContents(e.sender)!;
   const w = waiting.get(win);
   if (w && w.path) return w.path;
-  return new Promise((resolve) => waiting.set(win, { resolve }));
+  return new Promise<string>((resolve) => waiting.set(win, { resolve }));
 });
 
 // Each window watches the folder it shows and is told when something in it
@@ -350,11 +370,18 @@ ipcMain.handle('window:waitFolder', (e) => {
 // disks show up and go away. A folder's own watch hears nothing when the
 // folder itself is deleted, moved or renamed, so every two seconds the window
 // also checks that its folder is still there.
-const watchers = new Map(); // window -> slot -> { dir, watcher, check, timer }
+interface Watch {
+  dir: string;
+  watcher: fs.FSWatcher;
+  check: NodeJS.Timeout | undefined;
+  timer: NodeJS.Timeout | undefined;
+}
+
+const watchers = new Map<BrowserWindow, Map<WatchSlot, Watch>>(); // window -> slot -> { dir, watcher, check, timer }
 
 // A window watches its folder (slot main) and, with two panes open, the
 // other side's folder (slot other). Without a slot, both stop.
-function unwatch(win, slot) {
+function unwatch(win: BrowserWindow, slot?: WatchSlot) {
   const mine = watchers.get(win);
   if (!mine) return;
   for (const s of slot ? [slot] : [...mine.keys()]) {
@@ -368,8 +395,8 @@ function unwatch(win, slot) {
   if (!mine.size) watchers.delete(win);
 }
 
-function watch(win, dir, slot = 'main') {
-  const w = watchers.get(win) && watchers.get(win).get(slot);
+function watch(win: BrowserWindow, dir: string | null, slot: WatchSlot = 'main') {
+  const w = watchers.get(win)?.get(slot);
   if (w && w.dir === dir) return;
   unwatch(win, slot);
   if (!dir) return;
@@ -377,17 +404,17 @@ function watch(win, dir, slot = 'main') {
   // iCloud Drive's top aren't watched.
   if (dir === places.RECENTS || dir === places.ICLOUD) return;
   const target = dir === folders.COMPUTER ? '/Volumes' : dir === places.TRASH ? places.HOME_TRASH : dir;
-  let watcher;
+  let watcher: fs.FSWatcher;
   try {
     watcher = fs.watch(target, { persistent: false });
   } catch {
     return; // a folder that can't be watched is still shown, just not kept up to date
   }
-  const entry = { dir, watcher, check: null, timer: null };
+  const entry: Watch = { dir, watcher, check: undefined, timer: undefined };
   const changed = () => {
     clearTimeout(entry.timer);
     entry.timer = setTimeout(() => {
-      if (!win.isDestroyed()) win.webContents.send('folder:changed', dir);
+      if (!win.isDestroyed()) ipc.send(win.webContents, 'folder:changed', dir);
     }, 250);
   };
   watcher.on('change', changed);
@@ -398,14 +425,14 @@ function watch(win, dir, slot = 'main') {
     });
   }, 2000);
   if (!watchers.has(win)) watchers.set(win, new Map());
-  watchers.get(win).set(slot, entry);
+  watchers.get(win)!.set(slot, entry); // made just above when it wasn't there
 }
 
 // A file handed to Filedrawer, as other apps' Show in Finder does once
 // Filedrawer is the file viewer, opens its folder with it picked.
-function openPath(p) {
+function openPath(p: string) {
   let dir = p;
-  let select = null;
+  let select: string | null = null;
   try {
     if (!fs.statSync(p).isDirectory() || folders.isPackage(p)) {
       dir = path.dirname(p);
@@ -424,7 +451,7 @@ app.on('open-file', (e, p) => {
 });
 
 // Run as plain Electron (no Filedrawer.app), folders come in on the command line.
-function argvFolders(argv) {
+function argvFolders(argv: string[]) {
   return argv.slice(app.isPackaged ? 1 : 2).filter((a) => !a.startsWith('-') && path.isAbsolute(a));
 }
 
@@ -451,15 +478,15 @@ const THEMES = [['system', 'System'], ['classic-2009', 'Classic 2009'], ['classi
 const VIEWS = [['thumbs', 'Thumbnails'], ['tiles', 'Tiles'], ['icons', 'Icons'], ['list', 'List'], ['details', 'Details']];
 const SORTS = [['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['modified', 'Date Modified'], ['created', 'Date Created'], ['added', 'Date Added']];
 
-function send(command, arg) {
+function send(command: string, arg?: string) {
   const win = BrowserWindow.getFocusedWindow();
-  if (win && windows.has(win)) win.webContents.send('command', { command, arg });
+  if (win && windows.has(win)) ipc.send(win.webContents, 'command', { command, arg });
 }
 
 // Opens a folder in the terminal app from the settings, or in Terminal if
 // that app isn't there.
 // The themes and their color schemes, for the settings window.
-const THEME_LIST = [
+const THEME_LIST: Theme[] = [
   { id: 'system', name: 'System', schemes: [] },
   { id: 'classic-2009', name: 'Classic 2009', schemes: [['sky', 'Sky'], ['dusk', 'Dusk'], ['sea', 'Sea'], ['leaf', 'Leaf'], ['lime', 'Lime'],
     ['sun', 'Sun'], ['pumpkin', 'Pumpkin'], ['ruby', 'Ruby'], ['pink', 'Pink'], ['blush', 'Blush'], ['violet', 'Violet'], ['lavender', 'Lavender'],
@@ -470,7 +497,7 @@ const THEME_LIST = [
     ['slate', 'Slate'], ['spruce', 'Spruce'], ['storm', 'Storm'], ['teal', 'Teal'], ['wheat', 'Wheat']] }
 ];
 
-function openTerminal(dir) {
+function openTerminal(dir: string) {
   const want = settings.get().terminal || 'Terminal';
   execFile('open', ['-a', want, dir], (err) => {
     if (err && want !== 'Terminal') execFile('open', ['-a', 'Terminal', dir], () => {});
@@ -478,13 +505,15 @@ function openTerminal(dir) {
 }
 
 function buildMenu() {
-  const s = { ...settings.get() };
+  const s: Settings & Partial<WindowLook> = { ...settings.get() };
   const front = BrowserWindow.getFocusedWindow();
   if (front && viewOf.has(front)) Object.assign(s, viewOf.get(front));
   const hasWindow = !!BrowserWindow.getFocusedWindow();
   const labels = undo.labels();
-  const cmd = (label, command, accelerator, extra = {}) => ({ label, accelerator, enabled: hasWindow, click: () => send(command), ...extra });
-  const template = [
+  // A null accelerator is none, which Electron takes though its type only lists a string.
+  const cmd = (label: string, command: string, accelerator: string | null, extra: MenuItemConstructorOptions = {}): MenuItemConstructorOptions =>
+    ({ label, accelerator: accelerator as string, enabled: hasWindow, click: () => send(command), ...extra });
+  const template: MenuItemConstructorOptions[] = [
     {
       label: 'Filedrawer',
       submenu: [
@@ -607,7 +636,8 @@ function buildMenu() {
     {
       label: 'Pinned',
       submenu: [
-        cmd(s.pins.includes(s.cwd) ? 'Unpin This Folder' : 'Pin This Folder', 'pinHere', 'Ctrl+Cmd+T'),
+        // cwd is unknown until the front window has said.
+        cmd((s.pins as (string | undefined)[]).includes(s.cwd) ? 'Unpin This Folder' : 'Pin This Folder', 'pinHere', 'Ctrl+Cmd+T'),
         { type: 'separator' },
         ...(s.pins.length ? s.pins.map((p) => ({
           label: path.basename(p) || p,
@@ -643,23 +673,23 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-ipcMain.handle('state', () => state());
-ipcMain.handle('folder:list', (_e, dir, opts) => folders.list(dir, opts));
-ipcMain.handle('folder:resolve', (_e, text, cwd) => folders.resolve(text, cwd));
-ipcMain.handle('folder:complete', (_e, text, cwd) => folders.complete(text, cwd));
-ipcMain.handle('folder:volume', (_e, dir) => folders.volume(dir));
-ipcMain.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
-ipcMain.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
-ipcMain.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
-ipcMain.handle('settings:update', (_e, patch) => settings.update(patch));
-ipcMain.on('open', (_e, p) => (Array.isArray(p) ? execFile('open', p, () => {}) : shell.openPath(p)));
+ipc.handle('state', () => state());
+ipc.handle('folder:list', (_e, dir, opts) => folders.list(dir, opts));
+ipc.handle('folder:resolve', (_e, text, cwd) => folders.resolve(text, cwd));
+ipc.handle('folder:complete', (_e, text, cwd) => folders.complete(text, cwd));
+ipc.handle('folder:volume', (_e, dir) => folders.volume(dir));
+ipc.handle('folder:count', (_e, dir, cwd) => folders.count(dir, cwd));
+ipc.handle('folder:icons', (_e, reqs, px) => folders.icons(reqs, px));
+ipc.handle('folder:thumbs', (_e, paths, px) => folders.thumbs(paths, px));
+ipc.handle('settings:update', (_e, patch) => settings.update(patch));
+ipc.on('open', (_e, p) => (Array.isArray(p) ? execFile('open', p, () => {}) : shell.openPath(p)));
 
 // A file operation's answer. A failure is shown on the window that asked,
 // as a sheet, before the answer goes back.
-async function answer(e, res) {
+async function answer<T extends { error?: string | null } | null | undefined>(e: IpcMainEvent | IpcMainInvokeEvent, res: T): Promise<T> {
   if (res && res.error) {
     const win = BrowserWindow.fromWebContents(e.sender);
-    const opts = { type: 'warning', message: res.error, buttons: ['OK'] };
+    const opts: MessageBoxOptions = { type: 'warning', message: res.error, buttons: ['OK'] };
     if (win) await dialog.showMessageBox(win, opts);
     else await dialog.showMessageBox(opts);
   }
@@ -667,28 +697,28 @@ async function answer(e, res) {
 }
 // Cut, Copy and Paste go to the window, which works on the text being typed
 // or on the selected files. Other windows (a job's) get the text commands.
-function editOrFiles(which) {
+function editOrFiles(which: EditCommand) {
   const win = BrowserWindow.getFocusedWindow();
-  if (win && windows.has(win)) win.webContents.send('command', { command: which });
+  if (win && windows.has(win)) ipc.send(win.webContents, 'command', { command: which });
   else if (win) win.webContents[which]();
 }
-ipcMain.on('edit:text', (e, which) => {
+ipc.on('edit:text', (e, which) => {
   if (['cut', 'copy', 'paste'].includes(which)) e.sender[which]();
 });
 
 // Files go on the Mac's clipboard the way Finder puts them there, so either
 // app can paste them. Cut is remembered here: a paste moves the files as
 // long as the clipboard still holds what was cut.
-async function putOnClipboard(paths, isCut) {
+async function putOnClipboard(paths: string[], isCut: boolean) {
   const res = await helper.request('clipWrite', { paths });
   cut = isCut && res ? { paths, change: res.change } : null;
   pushState();
 }
-ipcMain.handle('clip:copy', (_e, paths) => putOnClipboard(paths, false));
-ipcMain.handle('clip:cut', (_e, paths) => putOnClipboard(paths, true));
+ipc.handle('clip:copy', (_e, paths) => putOnClipboard(paths, false));
+ipc.handle('clip:cut', (_e, paths) => putOnClipboard(paths, true));
 
 // { paths } of what was pasted, for the window to select.
-ipcMain.handle('clip:paste', async (e, dest) => {
+ipc.handle('clip:paste', async (e, dest) => {
   const clip = await helper.request('clipRead');
   if (!clip || !clip.paths.length) return { paths: [] };
   const move = !!cut && clip.change === cut.change;
@@ -703,8 +733,8 @@ ipcMain.handle('clip:paste', async (e, dest) => {
 
 // Dragging items out of a window, as the Mac's own drag with the first
 // item's icon under the pointer.
-ipcMain.on('drag:start', async (e, paths) => {
-  let icon;
+ipc.on('drag:start', async (e, paths) => {
+  let icon: NativeImage | null;
   try {
     icon = await app.getFileIcon(paths[0], { size: 'normal' });
   } catch {
@@ -714,7 +744,7 @@ ipcMain.on('drag:start', async (e, paths) => {
   // Every window hears that the drag is Filedrawer's own, so a drop moves
   // it (the Mac reports this drag as copy only, like Photos' drags).
   // startDrag returns when the drag ends.
-  const tell = (own) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('drag:own', own));
+  const tell = (own: boolean) => BrowserWindow.getAllWindows().forEach((w) => ipc.send(w.webContents, 'drag:own', own));
   tell(true);
   e.sender.startDrag({ file: paths[0], files: paths, icon });
   tell(false);
@@ -722,17 +752,17 @@ ipcMain.on('drag:start', async (e, paths) => {
 
 // A drop moves items that are on the same disk as the folder and copies
 // the rest, or copies everything with Option held.
-ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
+ipc.handle('op:drop', async (e, paths, dest, copy) => {
   const destDev = (await fs.promises.stat(dest)).dev;
   const names = await dragNames();
-  const moves = [];
-  const copies = [];
-  const exported = []; // pictures and videos from Photos, written to a temp folder first
-  let videoError = null;
+  const moves: copier.Pair[] = [];
+  const copies: copier.Pair[] = [];
+  const exported: copier.Pair[] = []; // pictures and videos from Photos, written to a temp folder first
+  let videoError: string | null = null;
   for (const p of paths) {
     const st = await fs.promises.lstat(p).catch(() => null);
     if (!st) continue;
-    const info = names.get(p) || {};
+    const info: Partial<DragName> = names.get(p) || {};
     const isPhoto = info.asset && info.mediaType === 1;
     const isVideo = info.asset && info.mediaType === 2;
     const out = isPhoto || isVideo ? await photoExport(info) : null;
@@ -750,7 +780,7 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
     if (!copy && st.dev === destDev) moves.push(pair);
     else copies.push(pair);
   }
-  const done = [];
+  const done: copier.Done[] = [];
   if (moves.length) done.push(...(await moveOrCopy(e, 'move', moves, dest)).done);
   if (copies.length) done.push(...(await moveOrCopy(e, 'copy', copies, dest)).done);
   if (exported.length) {
@@ -766,8 +796,15 @@ ipcMain.handle('op:drop', async (e, paths, dest, copy) => {
 // its originals, named by id inside its library, so the suggested name is
 // the one to use; its extension is dropped for the file's real one, since
 // an edited photo's original may be another format.
+interface DragName {
+  name: string;
+  suggested: string;
+  asset?: string;
+  mediaType?: number;
+}
+
 async function dragNames() {
-  const names = new Map();
+  const names = new Map<string, DragName>();
   const res = await helper.request('dragNames');
   for (const { path: p, name, asset, mediaType } of res?.items || []) {
     const stem = path.basename(name, path.extname(name));
@@ -783,13 +820,13 @@ async function dragNames() {
 // When Photos isn't allowed or the export fails the answer carries the
 // reason instead (a picture's original is copied then; a video is skipped,
 // since the file on the drag is only its poster frame).
-let photos = 'unknown';
+let photos: PhotosStatus = 'unknown';
 async function refreshPhotos() {
   const res = await helper.request('photosStatus');
   if (res?.status) photos = res.status;
   return photos;
 }
-async function photoExport(info) {
+async function photoExport(info: Partial<DragName>): Promise<{ path?: string; error?: string }> {
   if (photos !== 'allowed' && (await refreshPhotos()) !== 'allowed') {
     return { error: 'Filedrawer needs the Photos permission to take a video dropped from Photos. You can allow it on the General page in Settings.' };
   }
@@ -802,7 +839,7 @@ async function photoExport(info) {
 
 // The Photos row on the General page: macOS's prompt, or Privacy Settings
 // once it was declined there.
-ipcMain.on('photos:ask', async () => {
+ipc.on('photos:ask', async () => {
   if ((await refreshPhotos()) === 'denied') {
     shell.openExternal(PRIVACY + 'Photos');
     return;
@@ -811,14 +848,14 @@ ipcMain.on('photos:ask', async () => {
   if (res?.status) photos = res.status;
   pushState();
 });
-ipcMain.on('photos:refresh', async () => {
+ipc.on('photos:refresh', async () => {
   const was = photos;
   if ((await refreshPhotos()) !== was) pushState();
 });
 
 // Runs a copy or move job, shows its error and puts it on the Undo list.
 // sources are paths, or pairs with a name for the copy to take.
-async function moveOrCopy(e, mode, sources, dest, label) {
+async function moveOrCopy(e: IpcMainEvent | IpcMainInvokeEvent, mode: 'copy' | 'move', sources: (string | copier.Pair)[], dest: string, label?: string) {
   const near = BrowserWindow.fromWebContents(e.sender);
   const pairs = sources.map((s) => (typeof s === 'string' ? { src: s, target: null } : s));
   const res = await copier.start({ mode, pairs, dest, near });
@@ -828,9 +865,9 @@ async function moveOrCopy(e, mode, sources, dest, label) {
 }
 
 // Undoing a copy puts the copies in the Trash and brings back anything they replaced.
-function copyStep(res, label = 'Copy') {
+function copyStep(res: copier.JobResult, label = 'Copy'): undo.Step {
   const copies = res.done.map((d) => d.to);
-  let trashed = [];
+  let trashed: TrashedItem[] = [];
   let replaced = res.replaced;
   return {
     label,
@@ -848,7 +885,7 @@ function copyStep(res, label = 'Copy') {
 }
 
 // Undoing a move moves everything back, then brings back anything it replaced.
-function moveStep(res) {
+function moveStep(res: copier.JobResult): undo.Step {
   const moved = res.done;
   let replaced = res.replaced;
   return {
@@ -867,23 +904,23 @@ function moveStep(res) {
 
 // Undo and Redo go to the window first, which undoes typing in a name or
 // the address bar itself, and asks for the file undo otherwise.
-function undoOrType(which) {
+function undoOrType(which: UndoWhich) {
   const win = BrowserWindow.getFocusedWindow();
-  if (win && windows.has(win)) win.webContents.send('command', { command: which });
+  if (win && windows.has(win)) ipc.send(win.webContents, 'command', { command: which });
   else runUndo(which);
 }
 
-async function runUndo(which, e) {
+async function runUndo(which: UndoWhich, e?: IpcMainInvokeEvent) {
   const res = which === 'redo' ? await undo.redo() : await undo.undo();
   if (res && res.error) {
     if (e) await answer(e, res);
     else await dialog.showMessageBox({ type: 'warning', message: res.error, buttons: ['OK'] });
   }
 }
-ipcMain.handle('op:undo', (e, which) => runUndo(which, e));
+ipc.handle('op:undo', (e, which) => runUndo(which, e));
 
 // Renames and puts it on the Undo list. Used by the window and Properties.
-async function renameWithUndo(from, name) {
+async function renameWithUndo(from: string, name: string): Promise<OpResult> {
   const res = await ops.rename(from, name);
   if (res.path && res.path !== from) {
     const to = res.path;
@@ -895,8 +932,8 @@ async function renameWithUndo(from, name) {
   }
   return res;
 }
-ipcMain.handle('op:rename', async (e, from, name) => answer(e, await renameWithUndo(from, name)));
-ipcMain.handle('ask:extension', async (e, was, now) => {
+ipc.handle('op:rename', async (e, from, name) => answer(e, await renameWithUndo(from, name)));
+ipc.handle('ask:extension', async (e, was, now) => {
   const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), {
     type: 'question',
     message: now ? `Are you sure you want to change the extension from ".${was}" to ".${now}"?` : `Are you sure you want to remove the extension ".${was}"?`,
@@ -909,13 +946,13 @@ ipcMain.handle('ask:extension', async (e, was, now) => {
 });
 
 // Properties, Open With and Quick Look.
-ipcMain.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
-ipcMain.handle('openWith:apps', (_e, p) => chooser.appsFor(p));
-ipcMain.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
-ipcMain.on('openWith:choose', (e, paths) => chooser.show({ paths, mode: 'choose', near: BrowserWindow.fromWebContents(e.sender) }));
+ipc.on('props:open', (e, paths) => props.show(paths, BrowserWindow.fromWebContents(e.sender)));
+ipc.handle('openWith:apps', (_e, p) => chooser.appsFor(p));
+ipc.on('openWith:open', (_e, appPath, paths) => execFile('open', ['-a', appPath, ...paths], () => {}));
+ipc.on('openWith:choose', (e, paths) => chooser.show({ paths, mode: 'choose', near: BrowserWindow.fromWebContents(e.sender) }));
 // Space again on the same item closes its preview.
 const previewing = new WeakMap(); // window -> the path in Quick Look
-ipcMain.on('quicklook', (e, p) => {
+ipc.on('quicklook', (e, p) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
   if (!p || previewing.get(win) === p) {
@@ -928,8 +965,8 @@ ipcMain.on('quicklook', (e, p) => {
 });
 
 // A new item's undo moves it to the Trash, and its redo takes it out again.
-function newItemStep(label, p) {
-  let trashed = null;
+function newItemStep(label: string, p: string): undo.Step {
+  let trashed: TrashedItem[] | null = null;
   return {
     label,
     undo: async () => {
@@ -940,12 +977,12 @@ function newItemStep(label, p) {
     redo: () => ops.untrash(trashed || [])
   };
 }
-ipcMain.handle('op:newFolder', async (e, dir) => {
+ipc.handle('op:newFolder', async (e, dir) => {
   const res = await answer(e, await ops.newFolder(dir));
   if (res.path) undo.push(newItemStep('New Folder', res.path));
   return res;
 });
-ipcMain.handle('op:newText', async (e, dir) => {
+ipc.handle('op:newText', async (e, dir) => {
   const res = await answer(e, await ops.newTextFile(dir));
   if (res.path) undo.push(newItemStep('New Text Document', res.path));
   return res;
@@ -953,51 +990,52 @@ ipcMain.handle('op:newText', async (e, dir) => {
 
 // Send To: a zip next to the items, aliases on the Desktop, a new mail
 // with them attached, or copies in a pinned folder.
-ipcMain.handle('send:zip', async (e, paths) => {
+ipc.handle('send:zip', async (e, paths) => {
   const res = await answer(e, await ops.compress(paths));
   if (res.path) undo.push(newItemStep('Compress', res.path));
   return res;
 });
-ipcMain.handle('send:desktop', async (e, paths) => {
+ipc.handle('send:desktop', async (e, paths) => {
   const desktop = path.join(folders.HOME, 'Desktop');
   for (const p of paths) {
     const res = await answer(e, await ops.alias(p, desktop));
     if (res.error) return res;
-    undo.push(newItemStep('Make Alias', res.path));
+    undo.push(newItemStep('Make Alias', res.path as string)); // no error, so the alias was made at path
   }
   return {};
 });
-ipcMain.on('send:mail', (_e, paths) => execFile('open', ['-a', 'Mail', ...paths], () => {}));
-ipcMain.handle('send:copy', async (e, paths, dest) => {
+ipc.on('send:mail', (_e, paths) => execFile('open', ['-a', 'Mail', ...paths], () => {}));
+ipc.handle('send:copy', async (e, paths, dest) => {
   const res = await moveOrCopy(e, 'copy', paths, dest);
   return { paths: res.done.map((d) => d.to) };
 });
-ipcMain.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
+ipc.handle('op:eject', async (e, volume) => answer(e, await ops.eject(volume)));
 
 // Duplicate copies each item next to itself, named like a paste into the
 // same folder ("Copy of X"). Search results can come from several folders.
-ipcMain.handle('op:duplicate', async (e, paths) => {
-  const byDir = new Map();
+ipc.handle('op:duplicate', async (e, paths) => {
+  const byDir = new Map<string, string[]>();
   for (const p of paths) byDir.set(path.dirname(p), [...(byDir.get(path.dirname(p)) || []), p]);
-  const done = [];
+  const done: copier.Done[] = [];
   for (const [dir, list] of byDir) done.push(...(await moveOrCopy(e, 'copy', list, dir, 'Duplicate')).done);
   return { paths: done.map((d) => d.to) };
 });
 
 // Make Alias puts "X alias" next to each item.
-ipcMain.handle('op:alias', async (e, paths) => {
-  const made = [];
+ipc.handle('op:alias', async (e, paths) => {
+  const made: string[] = [];
   for (const p of paths) {
     const res = await answer(e, await ops.alias(p, path.dirname(p)));
     if (res.error) break;
-    undo.push(newItemStep('Make Alias', res.path));
-    made.push(res.path);
+    // No error, so the alias was made at path.
+    undo.push(newItemStep('Make Alias', res.path as string));
+    made.push(res.path as string);
   }
   return { paths: made };
 });
 
 // Copy Path puts the paths on the clipboard as text, one per line.
-ipcMain.on('clip:path', (_e, paths) => {
+ipc.on('clip:path', (_e, paths) => {
   clipboard.writeText(paths.join('\n'));
   if (cut) {
     cut = null;
@@ -1005,7 +1043,7 @@ ipcMain.on('clip:path', (_e, paths) => {
   }
 });
 
-ipcMain.handle('op:trash', async (e, paths) => {
+ipc.handle('op:trash', async (e, paths) => {
   if (settings.get().confirmTrash) {
     const win = BrowserWindow.fromWebContents(e.sender);
     const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `these ${paths.length} items`;
@@ -1033,23 +1071,23 @@ ipcMain.handle('op:trash', async (e, paths) => {
   }
   return res;
 });
-ipcMain.on('terminal:open', (_e, dir) => openTerminal(dir));
+ipc.on('terminal:open', (_e, dir) => openTerminal(dir));
 // Show in Finder from other apps: Filedrawer or Finder.
-ipcMain.on('search:start', (e, id, q) => search.start(e.sender, id, q));
-ipcMain.on('search:stop', (e) => search.stop(e.sender));
-ipcMain.on('window:open', (_e, dir) => openWindow(dir));
-ipcMain.on('folder:watch', (e, dir, slot) => {
+ipc.on('search:start', (e, id, q) => search.start(e.sender, id, q));
+ipc.on('search:stop', (e) => search.stop(e.sender));
+ipc.on('window:open', (_e, dir) => openWindow(dir));
+ipc.on('folder:watch', (e, dir, slot) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (win) watch(win, dir, slot);
 });
 // Move to Other Side moves even to another disk.
-ipcMain.handle('op:moveTo', async (e, paths, dest) => {
+ipc.handle('op:moveTo', async (e, paths, dest) => {
   const res = await moveOrCopy(e, 'move', paths, dest);
   return { paths: res.done.map((d) => d.to) };
 });
 // Each window has its own view, left pane and folder, so the menus show the front one's.
-const viewOf = new WeakMap();
-ipcMain.on('window:view', (e, look) => {
+const viewOf = new WeakMap<BrowserWindow, WindowLook>();
+ipc.on('window:view', (e, look) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
   viewOf.set(win, look);
@@ -1057,11 +1095,11 @@ ipcMain.on('window:view', (e, look) => {
 });
 // Finder keeps the Trash to itself, so the Trash opens there, and Finder
 // empties it (Filedrawer can't see inside without Full Disk Access).
-ipcMain.on('trash:open', () => {
+ipc.on('trash:open', () => {
   finder.pass();
   shell.openPath(path.join(folders.HOME, '.Trash'));
 });
-ipcMain.on('trash:empty', async (e) => {
+ipc.on('trash:empty', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning',
@@ -1079,15 +1117,15 @@ ipcMain.on('trash:empty', async (e) => {
     dialog.showMessageBox(win, { type: 'warning', message, buttons: ['OK'] });
   });
 });
-ipcMain.on('window:title', (e, { name, dir }) => {
+ipc.on('window:title', (e, { name, dir }) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win) return;
   win.setTitle(name);
   win.setRepresentedFilename(dir);
 });
 // The Trash, shown in Filedrawer once it has Full Disk Access.
-ipcMain.on('privacy:fda', () => shell.openExternal(PRIVACY + 'AllFiles'));
-ipcMain.handle('trash:putBack', async (e, paths) => {
+ipc.on('privacy:fda', () => shell.openExternal(PRIVACY + 'AllFiles'));
+ipc.handle('trash:putBack', async (e, paths) => {
   const res = await places.putBack(paths);
   if (res.done.length) {
     const done = res.done;
@@ -1100,7 +1138,7 @@ ipcMain.handle('trash:putBack', async (e, paths) => {
   if (res.error) await answer(e, { error: res.error });
   return { paths: res.done.map((d) => d.to) };
 });
-ipcMain.handle('trash:delete', async (e, paths) => {
+ipc.handle('trash:delete', async (e, paths) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const what = paths.length === 1 ? `"${path.basename(paths[0])}"` : `these ${paths.length} items`;
   const { response } = await dialog.showMessageBox(win, {
@@ -1115,9 +1153,9 @@ ipcMain.handle('trash:delete', async (e, paths) => {
   return answer(e, await places.deleteNow(paths));
 });
 // The folder Up goes to from a folder that belongs to a place (the Trash's own folder).
-ipcMain.handle('folder:place', (_e, dir) => places.placeOf(dir));
+ipc.handle('folder:place', (_e, dir) => places.placeOf(dir));
 // macOS's own pane for folder access, for a folder Filedrawer wasn't allowed into.
-ipcMain.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'));
+ipc.on('privacy:open', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'));
 
 app.whenReady().then(() => {
   settings.init();
@@ -1126,16 +1164,16 @@ app.whenReady().then(() => {
   prefs.init({ version: VERSION, onChange: pushState });
   updates.onChange(pushState);
   updates.schedule(VERSION, () => settings.get().updates.auto);
-  ipcMain.on('updates:check', () => updates.check(VERSION));
-  ipcMain.on('clipboard:text', (_e, text) => clipboard.writeText(String(text)));
-  ipcMain.on('settings:open', (_e, page) => prefs.show(page));
+  ipc.on('updates:check', () => updates.check(VERSION));
+  ipc.on('clipboard:text', (_e, text) => clipboard.writeText(String(text)));
+  ipc.on('settings:open', (_e, page) => prefs.show(page));
   // Starts one of the other apps, or brings it forward when it's running.
-  ipcMain.on('sibling:open', (_e, key) => {
+  ipc.on('sibling:open', (_e, key) => {
     const at = SIBLINGS[key] && siblingApp(key);
     if (at) execFile('open', ['-a', at], (err) => err && console.log(`Filedrawer: ${key} didn't open: ${err.message}`));
   });
-  ipcMain.on('link', (_e, name) => {
-    const links = {
+  ipc.on('link', (_e, name) => {
+    const links: Record<LinkKey, string> = {
       website: 'https://pratherbytecraft.com',
       github: PKG.homepage,
       community: 'https://www.reddit.com/r/pratherbytecraft/',

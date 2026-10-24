@@ -1,12 +1,13 @@
 // The note Filedrawer shows once, on its first launch, as a sheet on its
 // first window: it offers to open folders in place of Finder and walks
 // through the two permissions that needs. From mockups/default-viewer.html.
-const { BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
+import { BrowserWindow, ipcMain } from 'electron';
+import path from 'path';
+import * as ipc from './ipc';
 
-let sheet = null;
+let sheet: BrowserWindow | null = null;
 
-function show(parent, { onContinue, onClose }) {
+export function show(parent: BrowserWindow, { onContinue, onClose }: { onContinue: () => void; onClose: () => void }) {
   if (sheet && !sheet.isDestroyed()) return;
   sheet = new BrowserWindow({
     parent,
@@ -22,12 +23,13 @@ function show(parent, { onContinue, onClose }) {
     webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   sheet.loadFile(path.join(__dirname, '..', 'renderer', 'welcome', 'index.html'));
-  sheet.once('ready-to-show', () => sheet.show());
+  // Still open: closed only comes after ready-to-show.
+  sheet.once('ready-to-show', () => sheet!.show());
   sheet.on('closed', () => {
     sheet = null;
   });
   ipcMain.removeAllListeners('welcome');
-  ipcMain.on('welcome', (_e, what) => {
+  ipc.on('welcome', (_e, what) => {
     if (what === 'continue') onContinue();
     else if (sheet && !sheet.isDestroyed()) {
       sheet.close();
@@ -36,4 +38,4 @@ function show(parent, { onContinue, onClose }) {
   });
 }
 
-module.exports = { show, get window() { return sheet; } };
+export const window = () => sheet;

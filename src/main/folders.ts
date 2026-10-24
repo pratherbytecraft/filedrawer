@@ -1,15 +1,16 @@
 // Reading folders: the items in a folder with their sizes, dates, kinds and
 // icons, what a typed address points at, the folder names that fill in the
 // address bar, and the free space on a folder's volume.
-const { app, nativeImage } = require('electron');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const helper = require('./helper');
-const places = require('./places');
+import { app, nativeImage } from 'electron';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import helper = require('./helper');
+import places = require('./places');
+import type { Completion, IconRequest, Item, Listing, ListOptions, Pictures, Resolved, VolumeInfo } from '../shared/types';
 
-const HOME = os.homedir();
-const COMPUTER = '::computer'; // the place that lists the volumes
+export const HOME = os.homedir();
+export const COMPUTER = '::computer'; // the place that lists the volumes
 
 // Folders macOS asks about before an app may look inside. Filedrawer only
 // looks inside one when the user opens it, never just to count its items.
@@ -17,26 +18,26 @@ const PROTECTED = ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Document
 const INFO_CHUNK = 500; // paths per helper request
 
 // Finder's Applications folder also shows the apps in /System/Applications.
-const MERGED = { '/Applications': ['/System/Applications'] };
+const MERGED: Record<string, string[]> = { '/Applications': ['/System/Applications'] };
 
 // Kinds for when the helper isn't there.
-const KINDS = {
+const KINDS: Record<string, string> = {
   txt: 'Plain Text Document', md: 'Markdown Document', pdf: 'PDF Document', rtf: 'Rich Text Document',
   jpg: 'JPEG Image', jpeg: 'JPEG Image', png: 'PNG Image', gif: 'GIF Image', heic: 'HEIC Image', svg: 'SVG Image',
   zip: 'ZIP Archive', dmg: 'Disk Image', mp3: 'MP3 Audio', m4a: 'Apple MPEG-4 Audio', mov: 'QuickTime Movie', mp4: 'MPEG-4 Movie',
   html: 'HTML Document', js: 'JavaScript Script', json: 'JSON Document', sh: 'Shell Script', app: 'Application'
 };
 
-function fallbackKind(item) {
+function fallbackKind(item: Item) {
   if (item.dir && !item.package) return 'Folder';
   return KINDS[item.ext] || (item.ext ? `${item.ext.toUpperCase()} File` : 'Document');
 }
 
 const PACKAGE_EXTS = new Set(['app', 'bundle', 'framework', 'plugin', 'kext', 'pkg', 'mpkg', 'photoslibrary', 'rtfd', 'xcodeproj', 'playground']);
 
-async function readItem(dir, name) {
+export async function readItem(dir: string, name: string): Promise<Item | null> {
   const full = path.join(dir, name);
-  let st;
+  let st: fs.Stats;
   let link = false;
   try {
     const l = await fs.promises.lstat(full);
@@ -64,7 +65,7 @@ async function readItem(dir, name) {
 }
 
 // Display names, kinds, hidden flags and packages from the helper, in place.
-async function addInfo(items) {
+export async function addInfo(items: Item[]) {
   for (let i = 0; i < items.length; i += INFO_CHUNK) {
     const chunk = items.slice(i, i + INFO_CHUNK);
     const res = await helper.request('info', { paths: chunk.map((it) => it.path) });
@@ -90,8 +91,8 @@ async function addInfo(items) {
 
 // The volumes, for Computer: the startup disk and whatever is in /Volumes
 // (where the startup disk also has a link to itself, which is skipped).
-async function volumes() {
-  const names = await fs.promises.readdir('/Volumes').catch(() => []);
+async function volumes(): Promise<Item[]> {
+  const names = await fs.promises.readdir('/Volumes').catch((): string[] => []);
   const mounts = ['/'];
   for (const n of names) {
     const m = path.join('/Volumes', n);
@@ -110,7 +111,7 @@ async function volumes() {
   }));
 }
 
-const writable = (dir) => fs.promises.access(dir, fs.constants.W_OK).then(() => true, () => false);
+const writable = (dir: string) => fs.promises.access(dir, fs.constants.W_OK).then(() => true, () => false);
 
 // { path, items, modified, writable } or { path, error } where error is
 // missing, denied or other. hidden keeps hidden items in, extensions shows
@@ -118,9 +119,10 @@ const writable = (dir) => fs.promises.access(dir, fs.constants.W_OK).then(() => 
 // the top of the disk) is marked fixed: it can't be renamed, moved or
 // trashed, and nothing can be made next to it. A folder that can't be
 // changed itself has canAdd false.
-async function list(dir, { hidden = false, extensions = false } = {}) {
+export async function list(dir: string, { hidden = false, extensions = false }: ListOptions = {}): Promise<Listing> {
   if (dir === COMPUTER) return { path: dir, items: await volumes() };
-  const place = { [places.TRASH]: places.listTrash, [places.RECENTS]: places.listRecents, [places.ICLOUD]: places.listICloud }[dir];
+  const listers: Record<string, typeof places.listTrash> = { [places.TRASH]: places.listTrash, [places.RECENTS]: places.listRecents, [places.ICLOUD]: places.listICloud };
+  const place = listers[dir];
   if (place) {
     const res = await place(readItem, addInfo, { hidden });
     if (res.items) {
@@ -138,15 +140,16 @@ async function list(dir, { hidden = false, extensions = false } = {}) {
   try {
     names = await fs.promises.readdir(dir);
   } catch (err) {
-    const error = err.code === 'ENOENT' ? 'missing' : err.code === 'EPERM' || err.code === 'EACCES' ? 'denied' : 'other';
+    const code = (err as NodeJS.ErrnoException).code;
+    const error = code === 'ENOENT' ? 'missing' : code === 'EPERM' || code === 'EACCES' ? 'denied' : 'other';
     return { path: dir, error };
   }
-  let items = (await Promise.all(names.map((n) => readItem(dir, n)))).filter(Boolean);
+  let items = (await Promise.all(names.map((n) => readItem(dir, n)))).filter((it) => it !== null);
   for (const extra of MERGED[dir] || []) {
     const have = new Set(items.map((it) => it.name));
-    const more = await fs.promises.readdir(extra).catch(() => []);
+    const more = await fs.promises.readdir(extra).catch((): string[] => []);
     const merged = await Promise.all(more.filter((n) => !have.has(n)).map((n) => readItem(extra, n)));
-    items = items.concat(merged.filter(Boolean));
+    items = items.concat(merged.filter((it) => it !== null));
   }
   await addInfo(items);
   if (MERGED[dir]) {
@@ -169,8 +172,8 @@ async function list(dir, { hidden = false, extensions = false } = {}) {
 // The number of items in a folder, for the Details box, or null when
 // counting would mean looking inside a folder macOS guards (see PROTECTED)
 // or a volume other than the one being looked at.
-async function count(dir, cwd) {
-  const inside = (root) => cwd === root || (cwd || '').startsWith(root + '/');
+export async function count(dir: string, cwd: string) {
+  const inside = (root: string) => cwd === root || (cwd || '').startsWith(root + '/');
   if (PROTECTED.includes(dir) && !inside(dir)) return null;
   const vol = dir.match(/^\/Volumes\/[^/]+/);
   if (vol && !inside(vol[0])) return null;
@@ -178,9 +181,9 @@ async function count(dir, cwd) {
   return names ? names.filter((n) => !n.startsWith('.')).length : null;
 }
 
-const isPlace = (p) => p === COMPUTER || p === places.TRASH || p === places.RECENTS || p === places.ICLOUD;
+const isPlace = (p: string) => p === COMPUTER || p === places.TRASH || p === places.RECENTS || p === places.ICLOUD;
 
-function expand(text, cwd) {
+function expand(text: string, cwd: string) {
   let t = text.trim().replace(/^(["'])(.*)\1$/, '$2');
   if (t.startsWith('file://')) {
     try {
@@ -195,8 +198,9 @@ function expand(text, cwd) {
 
 // What an address typed into the address bar points at.
 // { type: 'dir' | 'file' | 'missing', path }
-async function resolve(text, cwd) {
-  const named = { computer: COMPUTER, trash: places.TRASH, recents: places.RECENTS, 'icloud drive': places.ICLOUD }[text.trim().toLowerCase()];
+export async function resolve(text: string, cwd: string): Promise<Resolved> {
+  const names: Record<string, string> = { computer: COMPUTER, trash: places.TRASH, recents: places.RECENTS, 'icloud drive': places.ICLOUD };
+  const named = names[text.trim().toLowerCase()];
   if (named) return { type: 'dir', path: named };
   const full = expand(text, cwd);
   if (full === places.HOME_TRASH) return { type: 'dir', path: places.TRASH };
@@ -211,7 +215,7 @@ async function resolve(text, cwd) {
 // Folders that start with what's been typed, for the list under the
 // address bar. Each one comes back the way it was typed (with ~ if the
 // text had it) and as a full path.
-async function complete(text, cwd) {
+export async function complete(text: string, cwd: string): Promise<Completion[]> {
   if (!text.trim()) return [];
   const tilde = text.trim().startsWith('~');
   const full = expand(text, cwd);
@@ -223,7 +227,7 @@ async function complete(text, cwd) {
   } catch {
     return [];
   }
-  const out = [];
+  const out: Completion[] = [];
   for (const e of entries) {
     if (!e.name.toLowerCase().startsWith(prefix)) continue;
     if (e.name.startsWith('.') && !prefix.startsWith('.')) continue;
@@ -239,7 +243,7 @@ async function complete(text, cwd) {
 }
 
 // { name, free } for the volume a folder is on.
-async function volume(dir) {
+export async function volume(dir: string): Promise<VolumeInfo | null> {
   const res = await helper.request('volume', { path: dir });
   if (res && res.name) return { name: res.name, free: res.free };
   try {
@@ -253,13 +257,14 @@ async function volume(dir) {
 // Icons as data URLs, by key. A file's icon is its type's, worked out once
 // per extension; apps, other packages and files with no extension get their
 // own. Plain folders are drawn by the window and never asked for.
-const iconCache = new Map();
+const iconCache = new Map<string, string>();
 
-async function icon(req, px) {
+async function icon(req: IconRequest, px: number) {
   const own = req.package || !req.ext;
   const key = `${own ? req.path : '.' + req.ext}@${px}`;
-  if (iconCache.has(key)) return iconCache.get(key);
-  let url = null;
+  // has() said it's there.
+  if (iconCache.has(key)) return iconCache.get(key) as string;
+  let url: string | null = null;
   const res = own ? await helper.request('icon', { path: req.path, size: px }) : await helper.request('typeIcon', { ext: req.ext, size: px });
   if (res && res.png) {
     url = 'data:image/png;base64,' + res.png;
@@ -275,8 +280,8 @@ async function icon(req, px) {
   return url;
 }
 
-async function icons(reqs, px) {
-  const out = {};
+export async function icons(reqs: IconRequest[], px: number) {
+  const out: Pictures = {};
   await Promise.all(reqs.map(async (r) => {
     out[r.key] = await icon(r, px);
   }));
@@ -289,12 +294,12 @@ async function icons(reqs, px) {
 // A file Quick Look can't draw gets null and keeps its icon. Without the
 // helper, Electron's thumbnail stands in. Kept for the last few hundred
 // files, by path, size and date.
-const thumbCache = new Map();
+const thumbCache = new Map<string, string | null>();
 const THUMB_KEEP = 400;
 const THUMB_TIMEOUT = 10000; // a long video can take Quick Look a while
 const THUMB_BATCH = 6; // asked at once, so a folder of photos doesn't flood the helper
 
-async function thumb(p, px) {
+async function thumb(p: string, px: number) {
   let st;
   try {
     st = await fs.promises.stat(p);
@@ -302,8 +307,9 @@ async function thumb(p, px) {
     return null;
   }
   const key = `${p}@${px}:${st.size}:${st.mtimeMs}`;
-  if (thumbCache.has(key)) return thumbCache.get(key);
-  let url = null;
+  // has() said it's there.
+  if (thumbCache.has(key)) return thumbCache.get(key) as string | null;
+  let url: string | null = null;
   const res = await helper.request('thumb', { path: p, size: px }, { withError: true, timeout: THUMB_TIMEOUT });
   if (res && res.png) url = 'data:image/png;base64,' + res.png;
   else if (!res) {
@@ -315,12 +321,13 @@ async function thumb(p, px) {
     }
   }
   thumbCache.set(key, url);
-  if (thumbCache.size > THUMB_KEEP) thumbCache.delete(thumbCache.keys().next().value);
+  // Over THUMB_KEEP, so there's a first key.
+  if (thumbCache.size > THUMB_KEEP) thumbCache.delete(thumbCache.keys().next().value as string);
   return url;
 }
 
-async function thumbs(paths, px) {
-  const out = {};
+export async function thumbs(paths: string[], px: number) {
+  const out: Pictures = {};
   // A few at a time, so a folder of photos doesn't hold up everything else.
   for (let i = 0; i < paths.length; i += THUMB_BATCH) {
     await Promise.all(paths.slice(i, i + THUMB_BATCH).map(async (p) => {
@@ -330,6 +337,5 @@ async function thumbs(paths, px) {
   return out;
 }
 
-const isPackage = (p) => PACKAGE_EXTS.has(path.extname(p).slice(1).toLowerCase());
+export const isPackage = (p: string) => PACKAGE_EXTS.has(path.extname(p).slice(1).toLowerCase());
 
-module.exports = { HOME, COMPUTER, isPackage, list, count, resolve, complete, volume, icons, thumbs, readItem, addInfo };

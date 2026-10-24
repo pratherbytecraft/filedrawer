@@ -3,19 +3,55 @@
 // open one in the same spot. Events come in one JSON line each; see the top
 // of the helper for the list. The watch comes back after a crash, waiting a
 // bit longer each time, and starts again fresh once Accessibility is given.
-const { spawn } = require('child_process');
-const readline = require('readline');
-const { helperPath } = require('../../scripts/build-helper');
+import { spawn, type ChildProcessByStdio } from 'child_process';
+import readline from 'readline';
+import type { Readable, Writable } from 'stream';
+import { helperPath } from '../../scripts/build-helper';
+import type { FinderPermission } from '../shared/types';
 
-let child = null;
-let handlers = {};
+// The watch's events, one per line.
+export interface WindowEvent {
+  type: 'window';
+  token: number;
+  frame: [number, number, number, number];
+  title: string;
+}
+
+export interface FolderEvent {
+  type: 'folder';
+  token: number;
+  path: string;
+}
+
+export interface SkipEvent {
+  type: 'skip';
+  token: number;
+}
+
+interface PermissionEvent {
+  type: 'permission';
+  accessibility: boolean;
+  automation?: string;
+}
+
+type FinderEvent = WindowEvent | FolderEvent | SkipEvent | PermissionEvent;
+
+export interface Handlers {
+  window?: (msg: WindowEvent) => void;
+  folder?: (msg: FolderEvent) => void;
+  skip?: (msg: SkipEvent) => void;
+  permission?: (permission: FinderPermission) => void;
+}
+
+let child: ChildProcessByStdio<Writable, Readable, null> | null = null;
+let handlers: Handlers = {};
 let stopping = false;
 let relaunch = false;
 let restarts = 0;
-let permission = { accessibility: null, automation: 'unknown' };
+export let permission: FinderPermission = { accessibility: null, automation: 'unknown' };
 
-function onLine(line) {
-  let msg;
+function onLine(line: string) {
+  let msg: FinderEvent;
   try {
     msg = JSON.parse(line);
   } catch {
@@ -27,12 +63,13 @@ function onLine(line) {
     if (handlers.permission) handlers.permission(permission);
     if (wasOff && msg.accessibility) restart();
   } else if (handlers[msg.type]) {
-    handlers[msg.type](msg);
+    // The handler for msg's own type.
+    (handlers[msg.type] as (m: typeof msg) => void)(msg);
   }
 }
 
 // on: { window, folder, skip, permission }, each called with the event.
-function start(on) {
+export function start(on?: Handlers) {
   handlers = on || handlers;
   const bin = helperPath();
   if (!bin || child) return;
@@ -63,25 +100,20 @@ function restart() {
   child.kill();
 }
 
-function stop() {
+export function stop() {
   stopping = true;
   if (child) child.kill();
   child = null;
 }
 
-function send(cmd) {
+function send(cmd: string) {
   if (child) child.stdin.write(JSON.stringify({ cmd }) + '\n');
 }
 
-module.exports = {
-  start,
-  stop,
-  // The next Finder window, in the next few seconds, stays Finder's.
-  pass: () => send('pass'),
-  // Shows macOS's Control Finder prompt, once.
-  askAutomation: () => send('askAutomation'),
-  // Adds Filedrawer to the Accessibility list, switched off, with macOS's note.
-  askAccessibility: () => send('askAccessibility'),
-  get running() { return !!child; },
-  get permission() { return permission; }
-};
+// The next Finder window, in the next few seconds, stays Finder's.
+export const pass = () => send('pass');
+// Shows macOS's Control Finder prompt, once.
+export const askAutomation = () => send('askAutomation');
+// Adds Filedrawer to the Accessibility list, switched off, with macOS's note.
+export const askAccessibility = () => send('askAccessibility');
+export const running = () => !!child;

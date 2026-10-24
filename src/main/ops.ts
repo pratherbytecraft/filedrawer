@@ -1,13 +1,14 @@
 // Changing things on disk: renaming, making new folders and text files, and
 // moving to the Trash and back. Each call answers { path } (or { items }) on
 // success or { error } with a message for the user, which the caller shows.
-const fs = require('fs');
-const path = require('path');
-const { execFile } = require('child_process');
-const helper = require('./helper');
-const places = require('./places');
+import fs from 'fs';
+import path from 'path';
+import { execFile } from 'child_process';
+import helper = require('./helper');
+import places = require('./places');
+import type { OpResult, TrashedItem, TrashResult } from '../shared/types';
 
-function message(err, what) {
+function message(err: NodeJS.ErrnoException, what: string) {
   if (err.code === 'EACCES' || err.code === 'EPERM') return `Filedrawer doesn't have permission to ${what} here.`;
   if (err.code === 'ENOENT') return 'The item isn\'t there anymore.';
   if (err.code === 'ENOSPC') return 'There isn\'t enough free space on the disk.';
@@ -15,12 +16,12 @@ function message(err, what) {
   return `The item couldn't be ${what === 'rename it' ? 'renamed' : 'made'}. ${err.message}`;
 }
 
-const exists = (p) => fs.promises.lstat(p).then(() => true, () => false);
+const exists = (p: string) => fs.promises.lstat(p).then(() => true, () => false);
 
 // base, or "base (2)", "base (3)" and so on, whichever isn't taken. The
 // number goes before the extension, as in "New Text Document (2).txt". An
 // extension with a space isn't one ("a.txt alias" gets "a.txt alias (2)").
-async function freeName(dir, base) {
+async function freeName(dir: string, base: string) {
   const ext = /\s/.test(path.extname(base)) ? '' : path.extname(base);
   const stem = ext ? base.slice(0, -ext.length) : base;
   for (let n = 1; ; n++) {
@@ -29,7 +30,7 @@ async function freeName(dir, base) {
   }
 }
 
-function badName(name) {
+function badName(name: string) {
   if (!name.trim()) return 'A name can\'t be empty.';
   if (name.includes('/')) return 'A name can\'t have a slash (/) in it.';
   if (name === '.' || name === '..') return `"${name}" can't be used as a name.`;
@@ -37,7 +38,7 @@ function badName(name) {
   return null;
 }
 
-async function rename(from, name) {
+async function rename(from: string, name: string): Promise<OpResult> {
   const bad = badName(name);
   if (bad) return { error: bad };
   const to = path.join(path.dirname(from), name);
@@ -50,40 +51,40 @@ async function rename(from, name) {
     await fs.promises.rename(from, to);
     return { path: to };
   } catch (err) {
-    if (err.code === 'EPERM') {
+    if ((err as NodeJS.ErrnoException).code === 'EPERM') {
       const flags = await helper.request('flags', { path: from });
       if (flags && flags.locked) return { error: `"${path.basename(from)}" is locked. Unlock it in Properties to rename it.` };
     }
-    return { error: message(err, 'rename it') };
+    return { error: message(err as NodeJS.ErrnoException, 'rename it') };
   }
 }
 
-async function newFolder(dir) {
+async function newFolder(dir: string): Promise<OpResult> {
   try {
     const p = path.join(dir, await freeName(dir, 'New Folder'));
     await fs.promises.mkdir(p);
     return { path: p };
   } catch (err) {
-    return { error: message(err, 'make a folder') };
+    return { error: message(err as NodeJS.ErrnoException, 'make a folder') };
   }
 }
 
-async function newTextFile(dir) {
+async function newTextFile(dir: string): Promise<OpResult> {
   try {
     const p = path.join(dir, await freeName(dir, 'New Text Document.txt'));
     await fs.promises.writeFile(p, '', { flag: 'wx' });
     return { path: p };
   } catch (err) {
-    return { error: message(err, 'make a file') };
+    return { error: message(err as NodeJS.ErrnoException, 'make a file') };
   }
 }
 
 // { items: [{ from, to }] } for what reached the Trash, with an error for
 // anything that didn't.
-async function trash(paths) {
+async function trash(paths: string[]): Promise<TrashResult> {
   const res = await helper.request('trash', { paths });
   if (!res) return { error: 'The items couldn\'t be moved to the Trash.', items: [] };
-  const moved = res.items.filter((it) => it.to);
+  const moved = res.items.filter((it): it is TrashedItem => !!it.to);
   const failed = res.items.filter((it) => !it.to);
   places.logTrashed(moved); // so Put Back knows where they came from
   if (!failed.length) return { items: moved };
@@ -94,7 +95,7 @@ async function trash(paths) {
 }
 
 // Puts trashed items back where they were, for Undo.
-async function untrash(items) {
+async function untrash(items: TrashedItem[]): Promise<{ error?: string }> {
   for (const it of items) {
     if (await exists(it.from)) return { error: `There's already an item named "${path.basename(it.from)}" where it came from.` };
   }
@@ -108,12 +109,12 @@ async function untrash(items) {
 // A zip of the items next to them, named after the first one ("Report.zip").
 // One item goes through ditto, which keeps Mac extras the way Finder does;
 // more than one through zip.
-async function compress(paths) {
+async function compress(paths: string[]): Promise<OpResult> {
   const dir = path.dirname(paths[0]);
   const first = path.basename(paths[0]);
   const stem = (await fs.promises.stat(paths[0])).isDirectory() ? first : path.basename(first, path.extname(first)) || first;
   const out = path.join(dir, await freeName(dir, `${stem}.zip`));
-  const args = paths.length === 1 ? ['ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', paths[0], out]]
+  const args: [string, string[]] = paths.length === 1 ? ['ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', paths[0], out]]
     : ['zip', ['-r', '-y', '-q', out, ...paths.map((p) => path.basename(p))]];
   return new Promise((resolve) => {
     execFile(args[0], args[1], { cwd: dir }, (err) => {
@@ -128,7 +129,7 @@ async function compress(paths) {
 }
 
 // A Finder alias of an item in another folder, named "X alias".
-async function alias(src, destDir) {
+async function alias(src: string, destDir: string): Promise<OpResult> {
   const out = path.join(destDir, await freeName(destDir, `${path.basename(src)} alias`));
   const res = await helper.request('alias', { path: src, to: out }, { withError: true });
   if (!res || res.error) return { error: `The alias couldn't be made. ${res ? res.error : ''}`.trim() };
@@ -136,8 +137,8 @@ async function alias(src, destDir) {
 }
 
 // Through diskutil, which says which app is holding a disk that's in use.
-function eject(volume) {
-  return new Promise((resolve) => {
+function eject(volume: string) {
+  return new Promise<OpResult>((resolve) => {
     execFile('diskutil', ['eject', volume], (err, _out, stderr) => {
       if (!err) return resolve({});
       const why = /dissented by PID (\d+)(?: \(([^)]+)\))?/.exec(stderr || '');
@@ -148,4 +149,6 @@ function eject(volume) {
   });
 }
 
-module.exports = { rename, newFolder, newTextFile, trash, untrash, compress, alias, eject, freeName, exists };
+// A plain exports object, the way CommonJS has it, so a unit test can put a
+// stand-in in place of one of these functions and the other modules use it.
+export = { rename, newFolder, newTextFile, trash, untrash, compress, alias, eject, freeName, exists };

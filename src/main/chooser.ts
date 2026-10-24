@@ -3,26 +3,34 @@
 // this file only) and Choose App... in Open With (opens the file, and can
 // make the app the default too). Apps picked here are remembered for each
 // extension, like the old windows, and listed first from then on.
-const { BrowserWindow, ipcMain, dialog } = require('electron');
-const { execFile } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const helper = require('./helper');
-const folders = require('./folders');
-const settings = require('./settings');
+import { BrowserWindow, dialog, type BrowserWindowConstructorOptions } from 'electron';
+import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import helper = require('./helper');
+import * as folders from './folders';
+import * as settings from './settings';
+import * as ipc from './ipc';
+import type { AppChoice, ChooserData, ChooserMode, OpensWith } from '../shared/types';
+
+interface Entry {
+  paths: string[];
+  mode: ChooserMode;
+  onDone?: () => void;
+}
 
 const KEEP = 5; // apps remembered for each extension
-const open = new Map(); // webContents id -> { paths, mode, onDone }
+const open = new Map<number, Entry>(); // webContents id -> { paths, mode, onDone }
 
-const extOf = (p) => path.extname(p).slice(1).toLowerCase();
+const extOf = (p: string) => path.extname(p).slice(1).toLowerCase();
 
-const appName = (p) => path.basename(p).replace(/\.app$/i, '');
+const appName = (p: string) => path.basename(p).replace(/\.app$/i, '');
 
-function remembered(ext) {
+function remembered(ext: string) {
   return (ext && settings.get().openWith[ext]) || [];
 }
 
-function remember(ext, appPath) {
+export function remember(ext: string, appPath: string) {
   if (!ext) return;
   const all = settings.get().openWith;
   const list = [appPath, ...remembered(ext).filter((p) => p !== appPath)].slice(0, KEEP);
@@ -31,9 +39,9 @@ function remember(ext, appPath) {
 
 // The apps that can open the file, from Launch Services, with the ones
 // picked here before added in (an app from Browse... may not say it can).
-async function appsFor(p) {
+export async function appsFor(p: string): Promise<AppChoice[]> {
   const res = await helper.request('openWith', { path: p });
-  const apps = res ? res.apps : [];
+  const apps: AppChoice[] = res ? res.apps : [];
   const ext = extOf(p);
   for (const r of remembered(ext)) {
     if (!apps.some((a) => a.path === r) && fs.existsSync(r)) apps.push({ path: r, name: appName(r), default: false, claims: false });
@@ -45,7 +53,7 @@ async function appsFor(p) {
 
 // The app that opens these files now, for Properties: { path, name, icon },
 // or null for folders, apps, disks and a mix of extensions.
-async function opensWith(paths) {
+export async function opensWith(paths: string[]): Promise<OpensWith | null> {
   const exts = new Set(paths.map(extOf));
   if (exts.size !== 1) return null;
   for (const p of paths) {
@@ -59,8 +67,8 @@ async function opensWith(paths) {
   return { path: app.path, name: app.name, icon: icons.a };
 }
 
-function show({ paths, mode, near, onDone }) {
-  const opts = {
+export function show({ paths, mode, near, onDone }: { paths: string[]; mode: ChooserMode; near: BrowserWindow | null; onDone?: () => void }) {
+  const opts: BrowserWindowConstructorOptions & { width: number } = {
     width: 440,
     height: 460,
     minWidth: 380,
@@ -88,7 +96,7 @@ function show({ paths, mode, near, onDone }) {
   return win;
 }
 
-ipcMain.handle('chooser:get', async (e) => {
+ipc.handle('chooser:get', async (e): Promise<ChooserData | null> => {
   const entry = open.get(e.sender.id);
   if (!entry) return null;
   const first = entry.paths[0];
@@ -109,7 +117,7 @@ ipcMain.handle('chooser:get', async (e) => {
 });
 
 // An app from anywhere on the Mac, picked in the Mac's own open panel.
-ipcMain.handle('chooser:browse', async (e) => {
+ipc.handle('chooser:browse', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const res = await dialog.showOpenDialog(win, {
     title: 'Choose an App',
@@ -126,7 +134,7 @@ ipcMain.handle('chooser:browse', async (e) => {
 
 // OK: { app, scope } where scope is type (every file like these), file
 // (these files only), or open (Choose App... without the box ticked).
-ipcMain.handle('chooser:done', async (e, { app, scope }) => {
+ipc.handle('chooser:done', async (e, { app, scope }) => {
   const entry = open.get(e.sender.id);
   if (!entry) return {};
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -151,8 +159,8 @@ ipcMain.handle('chooser:done', async (e, { app, scope }) => {
   }
   if (entry.mode === 'choose') execFile('open', ['-a', app, ...entry.paths], () => {});
   if (entry.onDone) entry.onDone();
-  win.close();
+  // The chooser's own window, which sent this.
+  win!.close();
   return {};
 });
 
-module.exports = { show, appsFor, opensWith, remember };

@@ -6,28 +6,64 @@
 // Copies are APFS clones where the disk allows, which take no time or room.
 // A move on the same disk is a rename. A move to another disk copies, then
 // removes the original once the copy is whole.
-const { BrowserWindow, ipcMain } = require('electron');
-const fs = require('fs');
-const path = require('path');
-const ops = require('./ops');
+import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import ops = require('./ops');
+import * as ipc from './ipc';
+import type { JobChoice, JobQuestion, TrashedItem } from '../shared/types';
+
+// A source and where it goes: target null when the job works the name out
+// (into dest), or a fixed path (for Undo). name, when set, is the name it
+// takes in dest instead of its own.
+export interface Pair {
+  src: string;
+  target: string | null;
+  name?: string;
+}
+
+export interface JobOptions {
+  mode: 'copy' | 'move';
+  pairs: Pair[];
+  dest?: string;
+  near?: BrowserWindow | null;
+}
+
+// A top level item that finished: where it was and where it is now.
+export interface Done {
+  from: string;
+  to: string;
+}
+
+export interface JobResult {
+  done: Done[];
+  replaced: TrashedItem[];
+  error: string | null;
+  cancelled: boolean;
+}
+
+interface Count {
+  files: number;
+  bytes: number;
+}
 
 const SHOW_AFTER = 600; // ms before the progress window opens
 const CANCELLED = new Error('cancelled');
 
-const jobs = new Map(); // id -> Job
+const jobs = new Map<number, Job>(); // id -> Job
 let nextId = 1;
 
-const isInside = (child, parent) => child === parent || child.startsWith(parent + '/');
+const isInside = (child: string, parent: string) => child === parent || child.startsWith(parent + '/');
 
 // "Copy of X", then "Copy (2) of X" and so on, for a copy into the same folder.
-async function copyName(dir, name) {
+async function copyName(dir: string, name: string) {
   for (let n = 1; ; n++) {
     const candidate = n === 1 ? `Copy of ${name}` : `Copy (${n}) of ${name}`;
     if (!(await ops.exists(path.join(dir, candidate)))) return candidate;
   }
 }
 
-async function count(p) {
+async function count(p: string): Promise<Count> {
   const st = await fs.promises.lstat(p);
   if (!st.isDirectory()) return { files: 1, bytes: st.size };
   let files = 0;
@@ -40,7 +76,7 @@ async function count(p) {
   return { files: files + 1, bytes };
 }
 
-function timeLeft(seconds) {
+function timeLeft(seconds: number) {
   if (!isFinite(seconds)) return '';
   if (seconds < 5) return 'A few seconds left';
   if (seconds < 60) return `About ${Math.round(seconds / 5) * 5} seconds left`;
@@ -49,10 +85,34 @@ function timeLeft(seconds) {
 }
 
 class Job {
+  // Declared only, so the class itself sets nothing; the constructor does.
+  declare id: number;
+  declare mode: JobOptions['mode'];
+  declare pairs: Pair[];
+  declare dest: string | undefined;
+  declare near: BrowserWindow | null | undefined;
+  declare win: BrowserWindow | null;
+  declare cancelled: boolean;
+  declare total: Count;
+  declare doneCount: Count;
+  declare current: string;
+  declare done: Done[];
+  declare replaced: TrashedItem[];
+  declare error: string | null;
+  declare answer: ((choice: JobChoice, all?: boolean) => void) | null;
+  declare forAll: JobChoice | null;
+  declare lastSent: number;
+  // Set as the job goes.
+  declare started?: number;
+  declare showTimer?: NodeJS.Timeout;
+  declare finished?: boolean;
+  declare partial?: number;
+  declare question?: JobQuestion | null;
+
   // mode is copy or move. pairs are { src, target } with target null when
   // the job works the name out (into dest), or a fixed path (for Undo).
   // A pair's name, when set, is the name it takes in dest instead of its own.
-  constructor({ mode, pairs, dest, near }) {
+  constructor({ mode, pairs, dest, near }: JobOptions) {
     this.id = nextId++;
     this.mode = mode;
     this.pairs = pairs;
@@ -73,7 +133,7 @@ class Job {
 
   show() {
     if (this.win || this.finished) return;
-    const opts = {
+    const opts: BrowserWindowConstructorOptions & { width: number } = {
       width: 440,
       height: 190,
       resizable: false,
@@ -104,17 +164,17 @@ class Job {
     if (this.answer) this.answer('cancel');
   }
 
-  send(force) {
+  send(force?: boolean) {
     if (!this.win || this.win.isDestroyed() || this.win.webContents.isLoading()) return;
     const now = Date.now();
     if (!force && now - this.lastSent < 100) return;
     this.lastSent = now;
     const bytes = this.doneCount.bytes + (this.partial || 0);
     const fraction = this.total.bytes ? bytes / this.total.bytes : this.total.files ? this.doneCount.files / this.total.files : 0;
-    const elapsed = (now - this.started) / 1000;
+    const elapsed = (now - (this.started as number)) / 1000; // set when the job starts, before anything is sent
     const verb = this.mode === 'copy' ? 'Copying' : 'Moving';
     const n = this.pairs.length;
-    this.win.webContents.send('job:update', {
+    ipc.send(this.win.webContents, 'job:update', {
       title: `${verb} ${n === 1 ? `"${path.basename(this.pairs[0].src)}"` : `${n} items`}`,
       line: this.dest ? `to "${path.basename(this.dest) || this.dest}"` : '',
       current: this.current ? path.basename(this.current) : '',
@@ -124,14 +184,14 @@ class Job {
     });
   }
 
-  tick(files, bytes) {
+  tick(files: number, bytes: number) {
     this.doneCount.files += files;
     this.doneCount.bytes += bytes;
     this.send();
   }
 
   // replace | keep | skip | cancel, asked in the job's window.
-  ask(name, folder, more) {
+  ask(name: string, folder: string, more: number): Promise<JobChoice> {
     if (this.forAll) return Promise.resolve(this.forAll);
     clearTimeout(this.showTimer);
     this.show();
@@ -148,7 +208,7 @@ class Job {
     });
   }
 
-  async copyTree(src, dst) {
+  async copyTree(src: string, dst: string): Promise<void> {
     if (this.cancelled) throw CANCELLED;
     const st = await fs.promises.lstat(src);
     if (st.isSymbolicLink()) {
@@ -173,7 +233,7 @@ class Job {
         this.partial = Math.min(d.size, st.size);
         this.send();
       });
-    }, 250) : null;
+    }, 250) : undefined;
     try {
       // A clone where the disk can, a full copy with the file's dates and extras otherwise.
       await fs.promises.copyFile(src, dst, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);
@@ -184,13 +244,13 @@ class Job {
     this.tick(1, st.size);
   }
 
-  async run() {
+  async run(): Promise<JobResult> {
     this.started = Date.now();
     this.showTimer = setTimeout(() => this.show(), SHOW_AFTER);
     try {
       await this.work();
     } catch (err) {
-      if (err !== CANCELLED) this.error = this.error || err.message;
+      if (err !== CANCELLED) this.error = this.error || (err as Error).message;
     }
     this.finished = true;
     clearTimeout(this.showTimer);
@@ -204,11 +264,11 @@ class Job {
 
   async work() {
     const destDev = this.dest ? (await fs.promises.stat(this.dest)).dev : null;
-    const plan = [];
+    const plan: (Pair & { rename: boolean; size: Count })[] = [];
     for (const pair of this.pairs) {
       const st = await fs.promises.lstat(pair.src);
       const toDir = pair.target ? path.dirname(pair.target) : this.dest;
-      const sameDisk = (pair.target ? (await fs.promises.stat(toDir)).dev : destDev) === st.dev;
+      const sameDisk = (pair.target ? (await fs.promises.stat(toDir as string)).dev : destDev) === st.dev; // toDir is the target's folder here
       const rename = this.mode === 'move' && sameDisk;
       const c = rename ? { files: 1, bytes: 0 } : await count(pair.src);
       this.total.files += c.files;
@@ -224,19 +284,20 @@ class Job {
       let target = plan[i].target;
       let replacedHere = null; // what this item pushed into the Trash
       if (!target) {
-        if (this.mode === 'move' && path.dirname(src) === this.dest) {
+        const dest = this.dest as string; // a pair without a target goes into dest
+        if (this.mode === 'move' && path.dirname(src) === dest) {
           this.tick(plan[i].size.files, plan[i].size.bytes);
           continue; // already here
         }
-        if (isInside(this.dest, src)) {
+        if (isInside(dest, src)) {
           this.error = `"${name}" can't be ${this.mode === 'copy' ? 'copied' : 'moved'} into itself.`;
           continue;
         }
-        target = path.join(this.dest, name);
-        if (this.mode === 'copy' && path.dirname(src) === this.dest) {
-          target = path.join(this.dest, await copyName(this.dest, name));
+        target = path.join(dest, name);
+        if (this.mode === 'copy' && path.dirname(src) === dest) {
+          target = path.join(dest, await copyName(dest, name));
         } else if (await ops.exists(target)) {
-          const choice = await this.ask(name, path.basename(this.dest), plan.length - i - 1);
+          const choice = await this.ask(name, path.basename(dest), plan.length - i - 1);
           if (choice === 'cancel') {
             this.cancelled = true;
             return;
@@ -246,7 +307,7 @@ class Job {
             continue;
           }
           if (choice === 'keep') {
-            target = path.join(this.dest, await ops.freeName(this.dest, name));
+            target = path.join(dest, await ops.freeName(dest, name));
           } else {
             // Replaced items go to the Trash, so Undo can bring them back.
             const res = await ops.trash([target]);
@@ -282,19 +343,18 @@ class Job {
   }
 }
 
-function start(opts) {
+export function start(opts: JobOptions) {
   const job = new Job(opts);
   jobs.set(job.id, job);
   return job.run();
 }
 
-ipcMain.on('job:answer', (_e, id, choice, all) => {
+ipc.on('job:answer', (_e, id, choice, all) => {
   const job = jobs.get(Number(id));
   if (job && job.answer) job.answer(choice, all);
 });
-ipcMain.on('job:cancel', (_e, id) => {
+ipc.on('job:cancel', (_e, id) => {
   const job = jobs.get(Number(id));
   if (job) job.cancel();
 });
 
-module.exports = { start };

@@ -3,20 +3,31 @@
 // size on disk (folders counted in the background), dates, the Locked,
 // Hidden and Hide extension switches, and Finder's comments. The name can be
 // changed there too.
-const { BrowserWindow, ipcMain, dialog } = require('electron');
-const fs = require('fs');
-const { execFile } = require('child_process');
-const path = require('path');
-const helper = require('./helper');
-const folders = require('./folders');
-const chooser = require('./chooser');
+import { BrowserWindow, dialog, type BrowserWindowConstructorOptions, type IpcMainInvokeEvent } from 'electron';
+import fs from 'fs';
+import { execFile } from 'child_process';
+import path from 'path';
+import helper = require('./helper');
+import * as folders from './folders';
+import * as chooser from './chooser';
+import * as ipc from './ipc';
+import type { OpResult, PropsChange, PropsData, PropsSize } from '../shared/types';
 
-const open = new Map(); // window id -> { paths, stopped }
-let renameItem = null; // (from, name) -> { path } | { error }, with Undo, from index.js
+interface Entry {
+  paths: string[];
+  stopped: boolean;
+  id?: number;
+}
+
+type Totals = Omit<PropsSize, 'done'>;
+type Flags = Pick<PropsChange, 'locked' | 'hidden' | 'hideExt'>;
+
+const open = new Map<number, Entry>(); // window id -> { paths, stopped }
+let renameItem: ((from: string, name: string) => Promise<OpResult>) | null = null; // (from, name) -> { path } | { error }, with Undo, from index.js
 
 // Adds up a folder's files and folders as it goes, telling onStep now and
 // then, and stops when stopped() says so.
-async function measure(p, total, onStep, stopped) {
+async function measure(p: string, total: Totals, onStep: () => void, stopped: () => boolean): Promise<void> {
   const st = await fs.promises.lstat(p).catch(() => null);
   if (!st || stopped()) return;
   total.bytes += st.isDirectory() ? 0 : st.size;
@@ -26,7 +37,7 @@ async function measure(p, total, onStep, stopped) {
     return;
   }
   total.folders += 1;
-  const names = await fs.promises.readdir(p).catch(() => []);
+  const names = await fs.promises.readdir(p).catch((): string[] => []);
   for (const n of names) {
     await measure(path.join(p, n), total, onStep, stopped);
     if (stopped()) return;
@@ -34,7 +45,7 @@ async function measure(p, total, onStep, stopped) {
   }
 }
 
-async function describe(paths) {
+async function describe(paths: string[]): Promise<PropsData> {
   const items = await Promise.all(paths.map(async (p) => {
     const st = await fs.promises.lstat(p).catch(() => null);
     const info = await helper.request('info', { paths: [p] });
@@ -52,7 +63,7 @@ async function describe(paths) {
   return {
     one: paths.length === 1,
     name: paths.length === 1 ? (volume && volume.name) || first.name : `${paths.length} items`,
-    volume: volume ? { free: volume.free, total: (await helper.request('volume', { path: first.path }) || {}).total || null } : null,
+    volume: volume ? { free: volume.free, total: (await helper.request('volume', { path: first.path }))?.total || null } : null,
     fullName: path.basename(first.path),
     kind: kinds.size === 1 ? first.kind : 'Multiple kinds',
     location: places.size === 1 ? path.dirname(first.path) : 'More than one folder',
@@ -72,8 +83,8 @@ async function describe(paths) {
   };
 }
 
-function show(paths, near) {
-  const opts = {
+export function show(paths: string[], near: BrowserWindow | null) {
+  const opts: BrowserWindowConstructorOptions = {
     width: 400,
     height: 500,
     resizable: false,
@@ -90,20 +101,20 @@ function show(paths, near) {
     opts.y = b.y + 60 + open.size * 22;
   }
   const win = new BrowserWindow(opts);
-  const entry = { paths, stopped: false };
+  const entry: Entry = { paths, stopped: false };
   open.set(win.webContents.id, entry);
   win.loadFile(path.join(__dirname, '..', 'renderer', 'props', 'index.html'));
   // Shown once it's sized to what it shows (props:fit), or after a moment.
   win.once('ready-to-show', () => setTimeout(() => !win.isDestroyed() && win.show(), 800));
   win.on('closed', () => {
     entry.stopped = true;
-    open.delete(entry.id);
+    open.delete(entry.id as number); // set just below, before the window can close
   });
   entry.id = win.webContents.id;
   return win;
 }
 
-ipcMain.handle('props:get', async (e) => {
+ipc.handle('props:get', async (e) => {
   const entry = open.get(e.sender.id);
   if (!entry) return null;
   const data = await describe(entry.paths);
@@ -111,12 +122,12 @@ ipcMain.handle('props:get', async (e) => {
   // Sizes come afterwards, counted in the background.
   const total = { bytes: 0, disk: 0, files: 0, folders: 0 };
   let last = 0;
-  const report = (done) => {
+  const report = (done: boolean) => {
     if (e.sender.isDestroyed()) return;
     const now = Date.now();
     if (!done && now - last < 200) return;
     last = now;
-    e.sender.send('props:size', { ...total, done });
+    ipc.send(e.sender, 'props:size', { ...total, done });
   };
   (async () => {
     for (const p of entry.paths) await measure(p, total, () => report(false), () => entry.stopped);
@@ -125,7 +136,7 @@ ipcMain.handle('props:get', async (e) => {
   return data;
 });
 
-async function setFlags(p, flags) {
+async function setFlags(p: string, flags: Flags): Promise<OpResult> {
   const res = await helper.request('setFlags', { path: p, ...flags });
   return res ? {} : { error: 'The item\'s switches couldn\'t be changed.' };
 }
@@ -133,7 +144,7 @@ async function setFlags(p, flags) {
 // { error } or {} after setting what changed: the name (through rename, so
 // it can be undone) and the switches. A locked item can't be renamed, so an
 // unlock comes first and a lock last.
-ipcMain.handle('props:apply', async (e, change) => {
+ipc.handle('props:apply', async (e, change) => {
   const res = await apply(e, change);
   if (res.error) {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -142,7 +153,7 @@ ipcMain.handle('props:apply', async (e, change) => {
   return res;
 });
 
-async function apply(e, change) {
+async function apply(e: IpcMainInvokeEvent, change: PropsChange): Promise<OpResult> {
   const entry = open.get(e.sender.id);
   if (!entry || entry.paths.length !== 1) return {};
   let p = entry.paths[0];
@@ -153,13 +164,13 @@ async function apply(e, change) {
   if (change.name !== undefined && renameItem) {
     const res = await renameItem(p, change.name);
     if (res.error) return res;
-    entry.paths[0] = p = res.path;
+    entry.paths[0] = p = res.path as string; // no error, so the rename gave its path
   }
   if (change.comment !== undefined) {
     const res = await setComment(p, change.comment);
     if (res.error) return res;
   }
-  const rest = {};
+  const rest: Flags = {};
   if (change.locked === true) rest.locked = true;
   if (change.hidden !== undefined) rest.hidden = change.hidden;
   if (change.hideExt !== undefined) rest.hideExt = change.hideExt;
@@ -167,9 +178,9 @@ async function apply(e, change) {
 }
 
 // Comments are Finder's, set through Finder so its Get Info shows the same.
-function setComment(p, text) {
+function setComment(p: string, text: string) {
   const script = ['on run argv', 'tell application "Finder" to set comment of (POSIX file (item 1 of argv) as alias) to (item 2 of argv)', 'end run'];
-  return new Promise((resolve) => {
+  return new Promise<OpResult>((resolve) => {
     execFile('osascript', [...script.flatMap((l) => ['-e', l]), p, text], (err, _out, stderr) => {
       if (!err) return resolve({});
       if (/-1743/.test(stderr || '')) resolve({ error: 'Filedrawer needs Control Finder to change comments. You can allow it on the Default File Manager page in Settings.' });
@@ -178,7 +189,7 @@ function setComment(p, text) {
   });
 }
 
-ipcMain.on('props:fit', (e, height) => {
+ipc.on('props:fit', (e, height) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   if (!win || !open.has(e.sender.id)) return;
   const [width] = win.getContentSize();
@@ -188,7 +199,7 @@ ipcMain.on('props:fit', (e, height) => {
 
 // Change... next to Opens with: the app list over Properties, and the row
 // shows the new app once it's set.
-ipcMain.on('props:changeApp', (e) => {
+ipc.on('props:changeApp', (e) => {
   const entry = open.get(e.sender.id);
   if (!entry) return;
   const sender = e.sender;
@@ -198,13 +209,12 @@ ipcMain.on('props:changeApp', (e) => {
     near: BrowserWindow.fromWebContents(sender),
     onDone: async () => {
       const now = await chooser.opensWith(entry.paths);
-      if (!sender.isDestroyed()) sender.send('props:opensWith', now);
+      if (!sender.isDestroyed()) ipc.send(sender, 'props:opensWith', now);
     }
   });
 });
 
-function init({ rename }) {
+export function init({ rename }: { rename: (from: string, name: string) => Promise<OpResult> }) {
   renameItem = rename;
 }
 
-module.exports = { show, init };

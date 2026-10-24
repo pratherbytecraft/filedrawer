@@ -3,22 +3,32 @@
 // functions that do and undo it, each answering { error } when it can't.
 const MAX = 50;
 
-const done = []; // steps that can be undone, newest last
-const undone = []; // steps that can be done again, newest last
-const listeners = new Set();
+// What a step's function answers. Copy and move jobs answer error null when
+// they went fine.
+export type StepResult = { error?: string | null } | null | undefined;
+
+export interface Step {
+  label: string;
+  undo: () => StepResult | Promise<StepResult>;
+  redo: () => StepResult | Promise<StepResult>;
+}
+
+const done: Step[] = []; // steps that can be undone, newest last
+const undone: Step[] = []; // steps that can be done again, newest last
+const listeners = new Set<() => void>();
 
 function changed() {
   for (const fn of listeners) fn();
 }
 
-function push(step) {
+export function push(step: Step) {
   done.push(step);
   if (done.length > MAX) done.shift();
   undone.length = 0;
   changed();
 }
 
-async function undo() {
+export async function undo() {
   const step = done.pop();
   if (!step) return null;
   const res = await step.undo();
@@ -27,7 +37,7 @@ async function undo() {
   return res;
 }
 
-async function redo() {
+export async function redo() {
   const step = undone.pop();
   if (!step) return null;
   const res = await step.redo();
@@ -36,15 +46,14 @@ async function redo() {
   return res;
 }
 
-function labels() {
+export function labels() {
   return {
     undo: done.length ? `Undo ${done[done.length - 1].label}` : null,
     redo: undone.length ? `Redo ${undone[undone.length - 1].label}` : null
   };
 }
 
-function onChange(fn) {
+export function onChange(fn: () => void) {
   listeners.add(fn);
 }
 
-module.exports = { push, undo, redo, labels, onChange };

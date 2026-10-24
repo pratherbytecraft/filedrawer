@@ -7,16 +7,17 @@
 // directly, so macOS treats it as its own app and asks for folder access in
 // its name. A folder is handed over the same way, which reaches Filedrawer
 // whether it's running already or not.
-const { spawn, spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { spawn, spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 if (process.platform !== 'darwin') {
   console.error('Filedrawer runs on macOS only.');
   process.exit(1);
 }
 
-const { appPath, build, BUNDLE_ID } = require('../scripts/build-app');
+import { appPath, build, BUNDLE_ID } from '../scripts/build-app';
+import { fix } from '../scripts/fix-electron';
 const args = process.argv.slice(2);
 const foreground = args.includes('--foreground');
 const folders = args.filter((a) => !a.startsWith('--')).map((a) => path.resolve(a));
@@ -39,7 +40,7 @@ function terminalPath() {
 
 // Fallback when the bundle wasn't built: plain Electron, shown as Electron.
 function runElectron() {
-  const electron = require('electron'); // the path to the Electron binary when required from Node
+  const electron: string = require('electron'); // the path to the Electron binary when required from Node
   const child = spawn(electron, [path.join(__dirname, '..', '..'), ...folders], {
     detached: !foreground,
     stdio: foreground ? 'inherit' : 'ignore',
@@ -52,7 +53,7 @@ function runElectron() {
   }
 }
 
-function runBundle(bundle) {
+function runBundle(bundle: string) {
   const openArgs = ['-a', bundle, ...folders];
   const tty = foreground ? terminalPath() : null;
   if (tty) openArgs.unshift('-W', '--stdout', tty, '--stderr', tty);
@@ -74,7 +75,7 @@ function runBundle(bundle) {
   let bundle = appPath();
   if (!bundle) {
     console.log('Filedrawer: setting up Filedrawer.app, this takes a moment the first time.');
-    await require('../scripts/fix-electron').fix({ quiet: true });
+    await fix({ quiet: true });
     build({ quiet: true });
     bundle = appPath();
   }
