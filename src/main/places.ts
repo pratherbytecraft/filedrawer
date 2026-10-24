@@ -167,8 +167,9 @@ async function origins(dir: string, root: string) {
     for (const [name, r] of putBackRecords(buf)) {
       // Finder writes the startup disk's folders from its data volume's top
       // (System/Volumes/Data/Users/...), the same place as /Users/...
-      // Finder writes ptbL as text; one that isn't comes out null (see putBackRecords).
-      if (r.ptbL !== undefined) out.set(path.join(dir, name), path.join(root, r.ptbL as string, r.ptbN || name).replace(/^\/System\/Volumes\/Data(?=\/)/, ''));
+      // Finder writes ptbL as text; one that isn't comes out null (see
+      // putBackRecords) and is skipped, rather than failing the whole Trash.
+      if (typeof r.ptbL === 'string') out.set(path.join(dir, name), path.join(root, r.ptbL, r.ptbN || name).replace(/^\/System\/Volumes\/Data(?=\/)/, ''));
     }
   }
   const log = readLog();
