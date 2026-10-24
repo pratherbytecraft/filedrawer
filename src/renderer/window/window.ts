@@ -485,7 +485,8 @@ function renderIcons() {
 }
 
 function tileLine(it: Item) {
-  if (it.volume && it.free != null) return `<div class="sub">${fmtBytes(it.free)} free of ${fmtBytes(it.total as number)}</div>`;
+  // A disk whose size can't be read shows its free space alone.
+  if (it.volume && it.free != null) return `<div class="sub">${fmtBytes(it.free)} free${it.total != null ? ` of ${fmtBytes(it.total)}` : ''}</div>`;
   return it.size != null ? `<div class="sub">${fmtKB(it.size)}</div>` : '';
 }
 
@@ -1590,7 +1591,7 @@ function detailsBox() {
       (folderModified ? line(`Modified: ${fmtDate(folderModified)}`) : '');
   } else if (one) {
     html = `<b>${esc(one.display)}</b>` + line(esc(one.kind));
-    if (one.volume && one.free != null) html += line(`Free space: ${fmtBytes(one.free)}`) + line(`Total size: ${fmtBytes(one.total as number)}`);
+    if (one.volume && one.free != null) html += line(`Free space: ${fmtBytes(one.free)}`) + (one.total != null ? line(`Total size: ${fmtBytes(one.total)}`) : '');
     else if (isFolder(one)) {
       html += '<span class="d" id="det-count"></span>';
       countFor = one.path;
