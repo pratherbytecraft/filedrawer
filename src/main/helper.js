@@ -3,7 +3,12 @@
 // comes back after a crash, waiting a bit longer each time. Without a
 // helper every request answers null and the callers fall back.
 const { spawn } = require('child_process');
-const { helperPath } = require('../../scripts/build-helper');
+const fs = require('fs');
+const path = require('path');
+
+// Built at install time by scripts/build-helper.
+const HELPER = path.join(__dirname, '..', '..', 'helper', 'filedrawer-helper');
+const helperPath = () => (fs.existsSync(HELPER) ? HELPER : null);
 
 const TIMEOUT = 5000;
 

@@ -10,3 +10,4 @@ bundle/
 *.tgz
 test/cypress/screenshots/
 test/cypress/downloads/
+dist/

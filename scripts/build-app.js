@@ -12,7 +12,7 @@
 //
 // The bundle holds no Filedrawer code and no version number, only a stamp of
 // what it was built from (see bundleStamp).
-// Contents/Resources/app is a two file stub that loads src/main from the
+// Contents/Resources/app is a two file stub that loads dist/main from the
 // installed package, so an update to the package is picked up as is.
 const { spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -32,8 +32,9 @@ function stableRoot(dir) {
   return fs.existsSync(opt) ? opt : dir;
 }
 
-const root = stableRoot(path.join(__dirname, '..'));
-const mainScript = path.join(root, 'src', 'main', 'index.js');
+// Built into dist/scripts, two folders down from the package.
+const root = stableRoot(path.join(__dirname, '..', '..'));
+const mainScript = path.join(root, 'dist', 'main', 'index.js');
 
 const userBundle = path.join(os.homedir(), 'Applications', 'Filedrawer.app');
 const localBundle = path.join(root, 'bundle', 'Filedrawer.app');

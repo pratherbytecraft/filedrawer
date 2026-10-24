@@ -1,4 +1,4 @@
-// Cypress loads each renderer page on its own, served from src/renderer by
+// Cypress loads each renderer page on its own, served from dist/renderer by
 // a small server started here, with the preload's window.filedrawer replaced
 // by a fake (support/fake.js) that has a small made up home folder. Run with
 // npm run test:pages.
@@ -7,7 +7,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..', '..', 'src', 'renderer');
+const ROOT = path.join(__dirname, '..', '..', 'dist', 'renderer');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 function serve() {
@@ -28,7 +28,8 @@ function serve() {
 // What the main process sends as state, with every setting at its default.
 function filedrawerState() {
   require('../support/electron');
-  const { DEFAULTS } = require('../../src/main/settings');
+  // From the build, which npm run test:pages makes first.
+  const { DEFAULTS } = require('../../dist/main/settings');
   return {
     settings: JSON.parse(JSON.stringify(DEFAULTS)),
     system: { appearance: 'light', accent: '#007aff' },

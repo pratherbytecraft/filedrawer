@@ -19,31 +19,36 @@
   "engines": {
     "node": ">=18"
   },
-  "main": "src/main/index.js",
+  "main": "dist/main/index.js",
   "bin": {
-    "filedrawer": "bin/filedrawer.js"
+    "filedrawer": "dist/bin/filedrawer.js"
   },
   "files": [
-    "bin",
-    "src",
+    "dist",
     "helper/filedrawer-helper.swift",
-    "scripts",
     "assets",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "start": "node bin/filedrawer.js --foreground",
-    "postinstall": "node scripts/fix-electron.js && node scripts/build-helper.js && node scripts/build-app.js",
-    "build-app": "node scripts/build-app.js",
-    "test": "node --test test/unit/*.test.js",
-    "test:helper": "node scripts/build-helper.js && node --test test/helper/*.test.js",
-    "test:pages": "cypress run --config-file test/cypress/cypress.config.js"
+    "start": "npm run build && node dist/bin/filedrawer.js --foreground",
+    "build": "tsx scripts/build.ts",
+    "typecheck": "tsc -p .",
+    "prepack": "npm run typecheck && npm run build",
+    "postinstall": "node dist/scripts/fix-electron.js && node dist/scripts/build-helper.js && node dist/scripts/build-app.js",
+    "build-app": "node dist/scripts/build-app.js",
+    "test": "node --import tsx --test test/unit/*.test.js",
+    "test:helper": "npm run build && node dist/scripts/build-helper.js && node --import tsx --test test/helper/*.test.js",
+    "test:pages": "npm run build && cypress run --config-file test/cypress/cypress.config.js"
   },
   "dependencies": {
     "electron": "^33.2.1"
   },
   "devDependencies": {
-    "cypress": "14.5.4"
+    "@types/node": "20.19.43",
+    "cypress": "14.5.4",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
   }
 }

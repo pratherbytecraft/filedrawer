@@ -6,7 +6,8 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const root = path.join(__dirname, '..');
+// Built into dist/scripts, two folders down from the package.
+const root = path.join(__dirname, '..', '..');
 const src = path.join(root, 'helper', 'filedrawer-helper.swift');
 const out = path.join(root, 'helper', 'filedrawer-helper');
 

@@ -3,7 +3,11 @@
 // first (npm run test:helper does).
 const { spawn } = require('child_process');
 const readline = require('readline');
-const { helperPath } = require('../../scripts/build-helper');
+const fs = require('fs');
+const path = require('path');
+
+const HELPER = path.join(__dirname, '..', '..', 'helper', 'filedrawer-helper');
+const helperPath = () => (fs.existsSync(HELPER) ? HELPER : null);
 
 function serve() {
   const bin = helperPath();

@@ -15,7 +15,7 @@ const path = require('path');
 const EXECUTABLE = 'Electron.app/Contents/MacOS/Electron';
 
 function electronDir() {
-  return path.dirname(require.resolve('electron/package.json', { paths: [path.join(__dirname, '..')] }));
+  return path.dirname(require.resolve('electron/package.json', { paths: [path.join(__dirname, '..', '..')] }));
 }
 
 function isWhole(dir) {
