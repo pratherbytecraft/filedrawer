@@ -776,6 +776,27 @@ $('files').addEventListener('mousedown', (e) => {
     anchor = p;
   } else if (e.shiftKey && anchor) {
     sel = selectRange(anchor, p);
+  } else if (sel.has(p) && sel.size > 1) {
+    // A press on one of several selected items keeps them all, so a drag
+    // takes the whole selection. The release narrows it to this item,
+    // unless the pointer moved off to drag.
+    anchor = p;
+    const x = e.clientX;
+    const y = e.clientY;
+    const up = (u: MouseEvent) => {
+      document.removeEventListener('mouseup', up, true);
+      $('files').removeEventListener('dragstart', moved, true);
+      if (Math.abs(u.clientX - x) > 3 || Math.abs(u.clientY - y) > 3) return;
+      sel = new Set([p]);
+      anchor = cursor = p;
+      showSelection();
+    };
+    const moved = () => {
+      document.removeEventListener('mouseup', up, true);
+      $('files').removeEventListener('dragstart', moved, true);
+    };
+    document.addEventListener('mouseup', up, true);
+    $('files').addEventListener('dragstart', moved, true);
   } else {
     sel = new Set([p]);
     anchor = p;

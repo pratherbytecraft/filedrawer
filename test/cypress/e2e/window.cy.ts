@@ -54,6 +54,25 @@ describe('file window', () => {
     cy.calls('open').should('deep.include', ['/Users/test/notes.txt']);
   });
 
+  it('a drag from one of several selected items takes them all', () => {
+    cy.page(HOME);
+    item('Documents').trigger('mousedown', { button: 0 });
+    item('Documents').trigger('mouseup', { button: 0 });
+    item('Pictures').trigger('mousedown', { button: 0, metaKey: true });
+    item('Pictures').trigger('mouseup', { button: 0, metaKey: true });
+    cy.get('#files .item.sel').should('have.length', 2);
+    // A press that drags keeps both; startDrag gets both paths.
+    item('Documents').trigger('mousedown', { button: 0, clientX: 40, clientY: 40 });
+    item('Documents').trigger('dragstart');
+    cy.get('#files .item.sel').should('have.length', 2);
+    cy.calls('startDrag').should('deep.include', [['/Users/test/Documents', '/Users/test/Pictures']]);
+    // A press released in place narrows the selection to that item.
+    item('Documents').trigger('mousedown', { button: 0, clientX: 40, clientY: 40 });
+    item('Documents').trigger('mouseup', { button: 0, clientX: 40, clientY: 40 });
+    cy.get('#files .item.sel').should('have.length', 1);
+    item('Documents').should('have.class', 'sel');
+  });
+
   it('the arrow keys move the selection and Return opens a folder', () => {
     cy.page(HOME);
     item('Documents').click();
